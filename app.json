@@ -1,0 +1,10 @@
+{
+  "expo": {
+    "name": "E-tsena",
+    "slug": "e-tsena",
+    "scheme": "etsena",
+    "newArchEnabled": true,
+    "plugins": ["expo-router"],
+    "extra": { "router": { "origin": "https://app" } }
+  }
+}
