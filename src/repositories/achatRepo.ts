@@ -11,7 +11,7 @@ export type Achat = {
 export type LigneAchat = {
   id?: number;
   idAchat: number;
-  idProduit: number;
+  libelleProduit: string;
   quantite: number;
   prixUnitaire: number;
   prixTotal?: number;
@@ -37,9 +37,9 @@ export const AchatRepo = {
     const db = getDb();
     const prixTotal = (l.prixTotal ?? l.quantite * l.prixUnitaire);
     db.runSync(
-      `INSERT INTO LigneAchat(idAchat, idProduit, quantite, prixUnitaire, prixTotal, estCoche)
+      `INSERT INTO LigneAchat(idAchat, libelleProduit, quantite, prixUnitaire, prixTotal, estCoche)
        VALUES(?,?,?,?,?,?)`,
-      [l.idAchat, l.idProduit, l.quantite, l.prixUnitaire, prixTotal, l.estCoche ? 1 : 0]
+      [l.idAchat, l.libelleProduit, l.quantite, l.prixUnitaire, prixTotal, l.estCoche ? 1 : 0]
     );
     db.runSync(
       `UPDATE Achat SET montantTotal = (
@@ -52,7 +52,7 @@ export const AchatRepo = {
   async getLignes(idAchat: number) {
     const db = getDb();
     return db.getAllSync(
-      `SELECT l.*, p.libelle FROM LigneAchat l JOIN Produit p ON p.id = l.idProduit WHERE idAchat = ?`,
+      `SELECT * FROM LigneAchat WHERE idAchat = ?`,
       [idAchat]
     );
   },

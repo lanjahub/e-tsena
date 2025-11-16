@@ -97,12 +97,12 @@ export default function Layout() {
   // Écran de chargement
   if (!fontsLoaded || !dbReady) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F5F5' }}>
-        <Ionicons name="basket" size={64} color="#7C4DFF" />
-        <Text style={{ fontSize: 24, fontWeight: 'bold', marginTop: 16, color: '#7C4DFF' }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F0F9FF' }}>
+        <Ionicons name="basket" size={64} color="#60A5FA" />
+        <Text style={{ fontSize: 24, fontWeight: 'bold', marginTop: 16, color: '#60A5FA' }}>
           E-tsena
         </Text>
-        <ActivityIndicator size="large" color="#7C4DFF" style={{ marginTop: 24 }} />
+        <ActivityIndicator size="large" color="#60A5FA" style={{ marginTop: 24 }} />
         <Text style={{ fontSize: 14, color: '#999', marginTop: 12 }}>
           {!fontsLoaded ? 'Chargement des fonts...' : 'Initialisation de la base de données...'}
         </Text>
@@ -113,7 +113,7 @@ export default function Layout() {
   return (
     <Stack>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="achat/[id]" options={{ headerShown: true, title: 'Achat' }} />
+      <Stack.Screen name="achat/[id]/index" options={{ headerShown: true, title: 'Achat' }} />
     </Stack>
   );
 }

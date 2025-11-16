@@ -1,12 +1,13 @@
-import { View, Text, ScrollView, Dimensions, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Dimensions, TouchableOpacity, StyleSheet, Animated } from 'react-native';
 import { PieChart } from 'react-native-chart-kit';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { getDb } from '@db/init';
 import { Ionicons } from '@expo/vector-icons';
-import { SECTION_COLORS, COLORS } from '@constants/colors';
+import { SECTION_COLORS, COLORS, ANIMATIONS } from '@constants/colors';
 import { LinearGradient } from 'expo-linear-gradient';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subWeeks, subMonths } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { fadeScaleIn } from '../../src/utils/animations';
 
 interface ChartData {
   name: string;
@@ -40,6 +41,10 @@ export default function Stats() {
   const [weeklyData, setWeeklyData] = useState<ComparativeData[]>([]);
   const [monthlyData, setMonthlyData] = useState<ComparativeData[]>([]);
 
+  // Animations
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+
   const load = () => {
     const db = getDb();
     
@@ -53,20 +58,19 @@ export default function Stats() {
     }
 
     const rows = db.getAllSync(`
-      SELECT p.libelle as name, 
+      SELECT l.libelleProduit as name, 
              CASE 
-               WHEN p.libelle IN ('Riz', 'Poulet', 'Viande') THEN '#FF6B6B'
-               WHEN p.libelle IN ('Huile', 'Lait') THEN '#4ECDC4'
-               WHEN p.libelle IN ('Pain', 'Cahier', 'Stylo') THEN '#45B7D1'
-               WHEN p.libelle IN ('Tomate', 'Oignon') THEN '#95E1D3'
+               WHEN l.libelleProduit IN ('Riz', 'Poulet', 'Viande') THEN '#FF6B6B'
+               WHEN l.libelleProduit IN ('Huile', 'Lait') THEN '#4ECDC4'
+               WHEN l.libelleProduit IN ('Pain', 'Cahier', 'Stylo') THEN '#45B7D1'
+               WHEN l.libelleProduit IN ('Tomate', 'Oignon') THEN '#95E1D3'
                ELSE '#FFA07A'
              END as color,
              SUM(l.prixTotal) as montant
       FROM LigneAchat l
-      JOIN Produit p ON p.id = l.idProduit
       JOIN Achat a ON a.id = l.idAchat
       WHERE 1=1 ${dateFilter}
-      GROUP BY p.id
+      GROUP BY l.libelleProduit
       ORDER BY montant DESC
     `) as CategoryRow[];
     
@@ -161,6 +165,11 @@ export default function Stats() {
 
   useEffect(() => { load(); }, [period]);
 
+  // Animation d'entrée
+  useEffect(() => {
+    fadeScaleIn(fadeAnim, scaleAnim, ANIMATIONS.duration.normal).start();
+  }, []);
+
   const getPeriodLabel = () => {
     switch(period) {
       case '7days': return '7 derniers jours';
@@ -172,7 +181,15 @@ export default function Stats() {
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <Animated.ScrollView 
+      style={[
+        styles.container,
+        {
+          opacity: fadeAnim,
+          transform: [{ scale: scaleAnim }],
+        }
+      ]}
+    >
       {/* En-tête avec dégradé */}
       <LinearGradient
         colors={SECTION_COLORS.statistiques.gradient}
@@ -320,17 +337,19 @@ export default function Stats() {
           {data[0]?.name !== 'Aucune donnée' && data.length > 0 && (
             <View style={styles.detailsContainer}>
               <Text style={styles.detailsTitle}>Détails par catégorie</Text>
-              {data.map((item) => (
-                <View key={item.name} style={styles.detailRow}>
+              {data.map((item, index) => (
+                <View key={item.name} style={[styles.detailRow, index === data.length - 1 && styles.detailRowLast]}>
                   <View style={styles.detailLeft}>
                     <View style={[styles.colorBadge, { backgroundColor: item.color }]} />
-                    <Text style={styles.detailName}>{item.name}</Text>
+                    <View style={styles.detailNameContainer}>
+                      <Text style={styles.detailName}>{item.name}</Text>
+                      <Text style={styles.detailPercent}>
+                        {totalDepenses > 0 ? ((item.population / totalDepenses) * 100).toFixed(1) : 0}%
+                      </Text>
+                    </View>
                   </View>
                   <View style={styles.detailRight}>
                     <Text style={styles.detailAmount}>{item.population.toLocaleString()} Ar</Text>
-                    <Text style={styles.detailPercent}>
-                      {((item.population / totalDepenses) * 100).toFixed(1)}%
-                    </Text>
                   </View>
                 </View>
               ))}
@@ -345,33 +364,45 @@ export default function Stats() {
           <Text style={styles.comparativeTitle}>Évolution hebdomadaire</Text>
           <Text style={styles.comparativeSubtitle}>4 dernières semaines</Text>
           
-          {weeklyData.map((week, index) => (
-            <View key={index} style={styles.periodCard}>
-              <View style={styles.periodHeader}>
-                <View style={styles.periodIconContainer}>
-                  <Ionicons name="calendar-outline" size={24} color={SECTION_COLORS.statistiques.primary} />
+          {weeklyData.map((week, index) => {
+            const maxMontant = Math.max(...weeklyData.map(w => w.montant), 1);
+            const percentage = (week.montant / maxMontant) * 100;
+            return (
+              <View key={index} style={styles.periodCard}>
+                <View style={styles.periodHeader}>
+                  <View style={styles.periodIconContainer}>
+                    <Ionicons name="calendar-outline" size={24} color={SECTION_COLORS.statistiques.primary} />
+                  </View>
+                  <View style={styles.periodInfo}>
+                    <Text style={styles.periodName}>{week.period}</Text>
+                    <View style={styles.periodMeta}>
+                      <Ionicons name="bag-outline" size={12} color={COLORS.textLight} />
+                      <Text style={styles.periodSubtext}>{week.nbAchats} achats</Text>
+                    </View>
+                  </View>
+                  <View style={styles.periodAmount}>
+                    <Text style={styles.periodMontant}>{week.montant.toLocaleString()} Ar</Text>
+                    {index === 0 && (
+                      <View style={styles.periodBadge}>
+                        <Text style={styles.periodBadgeText}>Actuelle</Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
-                <View style={styles.periodInfo}>
-                  <Text style={styles.periodName}>{week.period}</Text>
-                  <Text style={styles.periodSubtext}>{week.nbAchats} achats</Text>
-                </View>
-                <View style={styles.periodAmount}>
-                  <Text style={styles.periodMontant}>{week.montant.toLocaleString()} Ar</Text>
+                <View style={styles.periodBarContainer}>
+                  <View 
+                    style={[
+                      styles.periodBar, 
+                      { 
+                        width: `${Math.min(100, percentage)}%`,
+                        backgroundColor: SECTION_COLORS.statistiques.primary 
+                      }
+                    ]} 
+                  />
                 </View>
               </View>
-              <View style={styles.periodBarContainer}>
-                <View 
-                  style={[
-                    styles.periodBar, 
-                    { 
-                      width: `${Math.min(100, (week.montant / Math.max(...weeklyData.map(w => w.montant))) * 100)}%`,
-                      backgroundColor: SECTION_COLORS.statistiques.primary 
-                    }
-                  ]} 
-                />
-              </View>
-            </View>
-          ))}
+            );
+          })}
         </View>
       )}
 
@@ -381,33 +412,45 @@ export default function Stats() {
           <Text style={styles.comparativeTitle}>Évolution mensuelle</Text>
           <Text style={styles.comparativeSubtitle}>6 derniers mois</Text>
           
-          {monthlyData.map((month, index) => (
-            <View key={index} style={styles.periodCard}>
-              <View style={styles.periodHeader}>
-                <View style={styles.periodIconContainer}>
-                  <Ionicons name="calendar" size={24} color={SECTION_COLORS.statistiques.primary} />
+          {monthlyData.map((month, index) => {
+            const maxMontant = Math.max(...monthlyData.map(m => m.montant), 1);
+            const percentage = (month.montant / maxMontant) * 100;
+            return (
+              <View key={index} style={styles.periodCard}>
+                <View style={styles.periodHeader}>
+                  <View style={styles.periodIconContainer}>
+                    <Ionicons name="calendar" size={24} color={SECTION_COLORS.statistiques.primary} />
+                  </View>
+                  <View style={styles.periodInfo}>
+                    <Text style={styles.periodName}>{month.period}</Text>
+                    <View style={styles.periodMeta}>
+                      <Ionicons name="bag-outline" size={12} color={COLORS.textLight} />
+                      <Text style={styles.periodSubtext}>{month.nbAchats} achats</Text>
+                    </View>
+                  </View>
+                  <View style={styles.periodAmount}>
+                    <Text style={styles.periodMontant}>{month.montant.toLocaleString()} Ar</Text>
+                    {index === monthlyData.length - 1 && (
+                      <View style={styles.periodBadge}>
+                        <Text style={styles.periodBadgeText}>Actuel</Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
-                <View style={styles.periodInfo}>
-                  <Text style={styles.periodName}>{month.period}</Text>
-                  <Text style={styles.periodSubtext}>{month.nbAchats} achats</Text>
-                </View>
-                <View style={styles.periodAmount}>
-                  <Text style={styles.periodMontant}>{month.montant.toLocaleString()} Ar</Text>
+                <View style={styles.periodBarContainer}>
+                  <View 
+                    style={[
+                      styles.periodBar, 
+                      { 
+                        width: `${Math.min(100, percentage)}%`,
+                        backgroundColor: SECTION_COLORS.statistiques.primary 
+                      }
+                    ]} 
+                  />
                 </View>
               </View>
-              <View style={styles.periodBarContainer}>
-                <View 
-                  style={[
-                    styles.periodBar, 
-                    { 
-                      width: `${Math.min(100, (month.montant / Math.max(...monthlyData.map(m => m.montant))) * 100)}%`,
-                      backgroundColor: SECTION_COLORS.statistiques.primary 
-                    }
-                  ]} 
-                />
-              </View>
-            </View>
-          ))}
+            );
+          })}
         </View>
       )}
 
@@ -416,14 +459,14 @@ export default function Stats() {
         <Ionicons name="download-outline" size={20} color="white" />
         <Text style={styles.exportButtonText}>Exporter les statistiques</Text>
       </TouchableOpacity>
-    </ScrollView>
+    </Animated.ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.secondaryUltraLight,
+    backgroundColor: COLORS.background,
   },
   header: {
     padding: 20,
@@ -592,9 +635,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: COLORS.divider,
+  },
+  detailRowLast: {
+    borderBottomWidth: 0,
   },
   detailLeft: {
     flexDirection: 'row',
@@ -603,27 +649,38 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   colorBadge: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: 'white',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  detailNameContainer: {
+    flex: 1,
   },
   detailName: {
-    fontSize: 14,
-    color: '#333',
-    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginBottom: 2,
   },
   detailRight: {
     alignItems: 'flex-end',
   },
   detailAmount: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: SECTION_COLORS.statistiques.primary,
   },
   detailPercent: {
     fontSize: 12,
-    color: '#999',
-    marginTop: 2,
+    color: COLORS.textLight,
+    fontWeight: '500',
   },
   
   // Styles pour vues comparatives
@@ -652,9 +709,16 @@ const styles = StyleSheet.create({
   },
   periodCard: {
     marginBottom: 12,
-    padding: 12,
-    backgroundColor: COLORS.surface,
-    borderRadius: 12,
+    padding: 16,
+    backgroundColor: 'white',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   periodHeader: {
     flexDirection: 'row',
@@ -678,10 +742,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.text,
   },
+  periodMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
   periodSubtext: {
     fontSize: 12,
     color: COLORS.textLight,
-    marginTop: 2,
   },
   periodAmount: {
     alignItems: 'flex-end',
@@ -690,16 +759,34 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: SECTION_COLORS.statistiques.primary,
+    marginBottom: 4,
+  },
+  periodBadge: {
+    backgroundColor: SECTION_COLORS.statistiques.light,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  periodBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: SECTION_COLORS.statistiques.primary,
   },
   periodBarContainer: {
-    height: 8,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 4,
+    height: 10,
+    backgroundColor: COLORS.surface,
+    borderRadius: 5,
     overflow: 'hidden',
+    marginTop: 8,
   },
   periodBar: {
     height: '100%',
-    borderRadius: 4,
+    borderRadius: 5,
+    shadowColor: SECTION_COLORS.statistiques.primary,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 2,
   },
   
   exportButton: {

@@ -1,116 +1,131 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useMemo, useCallback, useState, useRef } from 'react';
 import { 
   View, 
   Text, 
-  TouchableOpacity, 
   StyleSheet, 
-  FlatList, 
-  Alert,
+  ScrollView, 
+  TouchableOpacity, 
+  ActivityIndicator,
   TextInput,
+  Alert,
   Modal,
-  ScrollView
+  Animated
 } from 'react-native';
+import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
-import { getDb } from '@db/init';
-import { COLORS, SECTION_COLORS } from '@constants/colors';
 import { format } from 'date-fns';
+import { fr } from 'date-fns/locale';
+import { getDb } from '@db/init';
+import { COLORS, SECTION_COLORS, ANIMATIONS } from '@constants/colors';
+import { fadeIn, slideInFromBottom, fadeScaleIn } from '../../../src/utils/animations';
+import { LinearGradient } from 'expo-linear-gradient';
 
-// Interfaces
-interface Achat {
-  id: number;
-  nomListe: string;
-  dateAchat: string;
-}
-
-interface LigneAchat {
-  id: number;
-  idProduit: number;
+type LigneAchat = {
+  id?: number;
   libelleProduit: string;
   quantite: number;
   prixUnitaire: number;
   prixTotal: number;
-}
+  unite?: string;
+  isNew?: boolean;
+  isChecked?: boolean; // Pour savoir si le produit est coché (configuré)
+};
 
-interface Produit {
+type AchatRecord = {
+  id: number;
+  nomListe: string;
+  dateAchat: string;
+  montantTotal: number;
+};
+
+type Produit = {
   id: number;
   libelle: string;
-}
+  unite: string;
+};
 
-export default function GestionAchat() {
-  const { id } = useLocalSearchParams();
-  const achatId = Number.parseInt(id as string);
-
-  const [achat, setAchat] = useState<Achat | null>(null);
-  const [lignesAchat, setLignesAchat] = useState<LigneAchat[]>([]);
+export default function AchatDetails() {
+  const params = useLocalSearchParams<{ id?: string }>();
+  const achatId = Number(params.id);
+  const [achat, setAchat] = useState<AchatRecord | null>(null);
+  const [lignes, setLignes] = useState<LigneAchat[]>([]);
   const [produits, setProduits] = useState<Produit[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [selectedLigne, setSelectedLigne] = useState<LigneAchat | null>(null);
+  const [error, setError] = useState<string | null>(null);
   
-  // États pour l'ajout simplifié de produits (juste le nom d'abord)
-  const [newProduitName, setNewProduitName] = useState('');
-  const [produitsAjoutesTemp, setProduitsAjoutesTemp] = useState<{id: number, libelle: string}[]>([]);
-  const [selectedForDetails, setSelectedForDetails] = useState<{[key: number]: boolean}>({});
-  const [produitsDetails, setProduitsDetails] = useState<{[key: number]: {quantite: string, prix: string}}>({});
-  const [searchProduit, setSearchProduit] = useState('');
+  // États pour l'édition
+  const [editingTitre, setEditingTitre] = useState(false);
+  const [titreListe, setTitreListe] = useState('');
+  const [nouveauProduit, setNouveauProduit] = useState('');
   
-  // États pour la gestion CRUD des produits
-  const [showManageProduitsModal, setShowManageProduitsModal] = useState(false);
-  const [showAddProduitModal, setShowAddProduitModal] = useState(false);
-  const [showEditProduitModal, setShowEditProduitModal] = useState(false);
-  const [selectedProduit, setSelectedProduit] = useState<Produit | null>(null);
-  const [produitLibelle, setProduitLibelle] = useState('');
-  const [searchGestionProduit, setSearchGestionProduit] = useState('');
-  
-  // États pour la gestion du nom de liste
-  const [showEditListNameModal, setShowEditListNameModal] = useState(false);
-  const [newListName, setNewListName] = useState('');
-  
-  // État pour le menu d'actions (style Google Keep)
-  const [showHeaderMenuModal, setShowHeaderMenuModal] = useState(false);
+  // États pour le modal
+  const [showModal, setShowModal] = useState(false);
+  const [modalLigneIndex, setModalLigneIndex] = useState<number | null>(null);
+  const [modalQuantite, setModalQuantite] = useState('');
+  const [modalPrixUnitaire, setModalPrixUnitaire] = useState('');
+  const [modalUnite, setModalUnite] = useState('pcs');
 
-  // Charger les données
+  // Animations
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+  const modalSlideAnim = useRef(new Animated.Value(300)).current;
+  const modalFadeAnim = useRef(new Animated.Value(0)).current;
+
   const loadData = useCallback(() => {
+    if (!achatId || Number.isNaN(achatId)) {
+      setError('Identifiant d\'achat invalide');
+      setLoading(false);
+      return;
+    }
+
     try {
+      setLoading(true);
       const db = getDb();
       
-      // Charger les informations de l'achat
+      // Charger l'achat
       const achatResult = db.getAllSync(
-        'SELECT * FROM Achat WHERE id = ?',
+        `SELECT id, nomListe, dateAchat, montantTotal FROM Achat WHERE id = ?`,
         [achatId]
-      );
-      
-      if (achatResult.length === 0) {
-        Alert.alert('Erreur', 'Achat introuvable');
-        router.back();
+      ) as AchatRecord[];
+
+      if (!achatResult.length) {
+        setError('Achat introuvable');
+        setLoading(false);
         return;
       }
-      
-      setAchat(achatResult[0] as Achat);
+
+      setAchat(achatResult[0]);
+      setTitreListe(achatResult[0].nomListe);
 
       // Charger les lignes d'achat
-      const lignesResult = db.getAllSync(`
-        SELECT 
-          la.*,
-          p.libelle as libelleProduit
-        FROM LigneAchat la
-        JOIN Produit p ON p.id = la.idProduit
-        WHERE la.idAchat = ?
-        ORDER BY la.id DESC
-      `, [achatId]);
-      
-      setLignesAchat(lignesResult as LigneAchat[]);
+      const lignesResult = db.getAllSync(
+        `SELECT id, libelleProduit, quantite, prixUnitaire, prixTotal, unite
+         FROM LigneAchat
+         WHERE idAchat = ?
+         ORDER BY id DESC`,
+        [achatId]
+      ) as LigneAchat[];
 
-      // Charger tous les produits
-      const produitsResult = db.getAllSync('SELECT * FROM Produit ORDER BY libelle');
-      setProduits(produitsResult as Produit[]);
+      // Marquer les lignes comme coché si elles ont quantité et prix > 0
+      const lignesWithCheck = lignesResult.map(l => ({
+        ...l,
+        isChecked: l.quantite > 0 && l.prixUnitaire > 0
+      }));
+
+      setLignes(lignesWithCheck);
       
-      setLoading(false);
-    } catch (error) {
-      console.error('Erreur lors du chargement:', error);
-      Alert.alert('Erreur', 'Impossible de charger les données');
+      // Charger les produits disponibles dynamiquement
+      const produitsResult = db.getAllSync(
+        `SELECT id, libelle, unite FROM Produit ORDER BY libelle ASC`
+      ) as Produit[];
+      
+      setProduits(produitsResult);
+      
+      setError(null);
+    } catch (e) {
+      console.error('Erreur chargement achat:', e);
+      setError('Impossible de charger les détails de cet achat');
+    } finally {
       setLoading(false);
     }
   }, [achatId]);
@@ -119,1087 +134,611 @@ export default function GestionAchat() {
     loadData();
   }, [loadData]);
 
-  // Calculer le total
-  const totalGeneral = lignesAchat.reduce((sum, ligne) => sum + ligne.prixTotal, 0);
-
-  // === NOUVEAU SYSTÈME D'AJOUT SIMPLIFIÉ ===
-  
-  // Ajouter un produit à la liste temporaire (juste le nom)
-  const handleQuickAddProduit = (produit: Produit) => {
-    // Vérifier si déjà ajouté
-    if (produitsAjoutesTemp.some(p => p.id === produit.id)) {
-      Alert.alert('Info', 'Ce produit est déjà dans la liste');
-      return;
+  // Animation d'entrée au chargement
+  useEffect(() => {
+    if (!loading && achat) {
+      fadeScaleIn(fadeAnim, scaleAnim, ANIMATIONS.duration.normal).start();
     }
-    
-    // Ajouter à la liste temporaire
-    setProduitsAjoutesTemp(prev => [...prev, { id: produit.id, libelle: produit.libelle }]);
-  };
-  
-  // Créer un nouveau produit rapidement et l'ajouter
-  const handleCreateAndAddProduit = useCallback(() => {
-    if (!newProduitName.trim()) {
-      Alert.alert('Erreur', 'Veuillez entrer un nom de produit');
+  }, [loading, achat]);
+
+  // Animation du modal
+  useEffect(() => {
+    if (showModal) {
+      Animated.parallel([
+        fadeIn(modalFadeAnim, ANIMATIONS.duration.normal),
+        slideInFromBottom(modalSlideAnim, ANIMATIONS.duration.normal),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(modalFadeAnim, {
+          toValue: 0,
+          duration: ANIMATIONS.duration.fast,
+          useNativeDriver: true,
+        }),
+        Animated.timing(modalSlideAnim, {
+          toValue: 300,
+          duration: ANIMATIONS.duration.fast,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [showModal]);
+
+  // Fonction pour sauvegarder le titre
+  const handleSaveTitre = useCallback(async () => {
+    if (!titreListe.trim()) {
+      Alert.alert('Erreur', 'Le titre ne peut pas être vide');
+      setTitreListe(achat?.nomListe || '');
+      setEditingTitre(false);
       return;
     }
 
     try {
       const db = getDb();
-
-      // Vérifier si le produit existe déjà
-      const existing = db.getFirstSync<Produit>(
-        'SELECT * FROM Produit WHERE LOWER(libelle) = LOWER(?)',
-        [newProduitName.trim()]
-      );
-
-      if (existing) {
-        Alert.alert('Info', 'Ce produit existe déjà');
-        handleQuickAddProduit(existing);
-        setNewProduitName('');
-        return;
+      db.runSync('UPDATE Achat SET nomListe = ? WHERE id = ?', [titreListe, achatId]);
+      
+      if (achat) {
+        setAchat({ ...achat, nomListe: titreListe });
       }
+      
+      setEditingTitre(false);
+    } catch (error) {
+      console.error('Erreur mise à jour titre:', error);
+      Alert.alert('Erreur', 'Impossible de modifier le titre');
+      setTitreListe(achat?.nomListe || '');
+    }
+  }, [titreListe, achat, achatId]);
 
-      // Créer le nouveau produit
-      const result = db.runSync(
-        'INSERT INTO Produit (libelle) VALUES (?)',
-        [newProduitName.trim()]
-      );
+  // Fonction pour ajouter un produit directement (sans modal)
+  const handleAddProduct = useCallback(() => {
+    if (!nouveauProduit.trim()) return;
+    
+    // Vérifier si le produit existe déjà dans la liste
+    const existingIndex = lignes.findIndex(l => 
+      l.libelleProduit.toLowerCase() === nouveauProduit.trim().toLowerCase()
+    );
+    
+    if (existingIndex >= 0) {
+      Alert.alert('Information', 'Ce produit est déjà dans la liste');
+      setNouveauProduit('');
+      return;
+    }
+    
+    // Créer une nouvelle ligne non coché (sans quantité/prix)
+    const newLigne: LigneAchat = {
+      libelleProduit: nouveauProduit.trim(),
+      quantite: 0,
+      prixUnitaire: 0,
+      prixTotal: 0,
+      unite: 'pcs',
+      isNew: true,
+      isChecked: false
+    };
+    
+    // Ajouter en bas de la liste (après les produits cochés)
+    setLignes(prev => [...prev, newLigne]);
+    setNouveauProduit('');
+  }, [nouveauProduit, lignes]);
 
-      const newProduit = {
-        // Convertir proprement lastInsertRowId en number
-        id: Number(result.lastInsertRowId),
-        libelle: newProduitName.trim()
+  // Fonction pour gérer le toggle de checkbox
+  const handleToggleCheckbox = useCallback((index: number) => {
+    const ligne = lignes[index];
+    
+    if (!ligne.isChecked) {
+      // Si non coché, ouvrir le modal pour configurer
+      setModalLigneIndex(index);
+      setModalQuantite(ligne.quantite > 0 ? ligne.quantite.toString() : '1');
+      setModalPrixUnitaire(ligne.prixUnitaire > 0 ? ligne.prixUnitaire.toString() : '0');
+      setModalUnite(ligne.unite || 'pcs');
+      setShowModal(true);
+    } else {
+      // Si coché, décocher (remettre à zéro)
+      const newLignes = [...lignes];
+      newLignes[index] = {
+        ...ligne,
+        quantite: 0,
+        prixUnitaire: 0,
+        prixTotal: 0,
+        isChecked: false
       };
-
-      // L'ajouter immédiatement à la liste temporaire
-      setProduitsAjoutesTemp(prev => [...prev, newProduit]);
-      setNewProduitName('');
-
-      // Recharger la liste des produits
-      loadData();
-    } catch (error) {
-      console.error('Erreur lors de la création du produit:', error);
-      Alert.alert('Erreur', 'Impossible de créer le produit');
+      setLignes(newLignes);
+      
+      // Sauvegarder en DB si la ligne existe
+      if (ligne.id) {
+    try {
+      const db = getDb();
+          db.runSync(
+            'UPDATE LigneAchat SET quantite = 0, prixUnitaire = 0, prixTotal = 0 WHERE id = ?',
+            [ligne.id]
+          );
+        } catch (error) {
+          console.error('Erreur mise à jour:', error);
+        }
+      }
     }
-  }, [newProduitName, handleQuickAddProduit, loadData]);
+  }, [lignes]);
 
-  // Retirer un produit de la liste temporaire
-  const handleRemoveTempProduit = (produitId: number) => {
-    setProduitsAjoutesTemp(prev => prev.filter(p => p.id !== produitId));
-    // Retirer aussi la checkbox et les détails
-    setSelectedForDetails(prev => {
-      const newState = {...prev};
-      delete newState[produitId];
-      return newState;
-    });
-    setProduitsDetails(prev => {
-      const newState = {...prev};
-      delete newState[produitId];
-      return newState;
-    });
-  };
-  
-  // Toggle checkbox pour remplir les détails
-  const toggleProduitDetails = (produitId: number) => {
-    setSelectedForDetails(prev => ({
-      ...prev,
-      [produitId]: !prev[produitId]
-    }));
+  // Fonction pour valider le modal
+  const handleValidateModal = useCallback(async () => {
+    if (modalLigneIndex === null) return;
     
-    // Si on coche, initialiser les détails
-    if (!selectedForDetails[produitId]) {
-      setProduitsDetails(prev => ({
-        ...prev,
-        [produitId]: { quantite: '1', prix: '' }
-      }));
+    const quantite = parseFloat(modalQuantite) || 0;
+    const prixUnitaire = parseFloat(modalPrixUnitaire) || 0;
+    
+    if (quantite <= 0) {
+      Alert.alert('Erreur', 'La quantité doit être supérieure à 0');
+      return;
     }
-  };
-  
-  // Enregistrer les produits (ceux cochés avec détails + ceux non cochés avec valeurs par défaut)
-  const handleSaveAllTempProduits = () => {
-    if (produitsAjoutesTemp.length === 0) {
-      Alert.alert('Info', 'Aucun produit à ajouter');
+    
+    if (prixUnitaire < 0) {
+      Alert.alert('Erreur', 'Le prix unitaire ne peut pas être négatif');
       return;
     }
     
     try {
       const db = getDb();
+      const prixTotal = quantite * prixUnitaire;
+      const ligne = lignes[modalLigneIndex];
       
-      for (const produit of produitsAjoutesTemp) {
-        // Si coché, utiliser les détails renseignés
-        if (selectedForDetails[produit.id] && produitsDetails[produit.id]) {
-          const details = produitsDetails[produit.id];
-          const qty = details.quantite ? Number.parseFloat(details.quantite) : 1;
-          const prix = details.prix ? Number.parseFloat(details.prix) : 0;
-          const total = qty * prix;
-          
-          db.runSync(
-            'INSERT INTO LigneAchat (idAchat, idProduit, quantite, prixUnitaire, prixTotal) VALUES (?, ?, ?, ?, ?)',
-            [achatId, produit.id, qty, prix, total]
-          );
-        } else {
-          // Sinon, ajouter avec valeurs par défaut (qté=1, prix=0)
-          db.runSync(
-            'INSERT INTO LigneAchat (idAchat, idProduit, quantite, prixUnitaire, prixTotal) VALUES (?, ?, ?, ?, ?)',
-            [achatId, produit.id, 1, 0, 0]
-          );
-        }
-      }
-      
-      // Réinitialiser
-      setProduitsAjoutesTemp([]);
-      setSelectedForDetails({});
-      setProduitsDetails({});
-      setShowAddModal(false);
-      setNewProduitName('');
-      setSearchProduit('');
-      loadData();
-      
-      Alert.alert('Succès', `${produitsAjoutesTemp.length} produit(s) ajouté(s) !`);
-    } catch (error) {
-      console.error('Erreur lors de l\'ajout:', error);
-      Alert.alert('Erreur', 'Impossible d\'ajouter les produits');
-    }
-  };
-  
-  // Mettre à jour les détails d'un produit
-  const updateProduitDetail = (produitId: number, field: 'quantite' | 'prix', value: string) => {
-    setProduitsDetails(prev => ({
-      ...prev,
-      [produitId]: {
-        ...prev[produitId],
-        [field]: value
-      }
-    }));
-  };
-
-  // Toggle checkbox pour sélectionner/désélectionner un produit
-  const toggleProduitSelection = (produitId: number) => {
-    // basculer simplement l'état de selectedForDetails pour afficher ou masquer les détails
-    setSelectedForDetails(prev => ({ ...prev, [produitId]: !prev[produitId] }));
-  };
-
-  // Modifier un produit existant
-  const handleEditProduit = () => {
-    if (!selectedLigne) {
-      Alert.alert('Erreur', 'Erreur de sélection');
-      return;
-    }
-
-    const qty = selectedLigne.quantite;
-    const prix = selectedLigne.prixUnitaire;
-
-    try {
-      const db = getDb();
-      const total = qty * prix;
-
-      db.runSync(`
-        UPDATE LigneAchat 
-        SET quantite = ?, prixUnitaire = ?, prixTotal = ?
-        WHERE id = ?
-      `, [qty, prix, total, selectedLigne.id]);
-
-      setSelectedLigne(null);
-      setShowEditModal(false);
-      loadData();
-    } catch (error) {
-      console.error('Erreur lors de la modification:', error);
-      Alert.alert('Erreur', 'Impossible de modifier le produit');
-    }
-  };
-
-  // Supprimer un produit
-  const handleDeleteProduit = (ligne: LigneAchat) => {
-    Alert.alert(
-      'Confirmer la suppression',
-      `Voulez-vous vraiment supprimer ${ligne.libelleProduit} de la liste ?`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Supprimer',
-          style: 'destructive',
-          onPress: () => {
-            try {
-              const db = getDb();
-              db.runSync('DELETE FROM LigneAchat WHERE id = ?', [ligne.id]);
-              loadData();
-            } catch (error) {
-              console.error('Erreur lors de la suppression:', error);
-              Alert.alert('Erreur', 'Impossible de supprimer le produit');
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  // Valider et enregistrer la liste
-  const handleValidateList = () => {
-    if (lignesAchat.length === 0) {
-      Alert.alert('Attention', 'Ajoutez au moins un produit avant de valider');
-      return;
-    }
-
-    Alert.alert(
-      'Valider la liste',
-      'Votre liste d\'achat sera enregistrée avec tous les produits ajoutés.',
-      [
-        { text: 'Continuer l\'édition', style: 'cancel' },
-        {
-          text: 'Valider',
-          onPress: () => {
-            router.push('/');
-          }
-        }
-      ]
-    );
-  };
-
-  // Ouvrir le modal d'édition
-  const openEditModal = (ligne: LigneAchat) => {
-    setSelectedLigne(ligne);
-    setShowEditModal(true);
-  };
-
-  // Filtrer les produits pour la recherche
-  const filteredProduits = produits.filter(p =>
-    p.libelle.toLowerCase().includes(searchProduit.toLowerCase())
-  );
-  
-  // === FONCTIONS DE GESTION CRUD DES PRODUITS ===
-  
-  // Ajouter un nouveau produit
-  const handleAddProduitToDb = () => {
-    if (!produitLibelle.trim()) {
-      Alert.alert('Erreur', 'Veuillez entrer un nom de produit');
-      return;
-    }
-
-    try {
-      const db = getDb();
-      db.runSync('INSERT INTO Produit (libelle) VALUES (?)', [produitLibelle.trim()]);
-      
-      setProduitLibelle('');
-      setShowAddProduitModal(false);
-      loadData(); // Recharger pour actualiser la liste des produits
-      Alert.alert('Succès', 'Produit ajouté à la base de données !');
-    } catch (error) {
-      console.error('Erreur lors de l\'ajout:', error);
-      Alert.alert('Erreur', 'Impossible d\'ajouter le produit');
-    }
-  };
-
-  // Modifier un produit existant dans la DB
-  const handleEditProduitInDb = () => {
-    if (!selectedProduit || !produitLibelle.trim()) {
-      Alert.alert('Erreur', 'Veuillez entrer un nom de produit');
-      return;
-    }
-
-    try {
-      const db = getDb();
-      db.runSync('UPDATE Produit SET libelle = ? WHERE id = ?', [produitLibelle.trim(), selectedProduit.id]);
-      
-      setSelectedProduit(null);
-      setProduitLibelle('');
-      setShowEditProduitModal(false);
-      loadData(); // Recharger pour actualiser
-      Alert.alert('Succès', 'Produit modifié avec succès !');
-    } catch (error) {
-      console.error('Erreur lors de la modification:', error);
-      Alert.alert('Erreur', 'Impossible de modifier le produit');
-    }
-  };
-
-  // Supprimer un produit de la DB
-  const handleDeleteProduitFromDb = (produit: Produit) => {
-    Alert.alert(
-      'Confirmer la suppression',
-      `Voulez-vous vraiment supprimer "${produit.libelle}" de la base de données ?\n\nAttention : Ce produit ne pourra plus être ajouté aux futurs achats.`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Supprimer',
-          style: 'destructive',
-          onPress: () => {
-            try {
-              const db = getDb();
-              db.runSync('DELETE FROM Produit WHERE id = ?', [produit.id]);
-              loadData(); // Recharger
-              Alert.alert('Succès', 'Produit supprimé de la base');
-            } catch (error) {
-              console.error('Erreur lors de la suppression:', error);
-              Alert.alert('Erreur', 'Impossible de supprimer le produit');
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  // Ouvrir le modal d'édition d'un produit
-  const openEditProduitModal = (produit: Produit) => {
-    setSelectedProduit(produit);
-    setProduitLibelle(produit.libelle);
-    setShowEditProduitModal(true);
-  };
-  
-  // === FONCTIONS DE GESTION DU NOM DE LISTE ===
-  
-  // Ouvrir le modal de modification du nom de liste (inline editing)
-  const openEditListNameModal = () => {
-    setNewListName(achat?.nomListe || '');
-    setShowEditListNameModal(true);
-  };
-  
-  // Enregistrer le nouveau nom de liste (sans modal, inline)
-  const handleSaveListName = () => {
-    if (!newListName.trim()) {
-      Alert.alert('Erreur', 'Veuillez entrer un nom de liste');
-      return;
-    }
-
-    try {
-      const db = getDb();
-      db.runSync('UPDATE Achat SET nomListe = ? WHERE id = ?', [newListName.trim(), achatId]);
-      
-      setShowEditListNameModal(false);
-      loadData();
-    } catch (error) {
-      console.error('Erreur lors de la modification:', error);
-      Alert.alert('Erreur', 'Impossible de modifier le nom de liste');
-    }
-  };
-  
-  // Supprimer la liste d'achat
-  const handleDeleteList = () => {
-    Alert.alert(
-      'Confirmer la suppression',
-      'Voulez-vous vraiment supprimer cette liste d\'achat ? Tous les produits associés seront également supprimés.',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Supprimer',
-          style: 'destructive',
-          onPress: () => {
-            try {
-              const db = getDb();
-              db.runSync('DELETE FROM LigneAchat WHERE idAchat = ?', [achatId]);
-              db.runSync('DELETE FROM Achat WHERE id = ?', [achatId]);
-              
-              Alert.alert('Succès', 'Liste supprimée', [
-                { text: 'OK', onPress: () => router.push('/') }
-              ]);
-            } catch (error) {
-              console.error('Erreur lors de la suppression:', error);
-              Alert.alert('Erreur', 'Impossible de supprimer la liste');
-            }
-          }
-        }
-      ]
-    );
-  };
-  
-  // Créer une copie de la liste
-  const handleDuplicateList = () => {
-    try {
-      const db = getDb();
-      
-      // Créer une nouvelle liste avec le même nom + " (Copie)"
-      const newNom = `${achat?.nomListe} (Copie)`;
-      const now = new Date().toISOString();
-      
-      db.runSync(
-        'INSERT INTO Achat (nomListe, dateAchat, montantTotal) VALUES (?, ?, ?)',
-        [newNom, now, totalGeneral]
-      );
-      
-      // Récupérer l'ID de la nouvelle liste
-      const result = db.getFirstSync<{ id: number }>('SELECT last_insert_rowid() as id');
-      const newAchatId = result?.id;
-      
-      if (newAchatId) {
-        // Copier toutes les lignes d'achat
-        for (const ligne of lignesAchat) {
-          db.runSync(
-            'INSERT INTO LigneAchat (idAchat, idProduit, quantite, prixUnitaire, prixTotal) VALUES (?, ?, ?, ?, ?)',
-            [newAchatId, ligne.idProduit, ligne.quantite, ligne.prixUnitaire, ligne.prixTotal]
-          );
-        }
+      if (ligne.id) {
+        // Mettre à jour la ligne existante
+        db.runSync(
+          'UPDATE LigneAchat SET quantite = ?, prixUnitaire = ?, prixTotal = ?, unite = ? WHERE id = ?',
+          [quantite, prixUnitaire, prixTotal, modalUnite, ligne.id]
+        );
+      } else {
+        // Créer une nouvelle ligne en DB
+        const result = db.runSync(
+          'INSERT INTO LigneAchat (idAchat, libelleProduit, quantite, prixUnitaire, prixTotal, unite) VALUES (?, ?, ?, ?, ?, ?)',
+          [achatId, ligne.libelleProduit, quantite, prixUnitaire, prixTotal, modalUnite]
+        );
         
-        Alert.alert('Succès', 'Liste copiée !', [
-          { text: 'OK', onPress: () => router.push(`/achat/${newAchatId}`) }
-        ]);
+        ligne.id = result.lastInsertRowId as number;
       }
+      
+      // Mettre à jour l'état
+      const newLignes = [...lignes];
+      newLignes[modalLigneIndex] = {
+        ...ligne,
+        quantite,
+        prixUnitaire,
+        prixTotal,
+        unite: modalUnite,
+        isChecked: true,
+        isNew: false
+      };
+      setLignes(newLignes);
+      
+      // Fermer le modal
+      setShowModal(false);
+      setModalLigneIndex(null);
+      setModalQuantite('');
+      setModalPrixUnitaire('');
+      setModalUnite('pcs');
+      
     } catch (error) {
-      console.error('Erreur lors de la copie:', error);
-      Alert.alert('Erreur', 'Impossible de copier la liste');
+      console.error('Erreur sauvegarde ligne:', error);
+      Alert.alert('Erreur', 'Impossible de sauvegarder le produit');
     }
-  };
+  }, [modalLigneIndex, modalQuantite, modalPrixUnitaire, modalUnite, lignes, achatId]);
 
-  if (loading) {
+  // Fonction pour supprimer une ligne
+  const handleDeleteLigne = useCallback((index: number) => {
+    const ligne = lignes[index];
+    
+    Alert.alert(
+      'Confirmation',
+      `Supprimer "${ligne.libelleProduit}" de la liste ?`,
+      [
+        { text: 'Annuler' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (ligne.id) {
+                const db = getDb();
+                db.runSync('DELETE FROM LigneAchat WHERE id = ?', [ligne.id]);
+              }
+              
+              setLignes(prev => prev.filter((_, i) => i !== index));
+            } catch (error) {
+              console.error('Erreur suppression ligne:', error);
+              Alert.alert('Erreur', 'Impossible de supprimer le produit');
+            }
+          }
+        }
+      ]
+    );
+  }, [lignes]);
+
+  // Fonction pour modifier une ligne dans le tableau
+  const handleEditLigne = useCallback((index: number) => {
+    const ligne = lignes[index];
+    setModalLigneIndex(index);
+    setModalQuantite(ligne.quantite.toString());
+    setModalPrixUnitaire(ligne.prixUnitaire.toString());
+    setModalUnite(ligne.unite || 'pcs');
+    setShowModal(true);
+  }, [lignes]);
+
+  // Fonction pour mettre à jour un champ dans le tableau
+  const updateLigneField = useCallback((index: number, field: 'libelleProduit' | 'quantite' | 'prixUnitaire', value: string | number) => {
+    const newLignes = [...lignes];
+    const ligne = newLignes[index];
+    
+    if (field === 'libelleProduit') {
+      ligne.libelleProduit = (value as string).trim();
+    } else if (field === 'quantite') {
+      const numValue = parseFloat(value as string) || 0;
+      ligne.quantite = numValue;
+    } else if (field === 'prixUnitaire') {
+      const numValue = parseFloat(value as string) || 0;
+      ligne.prixUnitaire = numValue;
+    }
+    
+    // Recalculer le prix total
+    ligne.prixTotal = ligne.quantite * ligne.prixUnitaire;
+    ligne.isChecked = ligne.quantite > 0 && ligne.prixUnitaire > 0;
+    
+    setLignes(newLignes);
+    
+    // Sauvegarder en DB si la ligne existe (avec debounce implicite via le rendu)
+    const ligneId = ligne.id;
+    if (ligneId) {
+      // Utiliser un timeout pour éviter trop de sauvegardes
+      setTimeout(() => {
+        try {
+          const db = getDb();
+          db.runSync(
+            'UPDATE LigneAchat SET libelleProduit = ?, quantite = ?, prixUnitaire = ?, prixTotal = ? WHERE id = ?',
+            [ligne.libelleProduit, ligne.quantite, ligne.prixUnitaire, ligne.prixTotal, ligneId]
+          );
+        } catch (error) {
+          console.error('Erreur mise à jour:', error);
+        }
+      }, 500);
+    }
+  }, [lignes]);
+
+  const totalDepense = useMemo(
+    () => lignes.filter(l => l.isChecked).reduce((sum, ligne) => sum + ligne.prixTotal, 0),
+    [lignes]
+  );
+
+  if (!achatId || Number.isNaN(achatId)) {
     return (
       <View style={[styles.container, styles.center]}>
-        <Ionicons name="basket" size={60} color={COLORS.primary} />
-        <Text style={styles.loadingText}>Chargement...</Text>
+        <Ionicons name="warning" size={48} color={COLORS.error} />
+        <Text style={styles.errorTitle}>Achat introuvable</Text>
+        <Text style={styles.errorText}>Identifiant fourni invalide.</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={() => router.back()}>
+          <Text style={styles.retryText}>Retour</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <ActivityIndicator size="large" color={SECTION_COLORS.achats.primary} />
+        <Text style={styles.loadingText}>Chargement des détails...</Text>
+      </View>
+    );
+  }
+
+  if (error || !achat) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <Ionicons name="warning" size={48} color={COLORS.error} />
+        <Text style={styles.errorTitle}>Oups...</Text>
+        <Text style={styles.errorText}>{error || 'Impossible de charger cet achat'}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={loadData}>
+          <Text style={styles.retryText}>Réessayer</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  const lignesChecked = lignes.filter(l => l.isChecked);
+  const lignesUnchecked = lignes.filter(l => !l.isChecked);
+
   return (
-    <View style={styles.container}>
-      {/* Header style Google Keep */}
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="white" />
-          </TouchableOpacity>
-          
-          {/* Titre éditable inline (comme Google Keep) */}
-          <View style={styles.headerInfo}>
-            {showEditListNameModal ? (
-              <TextInput
-                style={styles.headerTitleInput}
-                value={newListName}
-                onChangeText={setNewListName}
-                onBlur={() => {
-                  if (newListName.trim()) {
-                    handleSaveListName();
-                  } else {
-                    setShowEditListNameModal(false);
-                    setNewListName(achat?.nomListe || '');
-                  }
-                }}
-                autoFocus
-                placeholder="Titre"
-                placeholderTextColor="rgba(255,255,255,0.6)"
-              />
-            ) : (
-              <TouchableOpacity onPress={openEditListNameModal}>
-                <Text style={styles.headerTitle} numberOfLines={1}>
-                  {achat?.nomListe}
-                </Text>
-              </TouchableOpacity>
-            )}
-            <Text style={styles.headerSubtitle}>
-              {achat && format(new Date(achat.dateAchat), 'dd MMMM yyyy à HH:mm')}
-            </Text>
-          </View>
-          
-          {/* Actions en haut (style Google Keep) */}
-          <View style={styles.headerButtons}>
-            <TouchableOpacity 
-              style={styles.headerActionButton}
-              onPress={() => setShowManageProduitsModal(true)}
-            >
-              <Ionicons name="settings-outline" size={20} color="white" />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.headerActionButton}
-              onPress={() => setShowAddModal(true)}
-            >
-              <Ionicons name="add" size={24} color="white" />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.headerActionButton}
-              onPress={() => setShowHeaderMenuModal(true)}
-            >
-              <Ionicons name="ellipsis-vertical" size={20} color="white" />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-
-      {/* Résumé */}
-      <View style={styles.summaryCard}>
-        <View style={styles.summaryRow}>
-          <View style={styles.summaryItem}>
-            <Ionicons name="basket" size={20} color={SECTION_COLORS.achats.primary} />
-            <Text style={styles.summaryLabel}>Articles</Text>
-            <Text style={styles.summaryValue}>{lignesAchat.length}</Text>
-          </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryItem}>
-            <Ionicons name="cash" size={20} color={SECTION_COLORS.achats.primary} />
-            <Text style={styles.summaryLabel}>Total</Text>
-            <Text style={styles.summaryValue}>{totalGeneral.toLocaleString()} Ar</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Liste des produits */}
-      <View style={styles.listContainer}>
-        <Text style={styles.listTitle}>Produits ajoutés</Text>
+    <Animated.View 
+      style={[
+        styles.container,
+        {
+          opacity: fadeAnim,
+          transform: [{ scale: scaleAnim }],
+        }
+      ]}
+    >
+      <LinearGradient
+        colors={SECTION_COLORS.achats.gradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.header}
+      >
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={20} color="white" />
+        </TouchableOpacity>
         
-        <FlatList
-          data={lignesAchat}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={({ item }) => (
-            <View style={styles.productCard}>
-              <View style={styles.productInfo}>
-                <Text style={styles.productName}>{item.libelleProduit}</Text>
-                <View style={styles.productDetails}>
-                  <Text style={styles.productQuantity}>
-                    Qté: {item.quantite}
-                  </Text>
-                  <Text style={styles.productPrice}>
-                    {item.prixUnitaire.toLocaleString()} Ar/unité
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.productActions}>
-                <Text style={styles.productTotal}>
-                  {item.prixTotal.toLocaleString()} Ar
-                </Text>
-                <View style={styles.actionButtons}>
-                  <TouchableOpacity
-                    style={styles.editButton}
-                    onPress={() => openEditModal(item)}
-                  >
-                    <Ionicons name="pencil" size={16} color={SECTION_COLORS.achats.primary} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.deleteButton}
-                    onPress={() => handleDeleteProduit(item)}
-                  >
-                    <Ionicons name="trash" size={16} color={COLORS.error} />
-                  </TouchableOpacity>
-                </View>
-              </View>
+        <View style={styles.headerInfo}>
+          {editingTitre ? (
+            <View style={styles.titleEditContainer}>
+              <TextInput
+                style={styles.titleInput}
+                value={titreListe}
+                onChangeText={setTitreListe}
+                placeholder="Nom de la liste"
+                autoFocus
+                onBlur={handleSaveTitre}
+                onSubmitEditing={handleSaveTitre}
+              />
+              <TouchableOpacity onPress={handleSaveTitre}>
+                <Ionicons name="checkmark" size={20} color="white" />
+              </TouchableOpacity>
             </View>
-          )}
-          contentContainerStyle={styles.listContent}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Ionicons name="basket-outline" size={48} color="#ddd" />
-              <Text style={styles.emptyTitle}>Aucun produit ajouté</Text>
-              <Text style={styles.emptyText}>
-                Commencez par ajouter des produits à votre liste
+          ) : (
+            <TouchableOpacity onPress={() => setEditingTitre(true)}>
+              <Text style={styles.headerTitle}>{titreListe}</Text>
+              <Text style={styles.headerSubtitle}>
+                {format(new Date(achat.dateAchat), 'EEEE dd MMMM yyyy', { locale: fr })}
               </Text>
-            </View>
-          }
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <TouchableOpacity 
+          style={styles.refreshButton} 
+          onPress={() => router.push('/rapports')}
+        >
+          <Ionicons name="bar-chart" size={20} color="white" />
+        </TouchableOpacity>
+      </LinearGradient>
+
+      {/* Zone d'ajout de produit */}
+      <View style={styles.addProductContainer}>
+        <TextInput
+          style={styles.productInput}
+          value={nouveauProduit}
+          onChangeText={setNouveauProduit}
+          placeholder="Élément de liste"
+          onSubmitEditing={handleAddProduct}
         />
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={handleAddProduct}
+        >
+          <Ionicons name="add" size={24} color="white" />
+        </TouchableOpacity>
       </View>
 
-      {/* Bouton de validation */}
-      {lignesAchat.length > 0 && (
-        <View style={styles.validateContainer}>
-          <TouchableOpacity style={styles.validateButton} onPress={handleValidateList}>
-            <Ionicons name="checkmark-circle" size={24} color="white" />
-            <Text style={styles.validateButtonText}>Valider la liste</Text>
-          </TouchableOpacity>
+      <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 32 }}>
+        {/* Tableau des produits cochés */}
+        {lignesChecked.length > 0 && (
+          <>
+        <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Détail des achats</Text>
         </View>
-      )}
 
-      {/* Modal d'ajout de produit avec checkbox */}
-      <Modal
-        visible={showAddModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowAddModal(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity 
-              onPress={() => {
-                setShowAddModal(false);
-                setProduitsAjoutesTemp([]);
-                setSearchProduit('');
-              }} 
-              style={styles.modalCloseButton}
-            >
-              <Ionicons name="close" size={24} color={COLORS.text} />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>Ajouter des produits</Text>
-            <View style={styles.modalHeaderSpacer} />
+            <View style={styles.tableContainer}>
+              <View style={styles.tableHeader}>
+                <Text style={[styles.tableHeaderText, { flex: 2 }]}>Désignation et quantité</Text>
+                <Text style={[styles.tableHeaderText, { flex: 1 }]}>PU</Text>
+                <Text style={[styles.tableHeaderText, { flex: 1 }]}>PT</Text>
+                <View style={{ width: 60 }} />
           </View>
 
-          <ScrollView style={styles.modalContent}>
-            {/* Barre de recherche */}
-            <View style={styles.searchSection}>
-              <View style={styles.searchInputContainer}>
-                <Ionicons name="search" size={20} color="#999" style={styles.searchIcon} />
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Rechercher un produit..."
-                  value={searchProduit}
-                  onChangeText={setSearchProduit}
-                  placeholderTextColor="#999"
-                />
-              </View>
-            </View>
-
-            {/* Badge de sélection */}
-            {produitsAjoutesTemp.length > 0 && (
-              <View style={styles.selectionBadge}>
-                <Ionicons name="checkmark-circle" size={20} color={SECTION_COLORS.achats.primary} />
-                <Text style={styles.selectionBadgeText}>
-                  {produitsAjoutesTemp.length} produit(s) ajouté(s)
-                </Text>
-              </View>
-            )}
-
-            {/* Liste des produits disponibles */}
-            <View style={styles.productsSection}>
-              <Text style={styles.sectionTitle}>Produits disponibles</Text>
-              <View style={styles.productsList}>
-                {filteredProduits.map((produit) => (
-                  <TouchableOpacity
-                    key={produit.id}
-                    style={styles.checkboxItem}
-                    onPress={() => handleQuickAddProduit(produit)}
+              {lignesChecked.map((ligne, index) => {
+                const realIndex = lignes.findIndex(l => l === ligne);
+                const isEven = index % 2 === 0;
+                return (
+                  <View 
+                    key={ligne.id || realIndex} 
+                    style={[
+                      styles.tableRow,
+                      isEven && styles.tableRowEven
+                    ]}
                   >
-                    <Ionicons name="add-circle-outline" size={24} color={SECTION_COLORS.achats.primary} />
-                    <Text style={styles.checkboxLabel}>{produit.libelle}</Text>
+                    <View style={[styles.tableCell, { flex: 2 }]}>
+                      <View style={styles.tableCellProductContainer}>
+                        <TextInput
+                          style={[styles.tableCellInput, styles.tableCellProductName]}
+                          value={ligne.libelleProduit}
+                          onChangeText={(text) => updateLigneField(realIndex, 'libelleProduit', text)}
+                          placeholder="Produit"
+                        />
+                        <View style={styles.tableCellQuantityContainer}>
+                          <TextInput
+                            style={[styles.tableCellInput, styles.tableCellQuantity]}
+                            value={ligne.quantite > 0 ? ligne.quantite.toString() : ''}
+                            onChangeText={(text) => updateLigneField(realIndex, 'quantite', text)}
+                            keyboardType="numeric"
+                            placeholder="0"
+                          />
+                          <View style={styles.tableCellUnitBadge}>
+                            <Text style={styles.tableCellUnit}>{ligne.unite || 'pcs'}</Text>
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                    <View style={[styles.tableCell, { flex: 1 }]}>
+                      <TextInput
+                        style={styles.tableCellInput}
+                        value={ligne.prixUnitaire > 0 ? ligne.prixUnitaire.toString() : ''}
+                        onChangeText={(text) => updateLigneField(realIndex, 'prixUnitaire', text)}
+                        keyboardType="numeric"
+                        placeholder="0"
+                      />
+                    </View>
+                    <View style={[styles.tableCell, { flex: 1 }]}>
+                      <View style={styles.tableCellTotalContainer}>
+                        <Text style={styles.tableCellTextBold}>{ligne.prixTotal.toLocaleString()}</Text>
+                        <Text style={styles.tableCellCurrency}>Ar</Text>
+                      </View>
+                    </View>
+                    <View style={styles.tableCellActions}>
+                      <TouchableOpacity
+                        onPress={() => handleEditLigne(realIndex)}
+                        style={[styles.actionButton, styles.actionButtonEdit]}
+                      >
+                        <Ionicons name="pencil" size={16} color={SECTION_COLORS.achats.primary} />
+              </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleDeleteLigne(realIndex)}
+                        style={[styles.actionButton, styles.actionButtonDelete]}
+                      >
+                        <Ionicons name="trash" size={16} color={COLORS.error} />
+                      </TouchableOpacity>
+              </View>
+                  </View>
+                );
+              })}
+            </View>
+          </>
+        )}
+
+        {/* Liste des articles non cochés - Positionnée en bas après le tableau */}
+        {lignesUnchecked.length > 0 && (
+          <>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Liste des articles</Text>
+            </View>
+
+            {lignesUnchecked.map((ligne, index) => {
+              const realIndex = lignes.findIndex(l => l === ligne);
+              return (
+                <View key={realIndex} style={styles.produitItem}>
+                  <TouchableOpacity
+                    style={styles.checkboxContainer}
+                    onPress={() => handleToggleCheckbox(realIndex)}
+                  >
+                    <View style={[styles.checkbox, ligne.isChecked && styles.checkboxChecked]}>
+                      {ligne.isChecked && <Ionicons name="checkmark" size={16} color="white" />}
+                    </View>
                   </TouchableOpacity>
-                ))}
+                  <Text style={styles.produitName}>{ligne.libelleProduit}</Text>
+                </View>
+              );
+            })}
+          </>
+        )}
+
+        {/* Carte de résumé avec gradient - Positionnée en bas */}
+        {lignesChecked.length > 0 && (
+          <LinearGradient
+            colors={SECTION_COLORS.achats.gradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.summaryCardGradient}
+          >
+            <View style={styles.summaryRow}>
+              <View style={styles.summaryLeft}>
+                <Text style={styles.summaryLabel}>Total</Text>
+                <Text style={styles.summaryValue}>{totalDepense.toLocaleString()} Ar</Text>
+              </View>
+              <View style={styles.summaryBadge}>
+                <Ionicons name="list" size={20} color="white" />
+                <Text style={styles.summaryBadgeText}>{lignesChecked.length} articles</Text>
               </View>
             </View>
-            
-            {/* Liste des produits ajoutés temporairement */}
-            {produitsAjoutesTemp.length > 0 && (
-              <View style={styles.tempProduitsSection}>
-                <Text style={styles.sectionTitle}>Produits ajoutés ({produitsAjoutesTemp.length})</Text>
-                {produitsAjoutesTemp.map((produit) => (
-                  <View key={produit.id} style={styles.tempProduitCard}>
-                    <View style={styles.tempProduitLeft}>
-                      <TouchableOpacity
-                        style={styles.checkboxToggle}
-                        onPress={() => toggleProduitDetails(produit.id)}
-                      >
-                        <Ionicons
-                          name={selectedForDetails[produit.id] ? "checkbox" : "square-outline"}
-                          size={24}
-                          color={SECTION_COLORS.achats.primary}
-                        />
-                      </TouchableOpacity>
-                      <Text style={styles.tempProduitName}>{produit.libelle}</Text>
-                    </View>
-                    
-                    {/* Afficher les champs si coché */}
-                    {selectedForDetails[produit.id] && (
-                      <View style={styles.detailsInline}>
-                        <TextInput
-                          style={styles.smallInput}
-                          placeholder="Qté"
-                          keyboardType="numeric"
-                          value={produitsDetails[produit.id]?.quantite || ''}
-                          onChangeText={(v) => updateProduitDetail(produit.id, 'quantite', v)}
-                        />
-                        <TextInput
-                          style={styles.smallInput}
-                          placeholder="Prix"
-                          keyboardType="numeric"
-                          value={produitsDetails[produit.id]?.prix || ''}
-                          onChangeText={(v) => updateProduitDetail(produit.id, 'prix', v)}
-                        />
-                      </View>
-                    )}
-                    
-                    <TouchableOpacity onPress={() => handleRemoveTempProduit(produit.id)}>
-                      <Ionicons name="close-circle" size={24} color={COLORS.error} />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
-            )}
-          </ScrollView>
+          </LinearGradient>
+        )}
 
-          {/* Actions */}
-          <View style={styles.modalActions}>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.cancelButton]}
-              onPress={() => {
-                setShowAddModal(false);
-                setProduitsAjoutesTemp([]);
-              }}
-            >
-              <Text style={styles.cancelButtonText}>Annuler</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[
-                styles.actionButton, 
-                styles.confirmButton,
-                produitsAjoutesTemp.length === 0 && styles.confirmButtonDisabled
-              ]}
-              onPress={handleSaveAllTempProduits}
-              disabled={produitsAjoutesTemp.length === 0}
-            >
-              <Ionicons name="checkmark" size={20} color="white" />
-              <Text style={styles.confirmButtonText}>
-                Valider ({produitsAjoutesTemp.length})
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+        {/* Bouton consulter rapport */}
+        {lignesChecked.length > 0 && (
+                <TouchableOpacity
+            style={styles.reportButton}
+            onPress={() => router.push('/rapports')}
+          >
+            <Ionicons name="bar-chart" size={20} color="white" />
+            <Text style={styles.reportButtonText}>Consulter le rapport</Text>
+          </TouchableOpacity>
+        )}
+      </ScrollView>
 
-      {/* Modal de modification de produit */}
+      {/* Modal pour ajouter/modifier quantité et prix */}
       <Modal
-        visible={showEditModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowEditModal(false)}
+        visible={showModal}
+        transparent
+        animationType="none"
+        onRequestClose={() => setShowModal(false)}
       >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity 
-              onPress={() => setShowEditModal(false)} 
-              style={styles.modalCloseButton}
-            >
-              <Ionicons name="close" size={24} color={COLORS.text} />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>
-              Modifier {selectedLigne?.libelleProduit || 'le produit'}
-            </Text>
-            <View style={styles.modalHeaderSpacer} />
-          </View>
+        <Animated.View 
+          style={[
+            styles.modalOverlay,
+            { opacity: modalFadeAnim }
+          ]}
+        >
+          <Animated.View 
+            style={[
+              styles.modalContent,
+              {
+                transform: [{ translateY: modalSlideAnim }],
+              }
+            ]}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {modalLigneIndex !== null && lignes[modalLigneIndex]
+                  ? `Ajouter quantité et prix unitaire du ${lignes[modalLigneIndex].libelleProduit.toLowerCase()}`
+                  : 'Ajouter quantité et prix unitaire'}
+              </Text>
+              <TouchableOpacity onPress={() => setShowModal(false)}>
+                <Ionicons name="close" size={24} color={COLORS.text} />
+                </TouchableOpacity>
+            </View>
 
-          <View style={styles.modalContent}>
-            {selectedLigne && (
-              <View style={styles.detailsSection}>
-                <View style={styles.inputRow}>
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Quantité</Text>
+            <View style={styles.modalBody}>
+              <View style={styles.modalInputGroup}>
+                <Text style={styles.modalLabel}>Entrez prix unitaire</Text>
                     <TextInput
-                      style={styles.numberInput}
-                      value={selectedLigne.quantite.toString()}
-                      onChangeText={(value) => setSelectedLigne({...selectedLigne, quantite: Number.parseFloat(value) || 0})}
+                  style={styles.modalInput}
+                  value={modalPrixUnitaire}
+                  onChangeText={setModalPrixUnitaire}
                       keyboardType="numeric"
-                      placeholderTextColor="#999"
+                  placeholder="0"
                     />
                   </View>
                   
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Prix unitaire (Ar)</Text>
+              <View style={styles.modalInputGroup}>
+                <Text style={styles.modalLabel}>Entrez quantité</Text>
                     <TextInput
-                      style={styles.numberInput}
-                      value={selectedLigne.prixUnitaire.toString()}
-                      onChangeText={(value) => setSelectedLigne({...selectedLigne, prixUnitaire: Number.parseFloat(value) || 0})}
+                  style={styles.modalInput}
+                  value={modalQuantite}
+                  onChangeText={setModalQuantite}
                       keyboardType="numeric"
-                      placeholderTextColor="#999"
+                  placeholder="1"
+                    />
+                    <TextInput
+                  style={[styles.modalInput, styles.modalUniteInput]}
+                  value={modalUnite}
+                  onChangeText={setModalUnite}
+                  placeholder="Unité (kg, L, pcs...)"
                     />
                   </View>
                 </View>
-
-                <View style={styles.totalPreview}>
-                  <Text style={styles.totalPreviewText}>
-                    Total: {(selectedLigne.quantite * selectedLigne.prixUnitaire).toLocaleString()} Ar
-                  </Text>
-                </View>
+                
+            <View style={styles.modalActions}>
+                <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => setShowModal(false)}
+              >
+                <Text style={styles.modalCancelText}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalValidateButton}
+                onPress={handleValidateModal}
+              >
+                <Text style={styles.modalValidateText}>Valider</Text>
+                </TouchableOpacity>
               </View>
-            )}
-          </View>
-
-          <View style={styles.modalActions}>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.cancelButton]}
-              onPress={() => setShowEditModal(false)}
-            >
-              <Text style={styles.cancelButtonText}>Annuler</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[styles.actionButton, styles.confirmButton]}
-              onPress={handleEditProduit}
-            >
-              <Ionicons name="save" size={20} color="white" />
-              <Text style={styles.confirmButtonText}>Enregistrer</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+          </Animated.View>
+        </Animated.View>
       </Modal>
-
-      {/* Modal de gestion des produits */}
-      <Modal
-        visible={showManageProduitsModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowManageProduitsModal(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity 
-              onPress={() => setShowManageProduitsModal(false)} 
-              style={styles.modalCloseButton}
-            >
-              <Ionicons name="close" size={24} color={COLORS.text} />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>Gestion des produits</Text>
-            <View style={styles.modalHeaderSpacer} />
-          </View>
-
-          <View style={styles.modalContent}>
-            {/* Barre de recherche pour la gestion des produits */}
-            <View style={styles.searchSection}>
-              <View style={styles.searchInputContainer}>
-                <Ionicons name="search" size={20} color="#999" style={styles.searchIcon} />
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Rechercher un produit..."
-                  value={searchGestionProduit}
-                  onChangeText={setSearchGestionProduit}
-                  placeholderTextColor="#999"
-                />
-              </View>
-            </View>
-
-            {/* Liste des produits pour gestion */}
-            <View style={styles.productsSection}>
-              <Text style={styles.sectionTitle}>Tous les produits</Text>
-              <View style={styles.productsList}>
-                {produits.filter(p => 
-                  p.libelle.toLowerCase().includes(searchGestionProduit.toLowerCase())
-                ).map((produit) => (
-                  <View
-                    key={produit.id}
-                    style={styles.produitCard}
-                  >
-                    <View style={styles.produitIcon}>
-                      <Ionicons name="cube-outline" size={24} color={SECTION_COLORS.achats.primary} />
-                    </View>
-                    <Text style={styles.produitName}>{produit.libelle}</Text>
-                    <View style={styles.produitActions}>
-                      <TouchableOpacity
-                        style={styles.editButton}
-                        onPress={() => openEditProduitModal(produit)}
-                      >
-                        <Ionicons name="pencil" size={18} color={SECTION_COLORS.achats.primary} />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.deleteButton}
-                        onPress={() => handleDeleteProduitFromDb(produit)}
-                      >
-                        <Ionicons name="trash" size={18} color={COLORS.error} />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            </View>
-          </View>
-
-          {/* Actions */}
-          <View style={styles.modalActions}>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.cancelButton]}
-              onPress={() => setShowManageProduitsModal(false)}
-            >
-              <Text style={styles.cancelButtonText}>Fermer</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[styles.actionButton, styles.confirmButton]}
-              onPress={() => {
-                setShowManageProduitsModal(false);
-                setShowAddProduitModal(true);
-              }}
-            >
-              <Ionicons name="add" size={20} color="white" />
-              <Text style={styles.confirmButtonText}>
-                Ajouter un produit
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Modal d'ajout de produit */}
-      <Modal
-        visible={showAddProduitModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowAddProduitModal(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity 
-              onPress={() => setShowAddProduitModal(false)} 
-              style={styles.modalCloseButton}
-            >
-              <Ionicons name="close" size={24} color={COLORS.text} />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>Ajouter un produit</Text>
-            <View style={styles.modalHeaderSpacer} />
-          </View>
-
-          <View style={styles.modalContent}>
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Nom du produit</Text>
-              <TextInput
-                style={styles.textInput}
-                value={produitLibelle}
-                onChangeText={setProduitLibelle}
-                placeholder="Entrez le nom du produit"
-                placeholderTextColor="#999"
-              />
-            </View>
-          </View>
-
-          <View style={styles.modalActions}>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.cancelButton]}
-              onPress={() => setShowAddProduitModal(false)}
-            >
-              <Text style={styles.cancelButtonText}>Annuler</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[styles.actionButton, styles.confirmButton]}
-              onPress={handleAddProduitToDb}
-            >
-              <Ionicons name="checkmark" size={20} color="white" />
-              <Text style={styles.confirmButtonText}>Ajouter</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Modal d'édition de produit */}
-      <Modal
-        visible={showEditProduitModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowEditProduitModal(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity 
-              onPress={() => setShowEditProduitModal(false)} 
-              style={styles.modalCloseButton}
-            >
-              <Ionicons name="close" size={24} color={COLORS.text} />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>
-              Modifier {selectedProduit?.libelle || 'le produit'}
-            </Text>
-            <View style={styles.modalHeaderSpacer} />
-          </View>
-
-          <View style={styles.modalContent}>
-            {selectedProduit && (
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Nom du produit</Text>
-                <TextInput
-                  style={styles.textInput}
-                  value={produitLibelle}
-                  onChangeText={setProduitLibelle}
-                  placeholder="Entrez le nom du produit"
-                  placeholderTextColor="#999"
-                />
-              </View>
-            )}
-          </View>
-
-          <View style={styles.modalActions}>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.cancelButton]}
-              onPress={() => setShowEditProduitModal(false)}
-            >
-              <Text style={styles.cancelButtonText}>Annuler</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[styles.actionButton, styles.confirmButton]}
-              onPress={handleEditProduitInDb}
-            >
-              <Ionicons name="save" size={20} color="white" />
-              <Text style={styles.confirmButtonText}>Enregistrer</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Modal de modification du nom de la liste */}
-      <Modal
-        visible={showEditListNameModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowEditListNameModal(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <TouchableOpacity 
-              onPress={() => setShowEditListNameModal(false)} 
-              style={styles.modalCloseButton}
-            >
-              <Ionicons name="close" size={24} color={COLORS.text} />
-            </TouchableOpacity>
-            <Text style={styles.modalTitle}>Modifier le nom de la liste</Text>
-            <View style={styles.modalHeaderSpacer} />
-          </View>
-
-          <View style={styles.modalContent}>
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Nom de la liste</Text>
-              <TextInput
-                style={styles.textInput}
-                value={newListName}
-                onChangeText={setNewListName}
-                placeholder="Entrez le nouveau nom de la liste"
-                placeholderTextColor="#999"
-              />
-            </View>
-          </View>
-
-          <View style={styles.modalActions}>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.cancelButton]}
-              onPress={() => setShowEditListNameModal(false)}
-            >
-              <Text style={styles.cancelButtonText}>Annuler</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[styles.actionButton, styles.confirmButton]}
-              onPress={handleSaveListName}
-            >
-              <Ionicons name="save" size={20} color="white" />
-              <Text style={styles.confirmButtonText}>Enregistrer</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Modal de menu d'actions (style Google Keep) */}
-      <Modal
-        visible={showHeaderMenuModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowHeaderMenuModal(false)}
-      >
-        <TouchableOpacity 
-          style={styles.menuOverlay}
-          activeOpacity={1}
-          onPress={() => setShowHeaderMenuModal(false)}
-        >
-          <View style={styles.menuContainer}>
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => {
-                setShowHeaderMenuModal(false);
-                handleDuplicateList();
-              }}
-            >
-              <Ionicons name="copy-outline" size={22} color={COLORS.text} />
-              <Text style={styles.menuItemText}>Créer une copie</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => {
-                setShowHeaderMenuModal(false);
-                handleDeleteList();
-              }}
-            >
-              <Ionicons name="trash-outline" size={22} color={COLORS.error} />
-              <Text style={[styles.menuItemText, {color: COLORS.error}]}>Supprimer</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -1211,58 +750,47 @@ const styles = StyleSheet.create({
   center: {
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: 24,
   },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: COLORS.textLight,
-  },
-  
-  // Header
   header: {
-    backgroundColor: SECTION_COLORS.achats.primary,
     paddingTop: 50,
     paddingBottom: 20,
     paddingHorizontal: 20,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-  },
-  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    shadowColor: SECTION_COLORS.achats.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
   },
   headerInfo: {
     flex: 1,
   },
-  headerTitleInput: {
+  titleEditContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  titleInput: {
+    flex: 1,
     fontSize: 20,
     fontWeight: 'bold',
     color: 'white',
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
-  },
-  listNameContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  editIconInline: {
-    marginLeft: 4,
-    opacity: 0.9,
+    borderBottomWidth: 1,
+    borderBottomColor: 'white',
+    marginRight: 8,
+    paddingVertical: 4,
   },
   headerTitle: {
     fontSize: 20,
@@ -1270,600 +798,419 @@ const styles = StyleSheet.create({
     color: 'white',
   },
   headerSubtitle: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.9)',
-    marginTop: 2,
+    color: 'rgba(255,255,255,0.85)',
+    marginTop: 4,
+    fontSize: 12,
   },
-  headerButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  headerActionButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  refreshButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  
-  // Résumé
-  summaryCard: {
-    backgroundColor: 'white',
-    marginHorizontal: 20,
-    marginTop: -10,
-    marginBottom: 20,
-    borderRadius: 16,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  summaryRow: {
+  addProductContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
-  },
-  summaryItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  summaryDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: COLORS.border,
-    marginHorizontal: 20,
-  },
-  summaryLabel: {
-    fontSize: 12,
-    color: COLORS.textLight,
-    marginTop: 4,
-    marginBottom: 4,
-  },
-  summaryValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: SECTION_COLORS.achats.primary,
-  },
-
-  // Liste
-  listContainer: {
-    flex: 1,
     paddingHorizontal: 20,
-  },
-  listTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginBottom: 16,
-  },
-  listContent: {
-    paddingBottom: 20,
-  },
-  
-  // Cartes de produits
-  productCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  productInfo: {
-    flex: 1,
-  },
-  productName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginBottom: 6,
-  },
-  productDetails: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  productQuantity: {
-    fontSize: 14,
-    color: COLORS.textLight,
-  },
-  productPrice: {
-    fontSize: 14,
-    color: COLORS.textLight,
-  },
-  productActions: {
-    alignItems: 'flex-end',
-  },
-  productTotal: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: SECTION_COLORS.achats.primary,
-    marginBottom: 8,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  editButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: SECTION_COLORS.achats.light,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  deleteButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#fee2e2',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  // État vide
-  emptyContainer: {
-    alignItems: 'center',
-    paddingVertical: 60,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: COLORS.textLight,
-    textAlign: 'center',
-  },
-
-  // Validation
-  validateContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 30,
-  },
-  validateButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: SECTION_COLORS.achats.primary,
     paddingVertical: 16,
-    borderRadius: 12,
-    gap: 8,
-  },
-  validateButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: 'white',
-  },
-
-  // Modal
-  modalContainer: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 50,
-    paddingBottom: 20,
     backgroundColor: 'white',
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  modalCloseButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.surface,
+  productInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginRight: 12,
+    fontSize: 16,
+  },
+  addButton: {
+    backgroundColor: SECTION_COLORS.achats.primary,
+    borderRadius: 12,
+    padding: 10,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: SECTION_COLORS.achats.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
-  modalTitle: {
+  content: {
     flex: 1,
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    textAlign: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 24,
   },
-  modalHeaderSpacer: {
-    width: 40,
-  },
-  modalContent: {
-    flex: 1,
+  summaryCard: {
+    backgroundColor: 'white',
+    borderRadius: 16,
     padding: 20,
-  },
-
-  // Nouveaux styles pour les modals modernisées
-  searchSection: {
     marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  summaryCardGradient: {
+    borderRadius: 20,
+    padding: 24,
+    marginTop: 24,
+    marginBottom: 16,
+    shadowColor: SECTION_COLORS.achats.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  summaryLeft: {
+    flex: 1,
+  },
+  summaryLabel: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.9)',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  summaryValue: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: 'white',
+    letterSpacing: 0.5,
+  },
+  summaryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  summaryBadgeText: {
+    fontWeight: '700',
+    color: 'white',
+    fontSize: 14,
+  },
+  sectionHeader: {
+    marginBottom: 12,
+    marginTop: 8,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: COLORS.text,
-    marginBottom: 12,
   },
-  sectionSubtitle: {
-    fontSize: 14,
-    color: COLORS.textLight,
-    marginBottom: 12,
-  },
-  searchInputContainer: {
+  produitItem: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'white',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 10,
+    borderWidth: 1.5,
+    borderColor: SECTION_COLORS.achats.light,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
-    shadowRadius: 2,
+    shadowRadius: 3,
     elevation: 2,
   },
-  searchIcon: {
+  checkboxContainer: {
     marginRight: 12,
   },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: COLORS.text,
-  },
-  productsSection: {
-    marginBottom: 24,
-  },
-  productsList: {
-    maxHeight: 300,
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 8,
-  },
-  productItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  productSelector: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 8,
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  productSelectorActive: {
-    backgroundColor: SECTION_COLORS.achats.light,
-    borderColor: SECTION_COLORS.achats.primary,
-  },
-  productNameActive: {
-    color: SECTION_COLORS.achats.primary,
-    fontWeight: '600',
-  },
-  quickAddButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#10B981',
+  checkbox: {
+    width: 26,
+    height: 26,
+    borderRadius: 7,
+    borderWidth: 2.5,
+    borderColor: SECTION_COLORS.achats.light,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#10B981',
+    backgroundColor: 'white',
+  },
+  checkboxChecked: {
+    backgroundColor: SECTION_COLORS.achats.primary,
+    borderColor: SECTION_COLORS.achats.primary,
+    shadowColor: SECTION_COLORS.achats.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
-    elevation: 4,
-  },
-  detailsSection: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
     elevation: 3,
   },
-  inputRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  inputGroup: {
-    flex: 1,
-  },
-  inputLabel: {
-    fontSize: 14,
+  produitName: {
+    fontSize: 16,
     fontWeight: '600',
     color: COLORS.text,
-    marginBottom: 8,
+    flex: 1,
   },
-  numberInput: {
+  tableContainer: {
     backgroundColor: 'white',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 16,
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 6,
     borderWidth: 1,
     borderColor: COLORS.border,
-    color: COLORS.text,
   },
-  totalPreview: {
+  tableHeader: {
+    flexDirection: 'row',
+    paddingBottom: 16,
+    borderBottomWidth: 2,
+    borderBottomColor: SECTION_COLORS.achats.light,
+    marginBottom: 12,
     backgroundColor: SECTION_COLORS.achats.light,
-    padding: 16,
-    borderRadius: 8,
-    marginTop: 16,
-    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginHorizontal: -4,
   },
-  totalPreviewText: {
+  tableHeaderText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: SECTION_COLORS.achats.primary,
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  tableRow: {
+    flexDirection: 'row',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.divider,
+    alignItems: 'center',
+    backgroundColor: 'white',
+    borderRadius: 12,
+    marginBottom: 6,
+    borderLeftWidth: 3,
+    borderLeftColor: 'transparent',
+  },
+  tableRowEven: {
+    backgroundColor: SECTION_COLORS.achats.light,
+    borderLeftColor: SECTION_COLORS.achats.primary,
+  },
+  tableCell: {
+    paddingRight: 8,
+  },
+  tableCellInput: {
+    fontSize: 14,
+    color: COLORS.text,
+    borderWidth: 1.5,
+    borderColor: SECTION_COLORS.achats.light,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: COLORS.surface,
+    minHeight: 36,
+    fontWeight: '500',
+  },
+  tableCellProductContainer: {
+    gap: 4,
+  },
+  tableCellProductName: {
+    marginBottom: 4,
+  },
+  tableCellQuantityContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  tableCellQuantity: {
+    flex: 1,
+    minWidth: 60,
+  },
+  tableCellUnitBadge: {
+    backgroundColor: SECTION_COLORS.achats.light,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: SECTION_COLORS.achats.primary,
+  },
+  tableCellUnit: {
+    fontSize: 11,
+    color: SECTION_COLORS.achats.primary,
+    fontWeight: '600',
+  },
+  tableCellTotalContainer: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+  },
+  tableCellTextBold: {
     fontSize: 16,
     fontWeight: 'bold',
     color: SECTION_COLORS.achats.primary,
-    textAlign: 'center',
+    letterSpacing: 0.2,
   },
-  modalActions: {
+  tableCellCurrency: {
+    fontSize: 11,
+    color: COLORS.textLight,
+    fontWeight: '500',
+  },
+  tableCellActions: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingBottom: 30,
-    gap: 12,
+    gap: 6,
+    width: 60,
   },
   actionButton: {
-    flex: 1,
+    padding: 6,
+    borderRadius: 8,
+  },
+  actionButtonEdit: {
+    backgroundColor: SECTION_COLORS.achats.light,
+  },
+  actionButtonDelete: {
+    backgroundColor: '#FEE2E2',
+  },
+  reportButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: 12,
+    backgroundColor: SECTION_COLORS.rapports.primary,
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 16,
     gap: 8,
-  },
-  cancelButton: {
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.text,
-  },
-  confirmButton: {
-    backgroundColor: SECTION_COLORS.achats.primary,
-    shadowColor: SECTION_COLORS.achats.primary,
+    shadowColor: SECTION_COLORS.rapports.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 6,
   },
-  confirmButtonDisabled: {
-    backgroundColor: '#d1d5db',
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  confirmButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
+  reportButtonText: {
     color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
   },
-
-  // Nouveaux styles pour le nouveau système d'ajout
-  tempProduitsSection: {
-    backgroundColor: SECTION_COLORS.achats.light,
-    padding: 16,
-    marginTop: 16,
-    borderRadius: 12,
-  },
-  tempProduitCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
-    gap: 8,
-  },
-  tempProduitLeft: {
+  modalOverlay: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  checkboxToggle: {
-    width: 32,
-    height: 32,
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  tempProduitName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.text,
-    flex: 1,
-  },
-  detailsInline: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  smallInput: {
-    width: 70,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    fontSize: 13,
-    textAlign: 'center',
-  },
-  selectionBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: SECTION_COLORS.achats.light,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
-    gap: 8,
-  },
-  selectionBadgeText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: SECTION_COLORS.achats.primary,
-  },
-  checkboxItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 8,
+  modalContent: {
     backgroundColor: 'white',
-    gap: 12,
+    borderRadius: 20,
+    width: '90%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  checkboxLabel: {
-    fontSize: 14,
-    color: COLORS.text,
-    flex: 1,
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
   },
-  instructionText: {
-    fontSize: 14,
-    color: COLORS.textLight,
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  productDetailCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  productDetailName: {
-    fontSize: 16,
+  modalTitle: {
+    fontSize: 18,
     fontWeight: 'bold',
     color: COLORS.text,
-    marginBottom: 12,
-  },
-  detailInputRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  detailInputGroup: {
     flex: 1,
+    marginRight: 12,
   },
-  detailInputLabel: {
-    fontSize: 12,
-    color: COLORS.textLight,
-    marginBottom: 6,
+  modalBody: {
+    padding: 20,
   },
-  detailInput: {
-    backgroundColor: COLORS.surface,
+  modalInputGroup: {
+    marginBottom: 20,
+  },
+  modalLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text,
+    marginBottom: 8,
+  },
+  modalInput: {
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
+    paddingVertical: 12,
+    fontSize: 16,
+    backgroundColor: COLORS.surface,
+  },
+  modalUniteInput: {
+    marginTop: 8,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    padding: 20,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  modalCancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: COLORS.surface,
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    fontSize: 16,
+    fontWeight: '600',
     color: COLORS.text,
   },
-  productDetailTotal: {
-    flexDirection: 'row',
+  modalValidateButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: SECTION_COLORS.achats.primary,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.divider,
   },
-  productDetailTotalLabel: {
-    fontSize: 14,
+  modalValidateText: {
+    fontSize: 16,
     fontWeight: '600',
+    color: 'white',
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 14,
     color: COLORS.textLight,
   },
-  productDetailTotalValue: {
-    fontSize: 16,
+  errorTitle: {
+    fontSize: 20,
     fontWeight: 'bold',
-    color: SECTION_COLORS.achats.primary,
+    color: COLORS.error,
+    marginTop: 16,
   },
-  produitCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
+  errorText: {
+    fontSize: 14,
+    color: COLORS.textLight,
+    textAlign: 'center',
+    marginTop: 8,
   },
-  produitIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: SECTION_COLORS.achats.light,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
+  retryButton: {
+    marginTop: 20,
+    backgroundColor: SECTION_COLORS.achats.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 10,
   },
-  produitName: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.text,
-  },
-  produitActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  textInput: {
-    backgroundColor: 'white',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: COLORS.text,
-  },
-
-  // Styles pour le menu d'actions (style Google Keep)
-  menuOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  menuContainer: {
-    backgroundColor: 'white',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingVertical: 20,
-    paddingHorizontal: 16,
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    gap: 16,
-  },
-  menuItemText: {
-    fontSize: 16,
-    color: COLORS.text,
-    fontWeight: '500',
+  retryText: {
+    color: 'white',
+    fontWeight: 'bold',
   },
 });

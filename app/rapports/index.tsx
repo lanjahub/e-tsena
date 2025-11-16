@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -9,15 +9,17 @@ import {
   ScrollView,
   Share,
   Modal,
-  TextInput
+  TextInput,
+  Animated
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { getDb } from '@db/init';
-import { COLORS, SECTION_COLORS } from '@constants/colors';
+import { COLORS, SECTION_COLORS, ANIMATIONS } from '@constants/colors';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { LinearGradient } from 'expo-linear-gradient';
+import { fadeScaleIn } from '../../src/utils/animations';
 
 interface RapportRow {
   id: number;
@@ -74,21 +76,54 @@ export default function Rapports() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [showTransactions, setShowTransactions] = useState(false);
 
+  // Animations
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+
   useEffect(() => {
     loadRapports();
     loadProduits();
   }, []);
 
+  // Animation d'entrée
+  useEffect(() => {
+    if (!loading) {
+      fadeScaleIn(fadeAnim, scaleAnim, ANIMATIONS.duration.normal).start();
+    }
+  }, [loading]);
+
   const loadProduits = async () => {
     try {
       const db = getDb();
-      const result = db.getAllSync(`
-        SELECT DISTINCT p.id, p.libelle
-        FROM Produit p
-        INNER JOIN LigneAchat la ON p.id = la.idProduit
-        ORDER BY p.libelle ASC
-      `);
-      setProduits(result as Produit[]);
+      // Récupérer les produits depuis la table Produit ET les produits uniques de LigneAchat
+      const produitsFromTable = db.getAllSync(`
+        SELECT id, libelle FROM Produit ORDER BY libelle ASC
+      `) as Produit[];
+      
+      const produitsFromLignes = db.getAllSync(`
+        SELECT DISTINCT libelleProduit as libelle
+        FROM LigneAchat
+        ORDER BY libelleProduit ASC
+      `) as { libelle: string }[];
+      
+      // Combiner et dédupliquer
+      const allProduits = new Map<number, Produit>();
+      let maxId = 0;
+      
+      produitsFromTable.forEach(p => {
+        allProduits.set(p.id, p);
+        maxId = Math.max(maxId, p.id);
+      });
+      
+      produitsFromLignes.forEach(p => {
+        const existing = Array.from(allProduits.values()).find(prod => prod.libelle === p.libelle);
+        if (!existing) {
+          maxId++;
+          allProduits.set(maxId, { id: maxId, libelle: p.libelle });
+        }
+      });
+      
+      setProduits(Array.from(allProduits.values()).sort((a, b) => a.libelle.localeCompare(b.libelle)));
     } catch (error) {
       console.error('Erreur lors du chargement des produits:', error);
     }
@@ -124,11 +159,10 @@ export default function Rapports() {
       // Produit le plus acheté
       const produitStats = db.getAllSync(`
         SELECT 
-          p.libelle,
-          SUM(la.quantite) as total_quantite
-        FROM LigneAchat la
-        JOIN Produit p ON la.idProduit = p.id
-        GROUP BY p.libelle
+          libelleProduit as libelle,
+          SUM(quantite) as total_quantite
+        FROM LigneAchat
+        GROUP BY libelleProduit
         ORDER BY total_quantite DESC
         LIMIT 1
       `);
@@ -202,21 +236,23 @@ export default function Rapports() {
           a.id,
           a.dateAchat as dateAchat,
           a.nomListe as nomListe,
-          p.libelle as produit,
+          la.libelleProduit as produit,
           la.quantite,
           la.prixUnitaire,
           la.prixTotal
         FROM Achat a
         JOIN LigneAchat la ON a.id = la.idAchat
-        JOIN Produit p ON la.idProduit = p.id
         WHERE 1=1
       `;
       
       const params: any[] = [];
       
-      if (selectedProduit) {
-        query += ` AND p.id = ?`;
-        params.push(selectedProduit);
+      if (selectedProduit !== null) {
+        const produitLibelle = produits.find(p => p.id === selectedProduit)?.libelle;
+        if (produitLibelle) {
+          query += ` AND la.libelleProduit = ?`;
+          params.push(produitLibelle);
+        }
       }
       
       if (dateDebut) {
@@ -256,17 +292,25 @@ export default function Rapports() {
     <View style={styles.transactionCard}>
       <View style={styles.transactionHeader}>
         <View style={styles.transactionIcon}>
-          <Ionicons name="cart" size={20} color={SECTION_COLORS.rapports.primary} />
+          <Ionicons name="cube" size={24} color={SECTION_COLORS.rapports.primary} />
         </View>
         <View style={styles.transactionInfo}>
           <Text style={styles.transactionProduit}>{item.produit}</Text>
-          <Text style={styles.transactionDate}>
-            {format(parseISO(item.dateAchat), 'dd MMM yyyy', { locale: fr })} - {item.nomListe}
-          </Text>
+          <View style={styles.transactionMeta}>
+            <Ionicons name="calendar-outline" size={12} color={COLORS.textLight} />
+            <Text style={styles.transactionDate}>
+              {format(parseISO(item.dateAchat), 'dd MMM yyyy', { locale: fr })}
+            </Text>
+            <Text style={styles.transactionSeparator}>•</Text>
+            <Ionicons name="list-outline" size={12} color={COLORS.textLight} />
+            <Text style={styles.transactionListe}>{item.nomListe}</Text>
+          </View>
         </View>
         <View style={styles.transactionStats}>
           <Text style={styles.transactionMontant}>{item.prixTotal.toLocaleString()} Ar</Text>
-          <Text style={styles.transactionQuantite}>{item.quantite} x {item.prixUnitaire} Ar</Text>
+          <Text style={styles.transactionQuantite}>
+            {item.quantite} × {item.prixUnitaire.toLocaleString()} Ar
+          </Text>
         </View>
       </View>
     </View>
@@ -276,20 +320,27 @@ export default function Rapports() {
     <TouchableOpacity 
       style={styles.rapportCard}
       onPress={() => router.push(`/achat/${item.id}`)}
+      activeOpacity={0.7}
     >
       <View style={styles.rapportHeader}>
         <View style={styles.rapportIcon}>
-          <Ionicons name="receipt-outline" size={24} color={SECTION_COLORS.rapports.primary} />
+          <Ionicons name="receipt" size={28} color="white" />
         </View>
         <View style={styles.rapportInfo}>
           <Text style={styles.rapportTitle}>{item.nomListe}</Text>
-          <Text style={styles.rapportDate}>
-            {format(new Date(item.d), 'dd MMMM yyyy', { locale: fr })}
-          </Text>
+          <View style={styles.rapportMeta}>
+            <Ionicons name="calendar-outline" size={14} color={COLORS.textLight} />
+            <Text style={styles.rapportDate}>
+              {format(new Date(item.d), 'dd MMMM yyyy', { locale: fr })}
+            </Text>
+          </View>
         </View>
         <View style={styles.rapportStats}>
           <Text style={styles.rapportMontant}>{item.montant.toLocaleString()} Ar</Text>
-          <Text style={styles.rapportProduits}>{item.nbProduits} produits</Text>
+          <View style={styles.rapportBadge}>
+            <Ionicons name="cube-outline" size={12} color={SECTION_COLORS.rapports.primary} />
+            <Text style={styles.rapportProduits}>{item.nbProduits}</Text>
+          </View>
         </View>
       </View>
     </TouchableOpacity>
@@ -305,7 +356,15 @@ export default function Rapports() {
   }
 
   return (
-    <View style={styles.container}>
+    <Animated.View 
+      style={[
+        styles.container,
+        {
+          opacity: fadeAnim,
+          transform: [{ scale: scaleAnim }],
+        }
+      ]}
+    >
       {/* Header avec dégradé */}
       <LinearGradient
         colors={SECTION_COLORS.rapports.gradient}
@@ -560,14 +619,14 @@ export default function Rapports() {
           </View>
         </View>
       </Modal>
-    </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.primaryUltraLight,
+    backgroundColor: COLORS.background,
   },
   centered: {
     justifyContent: 'center',
@@ -763,14 +822,28 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   transactionProduit: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
     color: COLORS.text,
+    marginBottom: 4,
+  },
+  transactionMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   transactionDate: {
     fontSize: 12,
     color: COLORS.textLight,
-    marginTop: 2,
+  },
+  transactionSeparator: {
+    fontSize: 12,
+    color: COLORS.textLight,
+    marginHorizontal: 4,
+  },
+  transactionListe: {
+    fontSize: 12,
+    color: COLORS.textLight,
   },
   transactionStats: {
     alignItems: 'flex-end',
@@ -936,25 +1009,35 @@ const styles = StyleSheet.create({
 
   // Cartes de rapport
   rapportCard: {
-    backgroundColor: '#f8fafc',
-    borderRadius: 12,
+    backgroundColor: 'white',
+    borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: COLORS.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
   },
   rapportHeader: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   rapportIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: SECTION_COLORS.rapports.light,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: SECTION_COLORS.rapports.primary,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
+    shadowColor: SECTION_COLORS.rapports.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
   rapportInfo: {
     flex: 1,
@@ -964,23 +1047,38 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: COLORS.text,
   },
+  rapportMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
   rapportDate: {
-    fontSize: 14,
+    fontSize: 13,
     color: COLORS.textLight,
-    marginTop: 2,
   },
   rapportStats: {
     alignItems: 'flex-end',
   },
   rapportMontant: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
     color: SECTION_COLORS.rapports.primary,
+    marginBottom: 4,
+  },
+  rapportBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: SECTION_COLORS.rapports.light,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   rapportProduits: {
     fontSize: 12,
-    color: COLORS.textLight,
-    marginTop: 2,
+    fontWeight: '600',
+    color: SECTION_COLORS.rapports.primary,
   },
 
   // État vide

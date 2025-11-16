@@ -43,6 +43,87 @@ const migrateDatabase = (db: SQLite.SQLiteDatabase) => {
     console.log('✅ Colonne "unite" déjà présente');
   }
   
+  // Migration: Ajouter la colonne 'unite' à LigneAchat si elle n'existe pas
+  if (!columnExists(db, 'LigneAchat', 'unite')) {
+    console.log('📝 Migration: Ajout de la colonne "unite" à LigneAchat');
+    try {
+      db.execSync(`ALTER TABLE LigneAchat ADD COLUMN unite TEXT DEFAULT 'pcs'`);
+      console.log('✅ Migration réussie: colonne "unite" ajoutée à LigneAchat');
+    } catch (e) {
+      console.error('❌ Erreur migration LigneAchat.unite:', e);
+    }
+  }
+  
+  // Migration: Ajouter libelleProduit et supprimer idProduit dans LigneAchat
+  if (columnExists(db, 'LigneAchat', 'idProduit') && !columnExists(db, 'LigneAchat', 'libelleProduit')) {
+    console.log('📝 Migration: Restructuration de LigneAchat (ajout libelleProduit)');
+    try {
+      // Nettoyer toute table temporaire d'une précédente migration échouée
+      db.execSync('DROP TABLE IF EXISTS LigneAchat_new');
+
+      // Créer une table temporaire avec la nouvelle structure
+      db.execSync(`
+        CREATE TABLE LigneAchat_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          idAchat INTEGER NOT NULL,
+          libelleProduit TEXT NOT NULL,
+          quantite REAL DEFAULT 1,
+          prixUnitaire REAL DEFAULT 0,
+          prixTotal REAL DEFAULT 0,
+          unite TEXT DEFAULT 'pcs',
+          FOREIGN KEY (idAchat) REFERENCES Achat(id) ON DELETE CASCADE
+        );
+      `);
+      
+      // Copier les données existantes avec un libellé sécurisé
+      // Récupérer l'unité du produit si elle existe, sinon utiliser 'pcs'
+      const hasUniteColumn = columnExists(db, 'LigneAchat', 'unite');
+      if (hasUniteColumn) {
+        db.execSync(`
+          INSERT INTO LigneAchat_new (id, idAchat, libelleProduit, quantite, prixUnitaire, prixTotal, unite)
+          SELECT 
+            la.id, 
+            la.idAchat, 
+            COALESCE(p.libelle, 'Produit inconnu') as libelleProduit,
+            la.quantite, 
+            la.prixUnitaire, 
+            la.prixTotal,
+            COALESCE(la.unite, p.unite, 'pcs') as unite
+          FROM LigneAchat la
+          LEFT JOIN Produit p ON p.id = la.idProduit;
+        `);
+      } else {
+        db.execSync(`
+          INSERT INTO LigneAchat_new (id, idAchat, libelleProduit, quantite, prixUnitaire, prixTotal, unite)
+          SELECT 
+            la.id, 
+            la.idAchat, 
+            COALESCE(p.libelle, 'Produit inconnu') as libelleProduit,
+            la.quantite, 
+            la.prixUnitaire, 
+            la.prixTotal,
+            COALESCE(p.unite, 'pcs') as unite
+          FROM LigneAchat la
+          LEFT JOIN Produit p ON p.id = la.idProduit;
+        `);
+      }
+      
+      // Supprimer l'ancienne table et renommer la nouvelle
+      db.execSync('DROP TABLE LigneAchat');
+      db.execSync('ALTER TABLE LigneAchat_new RENAME TO LigneAchat');
+      
+      console.log('✅ Migration LigneAchat réussie');
+    } catch (e) {
+      console.error('❌ Erreur migration LigneAchat:', e);
+      // Nettoyer la table temporaire pour permettre une nouvelle tentative
+      try {
+        db.execSync('DROP TABLE IF EXISTS LigneAchat_new');
+      } catch (cleanupError) {
+        console.warn('⚠️ Impossible de supprimer LigneAchat_new après échec:', cleanupError);
+      }
+    }
+  }
+  
   // Supprimer les tables inutiles (optionnel)
   try {
     db.execSync(`DROP TABLE IF EXISTS TypeProduit`);
@@ -82,10 +163,11 @@ export const initDatabase = () => {
     CREATE TABLE IF NOT EXISTS LigneAchat (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       idAchat INTEGER NOT NULL,
-      idProduit INTEGER NOT NULL,
+      libelleProduit TEXT NOT NULL,
       quantite REAL DEFAULT 1,
       prixUnitaire REAL DEFAULT 0,
       prixTotal REAL DEFAULT 0,
+      unite TEXT DEFAULT 'pcs',
       FOREIGN KEY (idAchat) REFERENCES Achat(id) ON DELETE CASCADE
     );
   `);

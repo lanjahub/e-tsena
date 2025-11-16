@@ -1,50 +1,51 @@
 /**
- * CHARTE GRAPHIQUE E-TSENA v3.1
- * Palette de couleurs professionnelle rose-violet
+ * CHARTE GRAPHIQUE E-TSENA v4.0
+ * Palette de couleurs professionnelle bleu-violet
+ * Inspirée des dégradés doux bleu clair vers violet clair
  * 
  * Principes:
- * - Rose (#EC4899) = Primaire (achats, actions)
- * - Violet (#A855F7) = Secondaire (navigation, accents)
- * - Orange (#F59E0B) = Accentuation (notifications, stats)
+ * - Bleu clair (#60A5FA, #3B82F6) = Primaire (achats, actions)
+ * - Violet clair (#A78BFA, #8B5CF6) = Secondaire (navigation, accents)
+ * - Dégradés doux = Transitions fluides bleu → violet
  * - Gris = Neutres (texte, bordures, fonds)
  */
 
 // ==================== COULEURS PRIMAIRES ====================
 
-// Couleurs principales de l'application - Design Rose-Violet
+// Couleurs principales de l'application - Design Bleu-Violet
 export const COLORS = {
-  // ROSE - Couleur primaire (E-tsena brand)
-  primary: '#EC4899',           // Rose vif principal
-  primaryDark: '#BE185D',       // Rose foncé pour hover/focus
-  primaryLight: '#F472B6',      // Rose clair pour variantes
-  primaryUltraLight: '#FDF2F8', // Rose très clair pour backgrounds
+  // BLEU - Couleur primaire (E-tsena brand)
+  primary: '#60A5FA',           // Bleu clair principal
+  primaryDark: '#3B82F6',       // Bleu foncé pour hover/focus
+  primaryLight: '#93C5FD',      // Bleu très clair pour variantes
+  primaryUltraLight: '#DBEAFE', // Bleu ultra clair pour backgrounds
   
   // VIOLET - Couleur secondaire (navigation, accents)
-  secondary: '#A855F7',         // Violet élégant
-  secondaryDark: '#7E22CE',     // Violet foncé pour hover
-  secondaryLight: '#D8B4FE',    // Violet clair pour variantes
-  secondaryUltraLight: '#F3E8FF', // Violet très clair pour backgrounds
+  secondary: '#A78BFA',         // Violet clair élégant
+  secondaryDark: '#8B5CF6',     // Violet foncé pour hover
+  secondaryLight: '#C4B5FD',    // Violet clair pour variantes
+  secondaryUltraLight: '#EDE9FE', // Violet ultra clair pour backgrounds
   
-  // Couleurs de fond
-  background: '#f8fafc',     // Gris très clair (fond général)
-  surface: '#ffffff',        // Blanc (cartes, modals)
-  surfaceVariant: '#f1f5f9', // Gris léger (zones secondaires)
+  // Couleurs de fond avec dégradés doux
+  background: '#F0F9FF',     // Bleu très clair (fond général)
+  surface: '#FFFFFF',        // Blanc (cartes, modals)
+  surfaceVariant: '#EFF6FF', // Bleu ultra léger (zones secondaires)
   
   // Texte
-  text: '#1e293b',          // Gris foncé (texte principal)
-  textLight: '#64748b',     // Gris moyen (texte secondaire)
-  textDisabled: '#cbd5e1',  // Gris clair (texte désactivé)
+  text: '#1E293B',          // Gris foncé (texte principal)
+  textLight: '#64748B',     // Gris moyen (texte secondaire)
+  textDisabled: '#CBD5E1',  // Gris clair (texte désactivé)
   
   // États
-  success: '#10b981',       // Vert (succès, validations)
-  warning: '#f59e0b',       // Orange (avertissements)
-  error: '#ef4444',         // Rouge (erreurs)
-  info: '#3b82f6',          // Bleu (informations)
+  success: '#10B981',       // Vert (succès, validations)
+  warning: '#F59E0B',       // Orange (avertissements)
+  error: '#EF4444',         // Rouge (erreurs)
+  info: '#3B82F6',          // Bleu (informations)
   
   // Bordures et dividers
-  border: '#e2e8f0',        // Bordure légère
-  borderDark: '#cbd5e1',    // Bordure foncée
-  divider: '#f1f5f9',       // Séparateur
+  border: '#E2E8F0',        // Bordure légère
+  borderDark: '#CBD5E1',    // Bordure foncée
+  divider: '#F1F5F9',       // Séparateur
   
   // Overlay et ombres
   overlay: 'rgba(0, 0, 0, 0.5)',
@@ -52,26 +53,26 @@ export const COLORS = {
 };
 
 /**
- * Couleurs par section de l'application - Design Rose-Violet
- * Palette harmonieuse inspirée du design moderne
+ * Couleurs par section de l'application - Design Bleu-Violet
+ * Palette harmonieuse avec dégradés doux
  */
 export const SECTION_COLORS = {
-  // 🛒 Section Achats/Listes (Rose-Violet)
+  // 🛒 Section Achats/Listes (Bleu-Violet)
   achats: {
-    primary: '#A855F7',      // Violet du design
-    light: '#F3E8FF',        // Violet très clair
-    medium: '#E9D5FF',       // Violet clair
-    text: '#7C3AED',         // Violet foncé
-    gradient: ['#EC4899', '#A855F7', '#8B5CF6'] as const, // Dégradé rose-violet
+    primary: '#60A5FA',      // Bleu clair du design
+    light: '#DBEAFE',        // Bleu très clair
+    medium: '#BFDBFE',       // Bleu clair
+    text: '#3B82F6',         // Bleu foncé
+    gradient: ['#60A5FA', '#A78BFA', '#8B5CF6'] as const, // Dégradé bleu-violet
   },
   
-  // 📊 Section Rapports (Rose)
+  // 📊 Section Rapports (Bleu)
   rapports: {
-    primary: '#EC4899',      // Rose du design
-    light: '#FCE7F3',        // Rose très clair
-    medium: '#FBCFE8',       // Rose clair
-    text: '#DB2777',         // Rose foncé
-    gradient: ['#EC4899', '#DB2777'] as const, // Dégradé rose
+    primary: '#3B82F6',      // Bleu du design
+    light: '#DBEAFE',        // Bleu très clair
+    medium: '#BFDBFE',       // Bleu clair
+    text: '#2563EB',         // Bleu foncé
+    gradient: ['#3B82F6', '#60A5FA', '#93C5FD'] as const, // Dégradé bleu
   },
   
   // 📈 Section Statistiques (Violet)
@@ -79,49 +80,49 @@ export const SECTION_COLORS = {
     primary: '#8B5CF6',      // Violet profond
     light: '#EDE9FE',        // Violet très clair
     medium: '#DDD6FE',       // Violet clair
-    text: '#6B21A8',         // Violet foncé
-    gradient: ['#8B5CF6', '#7C3AED'] as const, // Dégradé violet
-  },
-  
-  // 📦 Section Produits (Rose doux)
-  produits: {
-    primary: '#F472B6',      // Rose doux
-    light: '#FCE7F3',        // Rose très clair
-    medium: '#FBCFE8',       // Rose clair
-    text: '#BE185D',         // Rose foncé
-    gradient: ['#F472B6', '#EC4899'] as const, // Dégradé rose doux
-  },
-  
-  // 🏠 Section Accueil (Gradient Rose-Violet)
-  home: {
-    primary: '#A855F7',      // Violet principal
-    light: '#F3E8FF',        // Violet très clair
-    medium: '#E9D5FF',       // Violet clair
     text: '#7C3AED',         // Violet foncé
-    gradient: ['#EC4899', '#A855F7', '#8B5CF6'] as const, // Dégradé rose-violet complet
+    gradient: ['#8B5CF6', '#A78BFA', '#C4B5FD'] as const, // Dégradé violet
+  },
+  
+  // 📦 Section Produits (Bleu doux)
+  produits: {
+    primary: '#60A5FA',      // Bleu doux
+    light: '#DBEAFE',        // Bleu très clair
+    medium: '#BFDBFE',       // Bleu clair
+    text: '#3B82F6',         // Bleu foncé
+    gradient: ['#60A5FA', '#93C5FD'] as const, // Dégradé bleu doux
+  },
+  
+  // 🏠 Section Accueil (Gradient Bleu-Violet)
+  home: {
+    primary: '#60A5FA',      // Bleu principal
+    light: '#DBEAFE',        // Bleu très clair
+    medium: '#BFDBFE',       // Bleu clair
+    text: '#3B82F6',         // Bleu foncé
+    gradient: ['#60A5FA', '#A78BFA', '#8B5CF6'] as const, // Dégradé bleu-violet complet
   },
 };
 
 /**
- * Justification ergonomique des couleurs - Design Rose-Violet :
+ * Justification ergonomique des couleurs - Design Bleu-Violet :
  * 
  * 1. 🎯 CONTRASTE ET ACCESSIBILITÉ
  *    - Tous les textes ont un ratio de contraste ≥ 4.5:1 (WCAG AA)
- *    - Les couleurs rose-violet sont modernes et élégantes
+ *    - Les couleurs bleu-violet sont apaisantes et professionnelles
  * 
  * 2. 🧠 PSYCHOLOGIE DES COULEURS
- *    - Rose-Violet (Accueil/Achats) : Créativité, élégance, modernité
- *    - Rose (Rapports) : Énergie, passion, attention aux détails
- *    - Violet (Statistiques) : Innovation, sagesse, insights
- *    - Rose doux (Produits) : Douceur, qualité, raffinement
+ *    - Bleu-Violet (Accueil/Achats) : Confiance, sérénité, modernité
+ *    - Bleu (Rapports) : Fiabilité, clarté, professionnalisme
+ *    - Violet (Statistiques) : Créativité, sagesse, innovation
+ *    - Bleu doux (Produits) : Calme, qualité, raffinement
  * 
  * 3. 🎨 COHÉRENCE VISUELLE
- *    - Palette harmonieuse rose-violet inspirée du design moderne
- *    - Gradients fluides pour un effet premium
+ *    - Palette harmonieuse bleu-violet avec dégradés doux
+ *    - Gradients fluides pour un effet premium et moderne
  *    - Teintes claires pour les fonds (évite la fatigue visuelle)
  * 
  * 4. 🔍 NAVIGATION INTUITIVE
- *    - Chaque section a une nuance distincte de la palette rose-violet
+ *    - Chaque section a une nuance distincte de la palette bleu-violet
  *    - L'utilisateur identifie rapidement sa position
  *    - Design cohérent et professionnel
  * 
@@ -169,6 +170,28 @@ export const ELEVATION = {
 };
 
 /**
+ * Animations - Durées et courbes d'animation
+ */
+export const ANIMATIONS = {
+  // Durées (en millisecondes)
+  duration: {
+    fast: 200,
+    normal: 300,
+    slow: 500,
+    verySlow: 800,
+  },
+  
+  // Courbes d'animation (easing)
+  easing: {
+    easeIn: 'ease-in',
+    easeOut: 'ease-out',
+    easeInOut: 'ease-in-out',
+    spring: 'cubic-bezier(0.68, -0.55, 0.265, 1.55)',
+    smooth: 'cubic-bezier(0.4, 0.0, 0.2, 1)',
+  },
+};
+
+/**
  * Export par défaut pour un import simple
  */
 export default {
@@ -176,4 +199,5 @@ export default {
   SECTION_COLORS,
   OPACITY,
   ELEVATION,
+  ANIMATIONS,
 };

@@ -1,11 +1,12 @@
 import { router } from 'expo-router';
-import { View, Text, TouchableOpacity, StyleSheet, TextInput, FlatList, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, TextInput, FlatList, Alert, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { getDb, checkDatabase } from '@db/init';
-import { COLORS, SECTION_COLORS } from '@constants/colors';
+import { COLORS, SECTION_COLORS, ANIMATIONS } from '@constants/colors';
 import { format } from 'date-fns';
 import { LinearGradient } from 'expo-linear-gradient';
+import { fadeScaleIn } from '../../src/utils/animations';
 
 // Interface pour les achats
 interface Achat {
@@ -23,6 +24,10 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Animations
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
 
   // Fonction pour charger tous les achats
   const loadAchats = useCallback(() => {
@@ -111,6 +116,13 @@ export default function Home() {
     handleSearch(searchQuery);
   }, [achats, searchQuery, handleSearch]);
 
+  // Animation d'entrée
+  useEffect(() => {
+    if (!loading && !error) {
+      fadeScaleIn(fadeAnim, scaleAnim, ANIMATIONS.duration.normal).start();
+    }
+  }, [loading, error]);
+
 
 
 
@@ -119,10 +131,18 @@ export default function Home() {
   if (error) return <ErrorView error={error} onRetry={loadAchats} />;
 
   return (
-    <View style={styles.container}>
-      {/* En-tête avec titre et actions - Gradient rose-violet */}
+    <Animated.View 
+      style={[
+        styles.container,
+        {
+          opacity: fadeAnim,
+          transform: [{ scale: scaleAnim }],
+        }
+      ]}
+    >
+      {/* En-tête avec titre et actions - Gradient bleu-violet */}
       <LinearGradient
-        colors={['#EC4899', '#A855F7', '#8B5CF6']}
+        colors={SECTION_COLORS.home.gradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.header}
@@ -149,7 +169,7 @@ export default function Home() {
         <Text style={styles.topStatsTitle}>📊 Aperçu</Text>
         <View style={styles.topStatsGrid}>
           <View style={styles.topStatCard}>
-            <Ionicons name="wallet-outline" size={16} color="#EC4899" />
+            <Ionicons name="wallet-outline" size={16} color={SECTION_COLORS.home.primary} />
             <Text style={styles.topStatLabel}>Dépenses</Text>
             <Text style={styles.topStatValue}>
               {(() => {
@@ -165,7 +185,7 @@ export default function Home() {
           </View>
           
           <View style={styles.topStatCard}>
-            <Ionicons name="cart-outline" size={16} color="#F59E0B" />
+            <Ionicons name="cart-outline" size={16} color={SECTION_COLORS.achats.primary} />
             <Text style={styles.topStatLabel}>Articles</Text>
             <Text style={styles.topStatValue}>
               {(() => {
@@ -180,7 +200,7 @@ export default function Home() {
           </View>
           
           <View style={styles.topStatCard}>
-            <Ionicons name="calendar-outline" size={16} color="#A855F7" />
+            <Ionicons name="calendar-outline" size={16} color={SECTION_COLORS.statistiques.primary} />
             <Text style={styles.topStatLabel}>Listes</Text>
             <Text style={styles.topStatValue}>
               {(() => {
@@ -220,7 +240,7 @@ export default function Home() {
         <View style={styles.achatsSectionHeader}>
           <Text style={styles.achatsSectionTitle}>Mes achats ({filteredAchats.length})</Text>
           <TouchableOpacity onPress={loadAchats} style={styles.refreshButton}>
-            <Ionicons name="refresh" size={20} color="#A855F7" />
+            <Ionicons name="refresh" size={20} color={SECTION_COLORS.home.primary} />
           </TouchableOpacity>
         </View>
 
@@ -250,21 +270,21 @@ export default function Home() {
 
       {/* Barre de navigation inférieure */}
       <View style={styles.bottomNavigation}>
-        <TouchableOpacity 
-          style={[styles.navItem, styles.navItemActive]}
-          onPress={() => {/* Déjà sur l'accueil */}}
-        >
-          <Ionicons name="home" size={24} color="#A855F7" />
+      <TouchableOpacity 
+        style={[styles.navItem, styles.navItemActive]}
+        onPress={() => {/* Déjà sur l'accueil */}}
+      >
+        <Ionicons name="home" size={24} color={SECTION_COLORS.home.primary} />
           <Text style={[styles.navLabel, styles.navLabelActive]}>Accueil</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity 
+        {/*<TouchableOpacity 
           style={styles.navItem}
           onPress={() => router.push('/produits')}
         >
           <Ionicons name="cube" size={24} color={COLORS.textLight} />
           <Text style={styles.navLabel}>Produits</Text>
-        </TouchableOpacity>
+        </TouchableOpacity>*/}
 
         <TouchableOpacity 
           style={styles.navItem}
@@ -292,7 +312,7 @@ export default function Home() {
           <Text style={styles.navLabel}>Créer</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -368,8 +388,8 @@ const AchatCard = ({ achat }: { achat: Achat }) => {
         
         for (const ligne of lignes) {
           db.runSync(
-            'INSERT INTO LigneAchat (idAchat, idProduit, quantite, prixUnitaire, prixTotal) VALUES (?, ?, ?, ?, ?)',
-            [newAchatId, ligne.idProduit, ligne.quantite, ligne.prixUnitaire, ligne.prixTotal]
+            'INSERT INTO LigneAchat (idAchat, libelleProduit, quantite, prixUnitaire, prixTotal) VALUES (?, ?, ?, ?, ?)',
+            [newAchatId, ligne.libelleProduit, ligne.quantite, ligne.prixUnitaire, ligne.prixTotal]
           );
         }
         
@@ -389,9 +409,14 @@ const AchatCard = ({ achat }: { achat: Achat }) => {
     >
       {/* En-tête avec icône et menu 3 points */}
       <View style={styles.achatSquareHeader}>
-        <View style={styles.achatSquareIcon}>
-          <Ionicons name="receipt" size={20} color={SECTION_COLORS.achats.primary} />
-        </View>
+        <LinearGradient
+          colors={SECTION_COLORS.achats.gradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.achatSquareIcon}
+        >
+          <Ionicons name="receipt" size={20} color="white" />
+        </LinearGradient>
         
         {/* Menu 3 points (style Google Keep) */}
         <TouchableOpacity 
@@ -490,7 +515,15 @@ const EmptyAchatsView = ({ searchQuery }: { searchQuery: string }) => (
     {!searchQuery && (
       <TouchableOpacity 
         style={styles.emptyButton} 
-        onPress={() => router.push('/nouvel-achat')}
+        onPress={() => {
+          const db = getDb();
+          const today = new Date().toISOString().split('T')[0];
+          db.runSync('INSERT INTO Achat (nomListe, dateAchat) VALUES (?, ?)', ['Nouvelle liste', today]);
+          const result = db.getAllSync('SELECT id FROM Achat ORDER BY id DESC LIMIT 1');
+          if (result.length > 0) {
+            router.push(`/achat/${(result[0] as any).id}`);
+          }
+        }}
       >
         <Ionicons name="add" size={20} color="white" />
         <Text style={styles.emptyButtonText}>Créer ma première liste</Text>
@@ -757,7 +790,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#F3E8FF', // Violet clair du design
+    backgroundColor: SECTION_COLORS.home.light,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -891,7 +924,7 @@ const styles = StyleSheet.create({
   emptyButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#A855F7', // Violet du design
+    backgroundColor: SECTION_COLORS.home.primary,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 12,
@@ -1032,12 +1065,16 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   achatSquareIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: SECTION_COLORS.achats.light,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: SECTION_COLORS.achats.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
   // Menu 3 points style Google Keep
   achatMenuButton: {
@@ -1117,21 +1154,27 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   achatSquarePrice: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: 'bold',
     color: SECTION_COLORS.achats.primary,
-    marginBottom: 5,
+    marginBottom: 6,
+    letterSpacing: 0.3,
   },
   achatSquareProgress: {
-    height: 3,
-    backgroundColor: COLORS.surfaceVariant,
-    borderRadius: 1.5,
+    height: 4,
+    backgroundColor: SECTION_COLORS.achats.light,
+    borderRadius: 2,
     overflow: 'hidden',
   },
   achatSquareProgressBar: {
     height: '100%',
     backgroundColor: SECTION_COLORS.achats.primary,
-    borderRadius: 1.5,
+    borderRadius: 2,
+    shadowColor: SECTION_COLORS.achats.primary,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 2,
   },
   
   // Barre de navigation inférieure
@@ -1155,7 +1198,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   navItemActive: {
-    backgroundColor: '#F3E8FF', // Violet clair du design
+    backgroundColor: SECTION_COLORS.home.light,
     borderRadius: 12,
     paddingVertical: 12,
   },
@@ -1166,14 +1209,14 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   navLabelActive: {
-    color: '#A855F7', // Violet du design
+    color: SECTION_COLORS.home.primary,
     fontWeight: 'bold',
   },
   addNavButton: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#A855F7', // Violet du design
+    backgroundColor: SECTION_COLORS.home.primary,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
