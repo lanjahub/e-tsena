@@ -19,6 +19,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
+        tabBarHideOnKeyboard: true, // Cache la tab bar quand le clavier est ouvert
         tabBarActiveTintColor: '#6366f1', // Indigo moderne
         tabBarInactiveTintColor: '#999',
         tabBarStyle: {

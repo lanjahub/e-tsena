@@ -3,6 +3,7 @@
     "name": "E-tsena",
     "slug": "e-tsena",
     "scheme": "etsena",
+    "orientation": "portrait",
     "newArchEnabled": true,
     "plugins": ["expo-router"],
     "extra": { "router": { "origin": "https://app" } }

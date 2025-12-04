@@ -61,10 +61,12 @@ export default function AnalyseProduit() {
   const [showResults, setShowResults] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<'current_month' | 'last_month' | 'year' | 'custom'>('current_month');
+  const [viewMode, setViewMode] = useState<'transactions' | 'summary'>('transactions');
+  const [periodSummary, setPeriodSummary] = useState<any[]>([]);
 
   useEffect(() => {
     loadProduits();
-  }, []);
+  }, [language]); // Reload when language changes for 'All Products' translation
 
   // Auto-analyze when product or dates change
   useEffect(() => {
@@ -76,14 +78,15 @@ export default function AnalyseProduit() {
   const loadProduits = () => {
     try {
       const db = getDb();
-      // Récupère tous les produits distincts de la table LigneAchat
       const result = db.getAllSync(`
         SELECT DISTINCT libelleProduit as libelle 
         FROM LigneAchat 
         WHERE libelleProduit IS NOT NULL AND libelleProduit != ''
         ORDER BY libelleProduit ASC
       `);
-      setProduits(result.map((p: any, i) => ({ id: i + 1, libelle: p.libelle })));
+      // Add "All Products" option at the top
+      const allOption = { id: -1, libelle: t('all_products') };
+      setProduits([allOption, ...result.map((p: any, i) => ({ id: i + 1, libelle: p.libelle }))]);
     } catch (e) {
       console.error(e);
     } finally {
@@ -92,33 +95,52 @@ export default function AnalyseProduit() {
   };
 
   const handleAnalyze = () => {
-    if (!selectedProduit) {
-      return;
-    }
+    if (!selectedProduit) return;
 
     try {
       setAnalyzing(true);
       const db = getDb();
-      const produitLibelle = produits.find(p => p.id === selectedProduit)?.libelle;
-
-      // Format YYYY-MM-DD pour SQLite
       const startStr = dateDebut.toISOString();
       const endStr = dateFin.toISOString();
 
-      const result = db.getAllSync(`
-        SELECT la.id, a.dateAchat, a.nomListe, la.libelleProduit as produit, 
-               la.quantite, la.prixUnitaire, la.prixTotal, la.unite
-        FROM Achat a 
-        JOIN LigneAchat la ON a.id = la.idAchat 
-        WHERE la.libelleProduit = ? 
-        AND a.dateAchat BETWEEN ? AND ?
-        ORDER BY a.dateAchat DESC
-      `, [produitLibelle, startStr, endStr]) as Transaction[];
+      if (selectedProduit === -1) {
+        // --- MODE RÉSUMÉ PÉRIODE (TOUS LES PRODUITS) ---
+        setViewMode('summary');
+        
+        const result = db.getAllSync(`
+          SELECT l.libelleProduit, SUM(l.quantite) as totalQte, SUM(l.prixTotal) as totalPrix
+          FROM LigneAchat l 
+          JOIN Achat a ON a.id = l.idAchat 
+          WHERE a.dateAchat BETWEEN ? AND ?
+          GROUP BY l.libelleProduit
+          ORDER BY totalPrix DESC
+        `, [startStr, endStr]);
 
-      setTransactions(result);
-      setTotalProduitAnalyse(result.reduce((sum, t) => sum + t.prixTotal, 0));
-      setTotalQuantite(result.reduce((sum, t) => sum + t.quantite, 0));
-      if (result.length > 0) setUnitePrincipale(result[0].unite);
+        setPeriodSummary(result);
+        setTotalProduitAnalyse(result.reduce((sum: number, item: any) => sum + item.totalPrix, 0));
+        setTotalQuantite(result.reduce((sum: number, item: any) => sum + item.totalQte, 0));
+        setUnitePrincipale('pcs'); // Generic unit
+        
+      } else {
+        // --- MODE TRANSACTION (PRODUIT UNIQUE) ---
+        setViewMode('transactions');
+        const produitLibelle = produits.find(p => p.id === selectedProduit)?.libelle;
+
+        const result = db.getAllSync(`
+          SELECT la.id, a.dateAchat, a.nomListe, la.libelleProduit as produit, 
+                 la.quantite, la.prixUnitaire, la.prixTotal, la.unite
+          FROM Achat a 
+          JOIN LigneAchat la ON a.id = la.idAchat 
+          WHERE la.libelleProduit = ? 
+          AND a.dateAchat BETWEEN ? AND ?
+          ORDER BY a.dateAchat DESC
+        `, [produitLibelle, startStr, endStr]) as Transaction[];
+
+        setTransactions(result);
+        setTotalProduitAnalyse(result.reduce((sum, t) => sum + t.prixTotal, 0));
+        setTotalQuantite(result.reduce((sum, t) => sum + t.quantite, 0));
+        if (result.length > 0) setUnitePrincipale(result[0].unite);
+      }
       
       setShowResults(true);
     } catch (e) {
@@ -145,11 +167,35 @@ export default function AnalyseProduit() {
   };
 
   const exportToPdf = async () => {
-    if (transactions.length === 0) return;
-    
-    const produitLibelle = produits.find(p => p.id === selectedProduit)?.libelle || 'Produit';
     const dateLocale = language === 'en' ? enUS : fr;
+    const isSummary = viewMode === 'summary';
+    const title = isSummary ? t('period_analysis') : (produits.find(p => p.id === selectedProduit)?.libelle || 'Produit');
     
+    if (isSummary && periodSummary.length === 0) return;
+    if (!isSummary && transactions.length === 0) return;
+
+    const rows = isSummary 
+      ? periodSummary.map((item: any) => `
+          <tr>
+            <td>${item.libelleProduit}</td>
+            <td>${item.totalQte}</td>
+            <td>-</td>
+            <td>${item.totalPrix.toLocaleString()} Ar</td>
+          </tr>
+        `).join('')
+      : transactions.map(t => `
+          <tr>
+            <td>${format(new Date(t.dateAchat), 'dd MMM yyyy', { locale: dateLocale })}</td>
+            <td>${t.quantite} ${t.unite}</td>
+            <td>${t.prixUnitaire.toLocaleString()} Ar</td>
+            <td>${t.prixTotal.toLocaleString()} Ar</td>
+          </tr>
+        `).join('');
+
+    const headers = isSummary
+      ? `<th>${t('product')}</th><th>${t('quantity')}</th><th>-</th><th>${t('total_amount')}</th>`
+      : `<th>${t('date')}</th><th>${t('quantity')}</th><th>${t('unit_price')}</th><th>${t('total_amount')}</th>`;
+
     const htmlContent = `
       <html>
         <head>
@@ -168,18 +214,18 @@ export default function AnalyseProduit() {
           </style>
         </head>
         <body>
-          <h1>Rapport d'Analyse : ${produitLibelle}</h1>
+          <h1>${title}</h1>
           <div class="subtitle">
-            Période : ${format(dateDebut, 'dd/MM/yyyy')} - ${format(dateFin, 'dd/MM/yyyy')}
+            ${t('period')} : ${format(dateDebut, 'dd/MM/yyyy')} - ${format(dateFin, 'dd/MM/yyyy')}
           </div>
 
           <div class="summary">
             <div class="summary-item">
-              <div>Total Dépensé</div>
+              <div>${t('total_spent')}</div>
               <div class="summary-value">${totalProduitAnalyse.toLocaleString()} Ar</div>
             </div>
             <div class="summary-item">
-              <div>Quantité Totale</div>
+              <div>${t('quantity')} Total</div>
               <div class="summary-value">${totalQuantite} ${unitePrincipale}</div>
             </div>
           </div>
@@ -187,21 +233,11 @@ export default function AnalyseProduit() {
           <table>
             <thead>
               <tr>
-                <th>Date</th>
-                <th>Quantité</th>
-                <th>Prix Unitaire</th>
-                <th>Total</th>
+                ${headers}
               </tr>
             </thead>
             <tbody>
-              ${transactions.map(t => `
-                <tr>
-                  <td>${format(new Date(t.dateAchat), 'dd MMM yyyy', { locale: dateLocale })}</td>
-                  <td>${t.quantite} ${t.unite}</td>
-                  <td>${t.prixUnitaire.toLocaleString()} Ar</td>
-                  <td>${t.prixTotal.toLocaleString()} Ar</td>
-                </tr>
-              `).join('')}
+              ${rows}
             </tbody>
           </table>
 
@@ -330,7 +366,7 @@ export default function AnalyseProduit() {
                             <Ionicons name="wallet" size={24} color={activeTheme.primary} />
                         </View>
                         <View>
-                            <Text style={s.statLabel}>Dépenses</Text>
+                            <Text style={s.statLabel}>{t('expenses')}</Text>
                             <Text style={[s.statValue, { color: activeTheme.primary }]}>{totalProduitAnalyse.toLocaleString()} Ar</Text>
                         </View>
                     </View>
@@ -342,32 +378,59 @@ export default function AnalyseProduit() {
                             <Ionicons name="layers" size={24} color="#10B981" />
                         </View>
                         <View>
-                            <Text style={s.statLabel}>Quantité</Text>
+                            <Text style={s.statLabel}>{t('quantity')}</Text>
                             <Text style={[s.statValue, { color: '#10B981' }]}>{totalQuantite} {unitePrincipale}</Text>
                         </View>
                     </View>
                 </LinearGradient>
 
-                {transactions.length === 0 ? (
-                   <View style={s.emptyBox}>
-                      <Ionicons name="document-text-outline" size={40} color="#ccc" />
-                      <Text style={{ color: '#999', marginTop: 10 }}>{t('no_purchase_found')}</Text>
-                   </View>
-                ) : (
-                   transactions.map((t) => (
-                      <View key={t.id} style={s.transactionItem}>
+                {/* CONTENU : LISTE TRANSACTIONS OU RÉSUMÉ PRODUITS */}
+                {viewMode === 'summary' ? (
+                  // --- VUE RÉSUMÉ (TOUS LES PRODUITS) ---
+                  periodSummary.length === 0 ? (
+                    <View style={s.emptyBox}>
+                      <Ionicons name="cube-outline" size={40} color="#ccc" />
+                      <Text style={{ color: '#999', marginTop: 10 }}>{t('no_product_period')}</Text>
+                    </View>
+                  ) : (
+                    periodSummary.map((item: any, index: number) => (
+                      <View key={index} style={s.transactionItem}>
                          <View style={s.transLeft}>
                             <View style={[s.dateBadge, { backgroundColor: isDarkMode ? '#334155' : '#F3F4F6' }]}>
-                              <Text style={s.dateDay}>{format(new Date(t.dateAchat), 'dd')}</Text>
-                              <Text style={s.dateMonth}>{format(new Date(t.dateAchat), 'MMM', { locale: language === 'en' ? enUS : fr })}</Text>
+                              <Ionicons name="cube" size={18} color={activeTheme.primary} />
                             </View>
                             <View>
-                              <Text style={s.transPrice}>{t.prixTotal.toLocaleString()} Ar</Text>
-                              <Text style={s.transDetail}>{t.quantite} {t.unite} à {t.prixUnitaire} Ar</Text>
+                              <Text style={s.transPrice}>{item.libelleProduit}</Text>
+                              <Text style={s.transDetail}>{item.totalQte} {t('articles')}</Text>
                             </View>
                          </View>
+                         <Text style={[s.transPrice, { color: activeTheme.primary }]}>{item.totalPrix.toLocaleString()} Ar</Text>
                       </View>
-                   ))
+                    ))
+                  )
+                ) : (
+                  // --- VUE TRANSACTIONS (PRODUIT UNIQUE) ---
+                  transactions.length === 0 ? (
+                     <View style={s.emptyBox}>
+                        <Ionicons name="document-text-outline" size={40} color="#ccc" />
+                        <Text style={{ color: '#999', marginTop: 10 }}>{t('no_purchase_found')}</Text>
+                     </View>
+                  ) : (
+                     transactions.map((t) => (
+                        <View key={t.id} style={s.transactionItem}>
+                           <View style={s.transLeft}>
+                              <View style={[s.dateBadge, { backgroundColor: isDarkMode ? '#334155' : '#F3F4F6' }]}>
+                                <Text style={s.dateDay}>{format(new Date(t.dateAchat), 'dd')}</Text>
+                                <Text style={s.dateMonth}>{format(new Date(t.dateAchat), 'MMM', { locale: language === 'en' ? enUS : fr })}</Text>
+                              </View>
+                              <View>
+                                <Text style={s.transPrice}>{t.prixTotal.toLocaleString()} Ar</Text>
+                                <Text style={s.transDetail}>{t.quantite} {t.unite} à {t.prixUnitaire} Ar</Text>
+                              </View>
+                           </View>
+                        </View>
+                     ))
+                  )
                 )}
              </View>
           )}

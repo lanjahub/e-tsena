@@ -51,6 +51,9 @@ const TRANSLATIONS = {
     'tip_3': 'Appuyez sur ... pour les options (supprimer, rappel).',
     'tip_4': 'Consultez les rapports pour analyser vos dépenses.',
     'tip_5': 'Changez le thème et la langue dans les paramètres.',
+    'tip_6': 'Cochez les articles au fur et à mesure de vos achats.',
+    'tip_7': 'Utilisez la recherche pour retrouver rapidement une liste.',
+    'tip_8': 'Appuyez longuement sur une liste pour plus d\'options.',
     'understood': 'Compris',
     'sort_by': 'Trier par',
     'date': 'Date',
@@ -160,7 +163,9 @@ const TRANSLATIONS = {
     'back_to_home': 'Retour à l\'Accueil',
     'error_select_product': 'Veuillez sélectionner un produit',
     'error_analyze': 'Impossible d\'analyser',
-    'loading': 'Chargement...'
+    'loading': 'Chargement...',
+    'daily_journal': 'Journal des Dépenses',
+    'all_products': 'Tous les produits'
   },
   mg: {
     'welcome': 'Tonga soa',
@@ -190,6 +195,9 @@ const TRANSLATIONS = {
     'tip_3': 'Tsindrio ny ... raha hijery safidy (fafana, fampahatsiahivana).',
     'tip_4': 'Jereo ny tatitra handinihana ny fandaniana.',
     'tip_5': 'Ovay ny loko sy ny fiteny ao amin\'ny fikirana.',
+    'tip_6': 'Mariho ny entana rehefa voavidy.',
+    'tip_7': 'Ampiasao ny fikarohana hahitana lisitra haingana.',
+    'tip_8': 'Tsindrio ela ny lisitra raha hijery safidy fanampiny.',
     'understood': 'Azoko',
     'sort_by': 'Rihana araka ny',
     'date': 'Daty',
@@ -299,7 +307,9 @@ const TRANSLATIONS = {
     'back_to_home': 'Hiverina any amin\'ny Fandraisana',
     'error_select_product': 'Misafidiana entana azafady',
     'error_analyze': 'Tsy afaka mamakafaka',
-    'loading': 'Maka...'
+    'loading': 'Maka...',
+    'daily_journal': 'Tatitra Isan\'andro',
+    'all_products': 'Entana rehetra'
   },
   en: {
     'welcome': 'Welcome',
@@ -329,6 +339,9 @@ const TRANSLATIONS = {
     'tip_3': 'Tap ... for options (delete, reminder).',
     'tip_4': 'Check reports to analyze your expenses.',
     'tip_5': 'Change theme and language in settings.',
+    'tip_6': 'Check items as you buy them.',
+    'tip_7': 'Use search to quickly find a list.',
+    'tip_8': 'Long press a list for more options.',
     'understood': 'Understood',
     'sort_by': 'Sort by',
     'date': 'Date',
@@ -438,7 +451,9 @@ const TRANSLATIONS = {
     'back_to_home': 'Back to Home',
     'error_select_product': 'Please select a product',
     'error_analyze': 'Cannot analyze',
-    'loading': 'Loading...'
+    'loading': 'Loading...',
+    'daily_journal': 'Daily Journal',
+    'all_products': 'All products'
   }
 };
 

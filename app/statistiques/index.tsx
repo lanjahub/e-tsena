@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { 
   View, Text, ScrollView, Dimensions, TouchableOpacity, StyleSheet, 
   Animated, Modal, StatusBar, ActivityIndicator, Platform, FlatList
@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subWeeks, subMonths, startOfYear, endOfYear } from 'date-fns';
 import { fr, enUS } from 'date-fns/locale';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
@@ -83,8 +83,14 @@ export default function StatsScreen() {
   const scaleChart = useRef(new Animated.Value(0)).current;
   const rotateChart = useRef(new Animated.Value(0)).current;
 
+  // RECHARGEMENT AUTOMATIQUE (FOCUS)
+  useFocusEffect(
+    useCallback(() => {
+      loadAllData();
+    }, [language, activeTheme])
+  );
+
   useEffect(() => {
-    loadAllData();
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
       Animated.spring(slideAnim, { toValue: 0, friction: 6, tension: 40, useNativeDriver: true })

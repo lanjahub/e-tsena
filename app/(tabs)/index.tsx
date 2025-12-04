@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, 
-  TextInput, Modal, Switch, StatusBar, Dimensions, Animated, Alert, Platform
+  TextInput, Modal, Switch, StatusBar, Dimensions, Animated, Alert, Platform, Easing, Keyboard
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleShoppingReminder } from '../../src/services/notificationService';
@@ -24,53 +24,69 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BazarHeader = () => {
   const anim1 = useRef(new Animated.Value(0)).current;
   const anim2 = useRef(new Animated.Value(0)).current;
+  const anim3 = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    const createLoop = (anim: Animated.Value, duration: number, delay: number = 0) => {
+      return Animated.loop(
+        Animated.sequence([
+          Animated.timing(anim, { toValue: 1, duration: duration, delay, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+          Animated.timing(anim, { toValue: 0, duration: duration, useNativeDriver: true, easing: Easing.inOut(Easing.ease) })
+        ])
+      );
+    };
+
     Animated.parallel([
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(anim1, { toValue: 1, duration: 4000, useNativeDriver: true }),
-          Animated.timing(anim1, { toValue: 0, duration: 4000, useNativeDriver: true })
-        ])
-      ),
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(anim2, { toValue: 1, duration: 5000, delay: 1000, useNativeDriver: true }),
-          Animated.timing(anim2, { toValue: 0, duration: 5000, useNativeDriver: true })
-        ])
-      )
+      createLoop(anim1, 4000),
+      createLoop(anim2, 5000, 500),
+      createLoop(anim3, 6000, 1000)
     ]).start();
   }, []);
 
-  const translateY1 = anim1.interpolate({ inputRange: [0, 1], outputRange: [0, -15] });
-  const translateY2 = anim2.interpolate({ inputRange: [0, 1], outputRange: [0, -10] });
-  const rotate1 = anim1.interpolate({ inputRange: [0, 1], outputRange: ['-5deg', '0deg'] });
-  const rotate2 = anim2.interpolate({ inputRange: [0, 1], outputRange: ['10deg', '5deg'] });
+  const translateY1 = anim1.interpolate({ inputRange: [0, 1], outputRange: [0, -20] });
+  const translateY2 = anim2.interpolate({ inputRange: [0, 1], outputRange: [0, -15] });
+  const translateY3 = anim3.interpolate({ inputRange: [0, 1], outputRange: [0, -25] });
+  
+  const rotate1 = anim1.interpolate({ inputRange: [0, 1], outputRange: ['-5deg', '5deg'] });
+  const scale1 = anim1.interpolate({ inputRange: [0, 1], outputRange: [1, 1.05] });
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {/* Cercles décoratifs d'arrière-plan */}
-      <View style={{ position: 'absolute', top: -80, right: -60, width: 300, height: 300, borderRadius: 150, backgroundColor: 'rgba(255,255,255,0.04)' }} />
-      <View style={{ position: 'absolute', top: 80, left: -40, width: 150, height: 150, borderRadius: 75, backgroundColor: 'rgba(255,255,255,0.03)' }} />
-      
-      {/* Animation des sacs overlapping */}
-      <View style={{ position: 'absolute', top: 40, right: 20, width: 200, height: 200 }}>
-         {/* Sac arrière (plus grand, flou) */}
+      {/* Background Circles */}
+      <Animated.View style={{ 
+          position: 'absolute', top: -50, right: -50, width: 300, height: 300, borderRadius: 150, 
+          backgroundColor: 'rgba(255,255,255,0.05)', transform: [{ translateY: translateY2 }] 
+      }} />
+      <Animated.View style={{ 
+          position: 'absolute', top: 100, left: -50, width: 200, height: 200, borderRadius: 100, 
+          backgroundColor: 'rgba(255,255,255,0.03)', transform: [{ translateY: translateY3 }] 
+      }} />
+
+      {/* Floating Basket Composition */}
+      <View style={{ position: 'absolute', top: 10, right: 10, width: 180, height: 180 }}>
+         {/* Main Cart Icon */}
          <Animated.View style={{ 
-             position: 'absolute', top: 0, right: 40, opacity: 0.08,
-             transform: [{ translateY: translateY2 }, { rotate: rotate1 }, { scale: 1.1 }] 
+             position: 'absolute', top: 0, right: 0, opacity: 0.15,
+             transform: [{ translateY: translateY1 }, { rotate: rotate1 }, { scale: scale1 }] 
          }}>
-            <Ionicons name="bag-handle" size={180} color="#fff" />
+            <Ionicons name="cart" size={160} color="#fff" />
+         </Animated.View>
+         
+         {/* Floating List/Notebook */}
+         <Animated.View style={{ 
+             position: 'absolute', top: 50, right: 100, opacity: 0.25,
+             transform: [{ translateY: translateY2 }, { rotate: '-15deg' }] 
+         }}>
+            <Ionicons name="receipt" size={60} color="#fff" />
+            {/* Lignes simulant du texte */}
+            <View style={{ position: 'absolute', top: 20, left: 15, width: 30, height: 3, backgroundColor: '#fff', borderRadius: 2 }} />
+            <View style={{ position: 'absolute', top: 28, left: 15, width: 20, height: 3, backgroundColor: '#fff', borderRadius: 2 }} />
+            <View style={{ position: 'absolute', top: 36, left: 15, width: 25, height: 3, backgroundColor: '#fff', borderRadius: 2 }} />
          </Animated.View>
 
-         {/* Sac avant (plus net) */}
-         <Animated.View style={{ 
-             position: 'absolute', top: 40, right: 10, opacity: 0.15,
-             transform: [{ translateY: translateY1 }, { rotate: rotate2 }] 
-         }}>
-            <Ionicons name="bag" size={140} color="#fff" />
-            {/* Détail brillant */}
-            <View style={{ position: 'absolute', top: 40, left: 30, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)' }} />
+         {/* Floating Items (Particles) */}
+         <Animated.View style={{ position: 'absolute', top: 10, right: 130, opacity: 0.2, transform: [{ translateY: translateY3 }] }}>
+            <Ionicons name="leaf" size={20} color="#fff" />
          </Animated.View>
       </View>
     </View>
@@ -112,8 +128,29 @@ export default function Home() {
   const [reminderDate, setReminderDate] = useState(new Date());
   const [mode, setMode] = useState<'date' | 'time'>('date');
   const [unreadCount, setUnreadCount] = useState(0);
+  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      'keyboardDidShow',
+      () => {
+        setKeyboardVisible(true); // or some other action
+      }
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      'keyboardDidHide',
+      () => {
+        setKeyboardVisible(false); // or some other action
+      }
+    );
+
+    return () => {
+      keyboardDidHideListener.remove();
+      keyboardDidShowListener.remove();
+    };
+  }, []);
 
   // --- NETTOYAGE (Mandeha rehefa miverina eto ianao) ---
   const cleanEmptyLists = (db: any) => {
@@ -263,10 +300,10 @@ export default function Home() {
         <BazarHeader />
         <View style={s.headerTop}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <Logo size={42} colors={['#fff', '#E0E7FF'] as any} />
+            <Logo size={48} colors={['#fff', '#E0E7FF'] as any} animated={true} />
             <View>
               <Text style={s.appName}>E-tsena</Text>
-              <Text style={s.appSub}>{t('my_groceries')}</Text>
+              <Text style={s.appSub}>Votre assistant courses</Text>
             </View>
           </View>
           
@@ -379,6 +416,7 @@ export default function Home() {
       </View>
 
       {/* NAVBAR */}
+      {!isKeyboardVisible && (
       <View style={[s.navbar, { paddingBottom: insets.bottom > 0 ? insets.bottom : 10, height: 60 + (insets.bottom > 0 ? insets.bottom : 10) }]}>
          <TouchableOpacity style={s.navItem} onPress={loadData}>
             <Ionicons name="home" size={24} color={activeTheme.primary} />
@@ -396,6 +434,7 @@ export default function Home() {
             <Text style={[s.navText, { color: "#9CA3AF" }]}>{t('reports')}</Text>
          </TouchableOpacity>
       </View>
+      )}
 
       {/* MODAL THEMES */}
       <Modal visible={showThemes} transparent animationType="fade">
@@ -449,20 +488,6 @@ export default function Home() {
                   </View>
               </View>
 
-              <View style={[s.settingRow, { marginTop: 15 }]}>
-                  <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
-                     <Ionicons name="cash-outline" size={22} color={isDarkMode ? '#fff' : '#333'} />
-                     <Text style={{ fontSize: 16, color: isDarkMode ? '#fff' : '#333' }}>{t('currency')}</Text>
-                  </View>
-                  <View style={{ flexDirection: 'row', gap: 10 }}>
-                     {['Ar', '€', '$'].map((c) => (
-                        <TouchableOpacity key={c} onPress={() => setCurrency(c as any)} style={{ padding: 5, backgroundColor: currency === c ? activeTheme.primary : 'transparent', borderRadius: 5 }}>
-                           <Text style={{ color: currency === c ? '#fff' : '#888', fontWeight: 'bold' }}>{c}</Text>
-                        </TouchableOpacity>
-                     ))}
-                  </View>
-              </View>
-
               <TouchableOpacity style={[s.settingRow, { marginTop: 15 }]} onPress={() => setShowHelp(true)}>
                   <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
                      <Ionicons name="help-circle-outline" size={22} color={isDarkMode ? '#fff' : '#333'} />
@@ -505,6 +530,9 @@ export default function Home() {
                <Text style={{ marginBottom: 5, color: s.textSec.color }}>• {t('tip_3')}</Text>
                <Text style={{ marginBottom: 5, color: s.textSec.color }}>• {t('tip_4')}</Text>
                <Text style={{ marginBottom: 5, color: s.textSec.color }}>• {t('tip_5')}</Text>
+               <Text style={{ marginBottom: 5, color: s.textSec.color }}>• {t('tip_6')}</Text>
+               <Text style={{ marginBottom: 5, color: s.textSec.color }}>• {t('tip_7')}</Text>
+               <Text style={{ marginBottom: 5, color: s.textSec.color }}>• {t('tip_8')}</Text>
                <TouchableOpacity onPress={() => setShowHelp(false)} style={{ backgroundColor: activeTheme.primary, padding: 10, borderRadius: 10, alignItems: 'center', marginTop: 15 }}>
                   <Text style={{ color: '#fff', fontWeight: 'bold' }}>{t('understood')}</Text>
                </TouchableOpacity>
@@ -572,8 +600,9 @@ const getStyles = (dark: boolean, theme: any) => StyleSheet.create({
   summaryRow: {
     position: 'absolute', bottom: -35, left: 20, right: 20,
     flexDirection: 'row', backgroundColor: dark ? '#1E293B' : '#fff',
-    borderRadius: 20, padding: 20, justifyContent: 'space-around',
-    shadowColor: '#000', shadowOffset: {width: 0, height: 4}, shadowOpacity: dark ? 0.3 : 0.1, shadowRadius: 8, elevation: 5
+    borderRadius: 24, paddingVertical: 22, paddingHorizontal: 20, justifyContent: 'space-around',
+    shadowColor: '#000', shadowOffset: {width: 0, height: 8}, shadowOpacity: dark ? 0.4 : 0.12, shadowRadius: 12, elevation: 8,
+    borderWidth: 1, borderColor: dark ? '#334155' : 'rgba(255,255,255,1)'
   },
   summaryItem: { alignItems: 'center' },
   summaryLabel: { color: dark ? '#94A3B8' : '#9CA3AF', fontSize: 11, fontWeight: '600', textTransform: 'uppercase' },
