@@ -4,7 +4,7 @@ import {
   Animated, Modal, ActivityIndicator, Alert, FlatList
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { PieChart } from 'react-native-chart-kit';
+import { PieChart, LineChart } from 'react-native-chart-kit';
 import { DepenseService } from '../../src/services/depenseService';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -21,8 +21,6 @@ import { useSettings } from '../../src/context/SettingsContext';
 import JournalModal from '../../src/components/JournalModal';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-// Using centralized formatMoney util
 
 // --- TYPES ---
 interface ChartData {
@@ -59,36 +57,32 @@ export default function StatsScreen() {
 
   // --- ÉTATS ---
   const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<ChartData[]>([]); // Données PieChart
+  const [data, setData] = useState<ChartData[]>([]);
   const [allProducts, setAllProducts] = useState<{ name: string; montant: number }[]>([]);
-  const [selectedProducts, setSelectedProducts] = useState<string[]>([]); // Pour le filtrage
+  const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [showAllProductsModal, setShowAllProductsModal] = useState(false);
   
-  // Totaux
   const [totalGlobal, setTotalGlobal] = useState(0);
   const [totalYear, setTotalYear] = useState(0);
   const [totalMonth, setTotalMonth] = useState(0);
   
-  // Vues
   const [viewMode, setViewMode] = useState<ViewMode>('repartition');
   const [weeklyData, setWeeklyData] = useState<ComparativeData[]>([]);
   const [monthlyData, setMonthlyData] = useState<ComparativeData[]>([]);
 
-  // MODAL DÉTAIL
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<ComparativeData | null>(null);
   const [journalData, setJournalData] = useState<ProductEntry[]>([]);
   
-  // MENU
   const [showMenu, setShowMenu] = useState(false);
 
-  // ANIMATIONS
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const scaleChart = useRef(new Animated.Value(0)).current;
   const rotateChart = useRef(new Animated.Value(0)).current;
 
-  // RECHARGEMENT AUTOMATIQUE (FOCUS)
+  const [filteredTotal, setFilteredTotal] = useState(0);
+
   useFocusEffect(
     useCallback(() => {
       loadAllData();
@@ -102,7 +96,6 @@ export default function StatsScreen() {
     ]).start();
   }, [language, activeTheme]); 
 
-  // Animation du graphique
   useEffect(() => {
     scaleChart.setValue(0);
     rotateChart.setValue(0);
@@ -120,28 +113,22 @@ export default function StatsScreen() {
 
   const loadAllData = async () => {
     try {
-      // 1. TOTAL GLOBAL (Tout temps)
       const tGlobal = await DepenseService.calculerTotalGlobal();
       setTotalGlobal(tGlobal);
 
-      // 2. TOTAL CETTE ANNÉE (Pour vérification cohérence)
       const startY = format(startOfYear(new Date()), 'yyyy-MM-dd');
       const endY = format(endOfYear(new Date()), 'yyyy-MM-dd');
       const tYear = await DepenseService.getTotalSurPeriode(startY, endY);
       setTotalYear(tYear);
 
-      // 3. TOTAL CE MOIS (Pour alignement avec Accueil)
       const startM = format(startOfMonth(new Date()), 'yyyy-MM-dd');
       const endM = format(endOfMonth(new Date()), 'yyyy-MM-dd');
       const tMonth = await DepenseService.getTotalSurPeriode(startM, endM);
       setTotalMonth(tMonth);
 
-      // 5. Répartition Catégorie (Global) - TOUS LES PRODUITS
       const allRows = await DepenseService.getRepartitionParProduit();
-      
       setAllProducts(allRows);
       
-      // Initialiser la sélection avec le Top 5 par défaut si vide
       if (selectedProducts.length === 0 && allRows.length > 0) {
         const topNames = allRows.slice(0, 5).map(r => r.name);
         setSelectedProducts(topNames);
@@ -150,41 +137,31 @@ export default function StatsScreen() {
         updateChartData(allRows, selectedProducts);
       }
 
-      // 5. Chargement Comparatifs
       await loadComparative();
-
     } catch (e) { 
       console.error(e); 
       Alert.alert(t('error'), t('error_loading_stats'));
     } finally { setLoading(false); }
   };
 
-  // Total filtré pour les pourcentages
-  const [filteredTotal, setFilteredTotal] = useState(0);
-
   const updateChartData = (products: { name: string; montant: number }[], selection: string[]) => {
     const filteredRows = products.filter(p => selection.includes(p.name));
-    
-    // Calculer le total filtré pour les pourcentages
     const total = filteredRows.reduce((sum, p) => sum + p.montant, 0);
     setFilteredTotal(total);
-    
-    // Génération de couleurs PRO - bien contrastées
-    const generateThemeColors = (count: number) => {
-      const basePalette = [
-        activeTheme.primary,
-        activeTheme.secondary,
-        '#E53935', '#8E24AA', '#1E88E5', '#43A047', '#FB8C00', '#00897B',
-        '#D81B60', '#5E35B1', '#039BE5', '#00ACC1', '#7CB342', '#C0CA33',
-        '#3949AB', '#00838F', '#6D4C41', '#546E7A', '#F4511E', '#757575'
-      ];
 
-      const colors = [];
+    const basePalette = [
+      activeTheme.primary,
+      activeTheme.secondary,
+      '#E53935', '#8E24AA', '#1E88E5', '#43A047', '#FB8C00', '#00897B',
+      '#D81B60', '#5E35B1', '#039BE5', '#00ACC1', '#7CB342', '#C0CA33',
+      '#3949AB', '#00838F', '#6D4C41', '#546E7A', '#F4511E', '#757575'
+    ];
+
+    const generateThemeColors = (count: number) => {
+      const colors: string[] = [];
       for (let i = 0; i < count; i++) {
-        if (i < basePalette.length) {
-          colors.push(basePalette[i]);
-        } else {
-          // Génération de couleur unique pour les surplus via HSL -> Hex
+        if (i < basePalette.length) colors.push(basePalette[i]);
+        else {
           const hue = (i * 137.508) % 360;
           colors.push(`hsl(${hue}, 70%, 50%)`); 
         }
@@ -202,16 +179,17 @@ export default function StatsScreen() {
       legendFontSize: 12
     }));
     
-    setData(chartData.length > 0 ? chartData : [{ name: 'Vide', population: 1, color: '#ddd', legendFontColor: '#aaa', legendFontSize: 12 }]);
+    setData(chartData.length > 0
+      ? chartData
+      : [{ name: 'Vide', population: 1, color: '#ddd', legendFontColor: '#aaa', legendFontSize: 12 }]
+    );
   };
 
   const toggleProductSelection = (name: string) => {
     let newSelection = [...selectedProducts];
     if (newSelection.includes(name)) {
       newSelection = newSelection.filter(n => n !== name);
-    } else {
-      newSelection.push(name);
-    }
+    } else newSelection.push(name);
     setSelectedProducts(newSelection);
     updateChartData(allProducts, newSelection);
   };
@@ -228,7 +206,7 @@ export default function StatsScreen() {
   };
 
   const loadComparative = async () => {
-    // SEMAINE (4 dernières)
+    // 4 dernières semaines
     const weeks: ComparativeData[] = [];
     for (let i = 0; i < 4; i++) {
       const ws = startOfWeek(subWeeks(new Date(), i), { weekStartsOn: 1 });
@@ -250,7 +228,7 @@ export default function StatsScreen() {
     }
     setWeeklyData(weeks);
 
-    // MOIS (6 derniers pour plus de contexte)
+    // 3 derniers mois
     const months: ComparativeData[] = [];
     for (let i = 0; i < 3; i++) {
       const d = subMonths(new Date(), i);
@@ -263,7 +241,7 @@ export default function StatsScreen() {
       
       months.push({
         id: `m-${i}`,
-        period: format(ms, 'MMMM', { locale: language === 'en' ? enUS : fr }),
+        period: format(ms, 'MMM', { locale: language === 'en' ? enUS : fr }),
         fullLabel: format(ms, 'MMMM yyyy', { locale: language === 'en' ? enUS : fr }),
         montant: stats.montant,
         nbAchats: stats.nbAchats,
@@ -274,21 +252,15 @@ export default function StatsScreen() {
     setMonthlyData(months);
   };
 
-  // OUVRIR LA MODAL DE DÉTAIL (PAR PRODUIT)
   const openDetailModal = async (item: ComparativeData) => {
     setSelectedPeriod(item);
     try {
-      // Récupérer les produits groupés par nom pour la période sélectionnée
-      console.log('[JOURNAL] Période:', item.startDate, '->', item.endDate);
       const res = await DepenseService.getDetailsProduitsSurPeriode(item.startDate, item.endDate);
-      console.log('[JOURNAL] Produits trouvés:', res.length, res);
-      
       setJournalData(res as ProductEntry[]);
       setShowDetailModal(true);
-    } catch (e) { console.error('[JOURNAL] Erreur:', e); }
+    } catch (e) { console.error(e); }
   };
 
-  // --- RENDER BARRE ---
   const renderProgressBar = (item: ComparativeData, max: number) => {
     const percent = max > 0 ? (item.montant / max) * 100 : 0;
     return (
@@ -316,6 +288,45 @@ export default function StatsScreen() {
     );
   };
 
+  // DATA POUR LES LINECHARTS
+  const locale = language === 'en' ? enUS : fr;
+
+  const getWeeklyLineData = () => {
+    if (!weeklyData.length) return null;
+    const sorted = [...weeklyData].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+    return {
+      labels: sorted.map(w => format(new Date(w.startDate), 'dd/MM')),
+      values: sorted.map(w => w.montant)
+    };
+  };
+
+  const getMonthlyLineData = () => {
+    if (!monthlyData.length) return null;
+    const sorted = [...monthlyData].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+    return {
+      labels: sorted.map(m => format(new Date(m.startDate), 'MMM', { locale })),
+      values: sorted.map(m => m.montant)
+    };
+  };
+
+  const lineChartConfig = {
+    backgroundColor: 'transparent',
+    backgroundGradientFrom: isDarkMode ? '#0F172A' : '#F8FAFC',
+    backgroundGradientTo: isDarkMode ? '#0F172A' : '#F8FAFC',
+    decimalPlaces: 0,
+    color: (opacity = 1) => `${activeTheme.primary}${Math.round(opacity * 255).toString(16).padStart(2, '0')}`,
+    labelColor: (opacity = 1) => isDarkMode ? '#E5E7EB' : '#6B7280',
+    propsForDots: {
+      r: '4',
+      strokeWidth: '2',
+      stroke: activeTheme.secondary,
+    },
+    propsForBackgroundLines: {
+      strokeDasharray: '',
+      stroke: isDarkMode ? '#1F2937' : '#E5E7EB'
+    }
+  };
+
   if (loading) return <ActivityIndicator style={s.center} color={activeTheme.primary} />;
 
   return (
@@ -324,7 +335,6 @@ export default function StatsScreen() {
       
       {/* HEADER */}
       <LinearGradient colors={activeTheme.gradient as any} style={[s.header, { paddingTop: insets.top + 10 }]}>
-        {/* FIL D'ARIANE */}
         <TouchableOpacity 
           onPress={() => router.push('/')} 
           style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, opacity: 0.9 }}
@@ -371,21 +381,20 @@ export default function StatsScreen() {
             { k: 'repartition', l: t('distribution') },
             { k: 'weekly', l: t('week') },
             { k: 'monthly', l: t('month') }
-          ].map(t => (
+          ].map(tt => (
             <TouchableOpacity 
-               key={t.k} 
-               style={[s.tab, viewMode === t.k && { backgroundColor: activeTheme.primary + '20' }]}
-               onPress={() => setViewMode(t.k as ViewMode)}
+               key={tt.k} 
+               style={[s.tab, viewMode === tt.k && { backgroundColor: activeTheme.primary + '20' }]}
+               onPress={() => setViewMode(tt.k as ViewMode)}
             >
-               <Text style={[s.tabText, viewMode === t.k && { color: activeTheme.primary, fontWeight: 'bold' }]}>{t.l}</Text>
+               <Text style={[s.tabText, viewMode === tt.k && { color: activeTheme.primary, fontWeight: 'bold' }]}>{tt.l}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* VUE : RÉPARTITION */}
+        {/* RÉPARTITION (Camembert) */}
         {viewMode === 'repartition' && (
           <View style={s.card}>
-            {/* HEADER */}
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                <View>
                  <Text style={s.cardTitle}>{t('distribution')}</Text>
@@ -397,7 +406,6 @@ export default function StatsScreen() {
                </TouchableOpacity>
             </View>
             
-            {/* CAMEMBERT PRO - CENTRÉ */}
             <View style={{ alignItems: 'center', justifyContent: 'center', marginVertical: 15 }}>
               <Animated.View style={[{ transform: [{ scale: scaleChart }, { rotate: spin }] }]}>
                 <PieChart
@@ -417,13 +425,11 @@ export default function StatsScreen() {
               </Animated.View>
             </View>
             
-            {/* TOTAL AFFICHÉ EN DESSOUS */}
             <View style={{ alignItems: 'center', marginBottom: 10, paddingVertical: 12, backgroundColor: isDarkMode ? '#1E293B' : '#F0F9FF', borderRadius: 12 }}>
               <Text style={{ fontSize: 12, color: isDarkMode ? '#94A3B8' : '#6B7280', fontWeight: '600' }}>{t('total')}</Text>
               <Text style={{ fontSize: 24, fontWeight: 'bold', color: activeTheme.primary }}>{formatMoney(filteredTotal)} {currency}</Text>
             </View>
 
-            {/* LÉGENDE PRO */}
             <View style={s.legendContainerPro}>
               {data.map((item, index) => {
                 const percent = filteredTotal > 0 ? Math.round((item.population / filteredTotal) * 100) : 0;
@@ -444,7 +450,6 @@ export default function StatsScreen() {
               })}
             </View>
             
-            {/* BOUTON GÉRER */}
             <TouchableOpacity 
               style={{ marginTop: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, backgroundColor: activeTheme.primary, borderRadius: 14, gap: 8 }}
               onPress={() => setShowAllProductsModal(true)}
@@ -455,15 +460,67 @@ export default function StatsScreen() {
           </View>
         )}
 
-        {/* VUE : COMPARATIFS */}
-        {(viewMode === 'weekly' || viewMode === 'monthly') && (
+        {/* SEMAINE (LineChart + liste) */}
+        {viewMode === 'weekly' && (
           <View style={s.card}>
-            <Text style={s.cardTitle}>
-              {viewMode === 'weekly' ? t('last_4_weeks') : t('last_3_months')}
-            </Text>
+            <Text style={s.cardTitle}>{t('last_4_weeks')}</Text>
+            <View style={{ marginTop: 15, alignItems: 'center' }}>
+              {getWeeklyLineData() ? (
+                <LineChart
+                  data={{
+                    labels: getWeeklyLineData()!.labels,
+                    datasets: [{ data: getWeeklyLineData()!.values }]
+                  }}
+                  width={SCREEN_WIDTH - 60}
+                  height={220}
+                  yAxisLabel=""
+                  yAxisSuffix=""
+                  chartConfig={lineChartConfig}
+                  bezier
+                  style={s.lineChart}
+                />
+              ) : (
+                <Text style={{ color: s.progressSub.color, marginTop: 20 }}>
+                  {t('no_data') || 'Pas de données pour ces semaines'}
+                </Text>
+              )}
+            </View>
             <View style={{ marginTop: 15 }}>
-              {(viewMode === 'weekly' ? weeklyData : monthlyData).map((item) => 
-                renderProgressBar(item, Math.max(...(viewMode === 'weekly' ? weeklyData : monthlyData).map(i => i.montant)))
+              {weeklyData.map(item => 
+                renderProgressBar(item, Math.max(...weeklyData.map(i => i.montant)))
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* MOIS (LineChart + liste) */}
+        {viewMode === 'monthly' && (
+          <View style={s.card}>
+            <Text style={s.cardTitle}>{t('last_3_months')}</Text>
+            <View style={{ marginTop: 15, alignItems: 'center' }}>
+              {getMonthlyLineData() ? (
+                <LineChart
+                  data={{
+                    labels: getMonthlyLineData()!.labels,
+                    datasets: [{ data: getMonthlyLineData()!.values }]
+                  }}
+                  width={SCREEN_WIDTH - 60}
+                  height={220}
+                  yAxisLabel=""
+                  yAxisSuffix=""
+                  chartConfig={lineChartConfig}
+                  bezier
+                  style={s.lineChart}
+                />
+              ) : (
+                <Text style={{ color: s.progressSub.color, marginTop: 20 }}>
+                  {t('no_data') || 'Pas de données pour ces mois'}
+                </Text>
+              )}
+            </View>
+            <View style={{ marginTop: 15 }}>
+              {monthlyData.map(item => 
+                renderProgressBar(item, Math.max(...monthlyData.map(i => i.montant)))
               )}
             </View>
           </View>
@@ -471,7 +528,7 @@ export default function StatsScreen() {
 
       </Animated.ScrollView>
 
-      {/* --- MODAL DÉTAIL (JOURNAL) --- */}
+      {/* MODALE JOURNAL */}
       <JournalModal
         visible={showDetailModal}
         onClose={() => setShowDetailModal(false)}
@@ -483,7 +540,7 @@ export default function StatsScreen() {
         t={t}
       />
 
-      {/* --- MODAL FILTRE PRODUITS - PRO --- */}
+      {/* MODAL PRODUITS */}
       <Modal 
          visible={showAllProductsModal} 
          animationType="slide" 
@@ -491,7 +548,6 @@ export default function StatsScreen() {
          onRequestClose={() => setShowAllProductsModal(false)}
       >
          <View style={{ flex: 1, backgroundColor: isDarkMode ? '#0F172A' : '#fff' }}>
-            {/* HEADER */}
             <View style={{ paddingTop: 50, paddingBottom: 20, paddingHorizontal: 20, backgroundColor: isDarkMode ? '#1E293B' : '#fff', borderBottomWidth: 1, borderBottomColor: isDarkMode ? '#334155' : '#F1F5F9' }}>
                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                   <TouchableOpacity onPress={() => setShowAllProductsModal(false)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -503,13 +559,11 @@ export default function StatsScreen() {
                   </View>
                </View>
                
-               {/* TITRE */}
                <View style={{ marginTop: 20 }}>
                   <Text style={{ fontSize: 20, fontWeight: '800', color: isDarkMode ? '#F1F5F9' : '#1F2937' }}>{t('manage_display')}</Text>
                   <Text style={{ fontSize: 13, color: isDarkMode ? '#64748B' : '#9CA3AF', marginTop: 4 }}>{t('filter')}</Text>
                </View>
                
-               {/* ACTION TOUT SÉLECTIONNER */}
                <TouchableOpacity onPress={toggleAllProducts} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 16, backgroundColor: isDarkMode ? '#0F172A' : '#F8FAFC', padding: 14, borderRadius: 12 }}>
                   <Ionicons name={selectedProducts.length === allProducts.length ? "checkbox" : "square-outline"} size={24} color={activeTheme.primary} />
                   <Text style={{ color: activeTheme.primary, fontWeight: '600', fontSize: 15 }}>
@@ -518,13 +572,12 @@ export default function StatsScreen() {
                </TouchableOpacity>
             </View>
 
-            {/* LISTE DES PRODUITS */}
             <FlatList
                data={allProducts}
                keyExtractor={(item, index) => index.toString()}
                contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
                showsVerticalScrollIndicator={false}
-               renderItem={({ item, index }) => {
+               renderItem={({ item }) => {
                   const isSelected = selectedProducts.includes(item.name);
                   const totalAll = allProducts.reduce((s, p) => s + p.montant, 0);
                   const percent = totalAll > 0 ? ((item.montant / totalAll) * 100).toFixed(1) : '0';
@@ -551,7 +604,7 @@ export default function StatsScreen() {
          </View>
       </Modal>
 
-      {/* --- MENU HAMBURGER --- */}
+      {/* MENU HAMBURGER */}
       <Modal visible={showMenu} transparent animationType="fade">
          <TouchableOpacity style={s.menuOverlay} onPress={() => setShowMenu(false)}>
             <View style={s.menuBox}>
@@ -567,7 +620,6 @@ export default function StatsScreen() {
             </View>
          </TouchableOpacity>
       </Modal>
-
     </View>
   );
 }
@@ -587,107 +639,83 @@ const getStyles = (theme: any, dark: boolean) => {
   };
 
   return StyleSheet.create({
-  container: { flex: 1, backgroundColor: c.bg },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  
-  // HEADER
-  header: { paddingBottom: 80, paddingHorizontal: 20, borderBottomLeftRadius: 30, borderBottomRightRadius: 30 },
-  headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  headerTitle: { fontSize: 20, fontWeight: 'bold', color: 'white' },
-  iconBtn: { padding: 8, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 12 },
+    container: { flex: 1, backgroundColor: c.bg },
+    center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    header: { paddingBottom: 80, paddingHorizontal: 20, borderBottomLeftRadius: 30, borderBottomRightRadius: 30 },
+    headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    headerTitle: { fontSize: 20, fontWeight: 'bold', color: 'white' },
+    iconBtn: { padding: 8, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 12 },
 
-  // RÉSUMÉ FLOTTANT
-  summaryRow: {
-    position: 'absolute', bottom: -35, left: 20, right: 20,
-    flexDirection: 'row', backgroundColor: dark ? '#1E293B' : '#fff',
-    borderRadius: 20, padding: 20, justifyContent: 'space-around',
-    shadowColor: '#000', shadowOffset: {width: 0, height: 4}, shadowOpacity: dark ? 0.3 : 0.1, shadowRadius: 8, elevation: 5
-  },
-  summaryItem: { alignItems: 'center' },
-  summaryLabel: { color: dark ? '#94A3B8' : '#9CA3AF', fontSize: 11, fontWeight: '600', textTransform: 'uppercase' },
-  summaryValue: { fontSize: 18, fontWeight: '800', marginTop: 4 },
-  verticalDivider: { width: 1, backgroundColor: dark ? '#334155' : '#E2E8F0', height: '80%' },
+    summaryRow: {
+      position: 'absolute', bottom: -35, left: 20, right: 20,
+      flexDirection: 'row', backgroundColor: dark ? '#1E293B' : '#fff',
+      borderRadius: 20, padding: 20, justifyContent: 'space-around',
+      shadowColor: '#000', shadowOffset: {width: 0, height: 4}, shadowOpacity: dark ? 0.3 : 0.1, shadowRadius: 8, elevation: 5
+    },
+    summaryItem: { alignItems: 'center' },
+    summaryLabel: { color: dark ? '#94A3B8' : '#9CA3AF', fontSize: 11, fontWeight: '600', textTransform: 'uppercase' },
+    summaryValue: { fontSize: 18, fontWeight: '800', marginTop: 4 },
+    verticalDivider: { width: 1, backgroundColor: dark ? '#334155' : '#E2E8F0', height: '80%' },
 
-  content: { flex: 1, marginTop: 55, paddingHorizontal: 20 },
+    content: { flex: 1, marginTop: 55, paddingHorizontal: 20 },
 
-  // TABS
-  tabContainer: {
-    flexDirection: 'row', backgroundColor: dark ? '#1E293B' : '#fff', borderRadius: 16,
-    padding: 5, marginBottom: 20, elevation: 2
-  },
-  tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 12 },
-  tabText: { color: dark ? '#94A3B8' : '#64748B', fontWeight: '600', fontSize: 13 },
+    tabContainer: {
+      flexDirection: 'row', backgroundColor: dark ? '#1E293B' : '#fff', borderRadius: 16,
+      padding: 5, marginBottom: 20, elevation: 2
+    },
+    tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 12 },
+    tabText: { color: dark ? '#94A3B8' : '#64748B', fontWeight: '600', fontSize: 13 },
 
-  // CARDS
-  card: {
-    backgroundColor: dark ? '#1E293B' : '#fff', borderRadius: 24, padding: 20, marginBottom: 20,
-    shadowColor: '#000', shadowOffset: {width: 0, height: 2}, shadowOpacity: dark ? 0.2 : 0.05, shadowRadius: 8, elevation: 3
-  },
-  cardTitle: { fontSize: 18, fontWeight: '800', color: dark ? '#F1F5F9' : '#1F2937', marginBottom: 5 },
-  cardSub: { fontSize: 12, color: dark ? '#94A3B8' : '#9CA3AF' },
+    card: {
+      backgroundColor: dark ? '#1E293B' : '#fff', borderRadius: 24, padding: 20, marginBottom: 20,
+      shadowColor: '#000', shadowOffset: {width: 0, height: 2}, shadowOpacity: dark ? 0.2 : 0.05, shadowRadius: 8, elevation: 3
+    },
+    cardTitle: { fontSize: 18, fontWeight: '800', color: dark ? '#F1F5F9' : '#1F2937', marginBottom: 5 },
+    cardSub: { fontSize: 12, color: dark ? '#94A3B8' : '#9CA3AF' },
 
-  // PROGRESS BAR
-  progressContainer: { marginBottom: 15, backgroundColor: dark ? '#334155' : '#F8FAFC', padding: 12, borderRadius: 14 },
-  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  progressLabel: { fontSize: 14, fontWeight: '600', color: dark ? '#F1F5F9' : '#333', textTransform: 'capitalize' },
-  progressValue: { fontSize: 14, fontWeight: '700', color: dark ? '#94A3B8' : '#64748B' },
-  track: { height: 8, backgroundColor: dark ? '#1E293B' : '#E2E8F0', borderRadius: 4, overflow: 'hidden' },
-  bar: { height: '100%', borderRadius: 4 },
-  progressSub: { fontSize: 11, color: dark ? '#94A3B8' : '#9CA3AF' },
+    progressContainer: { marginBottom: 15, backgroundColor: dark ? '#334155' : '#F8FAFC', padding: 12, borderRadius: 14 },
+    progressHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+    progressLabel: { fontSize: 14, fontWeight: '600', color: dark ? '#F1F5F9' : '#333', textTransform: 'capitalize' },
+    progressValue: { fontSize: 14, fontWeight: '700', color: dark ? '#94A3B8' : '#64748B' },
+    track: { height: 8, backgroundColor: dark ? '#1E293B' : '#E2E8F0', borderRadius: 4, overflow: 'hidden' },
+    bar: { height: '100%', borderRadius: 4 },
+    progressSub: { fontSize: 11, color: dark ? '#94A3B8' : '#9CA3AF' },
 
-  // CHART
-  chartWrapper: { alignItems: 'center', justifyContent: 'center', position: 'relative', marginVertical: 20 },
-  donutCenter: { 
-    position: 'absolute', 
-    width: 100, height: 100, borderRadius: 50, 
-    backgroundColor: dark ? '#1E293B' : '#fff', 
-    shadowColor: '#000', shadowOpacity: 0.1, elevation: 2,
-    // Centrage parfait
-    top: 80, left: (SCREEN_WIDTH - 40) / 2 - 50 + (SCREEN_WIDTH / 4) // Ajustement approximatif pour le paddingLeft du chart
-  },
-  legendContainer: { marginTop: 10 },
-  legendItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: dark ? '#334155' : '#F1F5F9' },
-  legendLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
-  dot: { width: 14, height: 14, borderRadius: 7, marginRight: 12 },
-  legendName: { fontSize: 15, color: dark ? '#F1F5F9' : '#333', fontWeight: '600' },
-  legendValue: { fontSize: 16, fontWeight: '800', color: dark ? '#F1F5F9' : '#333' },
-  percentBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
-  percentText: { fontSize: 12, fontWeight: 'bold' },
-  
-  // LÉGENDE PRO
-  legendContainerPro: { marginTop: 20, backgroundColor: dark ? '#0F172A' : '#F8FAFC', borderRadius: 16, padding: 5 },
-  legendItemPro: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 12, marginVertical: 2, backgroundColor: dark ? '#1E293B' : '#fff', borderRadius: 12 },
-  colorBar: { width: 5, height: 40, borderRadius: 3 },
-  legendNamePro: { fontSize: 14, color: dark ? '#F1F5F9' : '#1F2937', fontWeight: '700' },
-  legendAmountPro: { fontSize: 12, color: dark ? '#94A3B8' : '#6B7280', marginTop: 2 },
-  percentBadgePro: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, minWidth: 55, alignItems: 'center' },
-  percentTextPro: { fontSize: 13, fontWeight: 'bold', color: '#fff' },
+    legendContainerPro: { marginTop: 20, backgroundColor: dark ? '#0F172A' : '#F8FAFC', borderRadius: 16, padding: 5 },
+    legendItemPro: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 12, marginVertical: 2, backgroundColor: dark ? '#1E293B' : '#fff', borderRadius: 12 },
+    colorBar: { width: 5, height: 40, borderRadius: 3 },
+    legendNamePro: { fontSize: 14, color: dark ? '#F1F5F9' : '#1F2937', fontWeight: '700' },
+    legendAmountPro: { fontSize: 12, color: dark ? '#94A3B8' : '#6B7280', marginTop: 2 },
+    percentBadgePro: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, minWidth: 55, alignItems: 'center' },
+    percentTextPro: { fontSize: 13, fontWeight: 'bold', color: '#fff' },
 
-  // MODAL STYLE
-  modalContainer: { flex: 1, backgroundColor: dark ? '#0F172A' : '#fff', padding: 20 },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, paddingTop: 20 },
-  modalTitle: { fontSize: 22, fontWeight: '800', color: dark ? '#F1F5F9' : '#333', textTransform: 'capitalize' },
-  modalCloseBtn: { padding: 5 },
-  
-  modalSummary: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 20, borderBottomWidth: 1, borderColor: dark ? '#334155' : '#f0f0f0', marginBottom: 10 },
-  modalLabel: { fontSize: 12, color: '#999', fontWeight: '600', textTransform: 'uppercase' },
-  modalTotal: { fontSize: 24, fontWeight: '800' },
-  btnPdf: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 15, borderRadius: 20, borderWidth: 1 },
+    lineChart: {
+      borderRadius: 16,
+    },
 
-  // JOURNAL LIST
-  journalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderColor: dark ? '#334155' : '#f5f5f5' },
-  journalLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  dateBadge: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  journalName: { fontSize: 16, fontWeight: '600', color: dark ? '#F1F5F9' : '#333' },
-  journalSub: { fontSize: 12, color: '#999' },
-  journalPrice: { fontSize: 16, fontWeight: '700', color: dark ? '#F1F5F9' : '#333' },
-  emptyText: { textAlign: 'center', color: '#999', marginTop: 20, fontStyle: 'italic' },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-start', padding: 20, paddingTop: 60 },
+    menuBox: { backgroundColor: dark ? '#1E293B' : '#fff', padding: 20, borderRadius: 20, width: 200, alignSelf: 'flex-end', elevation: 10 },
+    menuTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15 },
+    menuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderColor: dark ? '#334155' : '#f0f0f0' },
+    menuText: { fontSize: 14, fontWeight: '500', color: dark ? '#F1F5F9' : '#333' },
 
-  // MENU
-  menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-start', padding: 20, paddingTop: 60 },
-  menuBox: { backgroundColor: dark ? '#1E293B' : '#fff', padding: 20, borderRadius: 20, width: 200, alignSelf: 'flex-end', elevation: 10 },
-  menuTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15 },
-  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderColor: dark ? '#334155' : '#f0f0f0' },
-  menuText: { fontSize: 14, fontWeight: '500', color: dark ? '#F1F5F9' : '#333' }
-});
+    menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-start', padding: 20, paddingTop: 60 },
+
+    // JournalModal styles déjà utilisés
+    modalContainer: { flex: 1, backgroundColor: dark ? '#0F172A' : '#fff', padding: 20 },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, paddingTop: 20 },
+    modalTitle: { fontSize: 22, fontWeight: '800', color: dark ? '#F1F5F9' : '#333', textTransform: 'capitalize' },
+    modalCloseBtn: { padding: 5 },
+    modalSummary: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 20, borderBottomWidth: 1, borderColor: dark ? '#334155' : '#f0f0f0', marginBottom: 10 },
+    modalLabel: { fontSize: 12, color: '#999', fontWeight: '600', textTransform: 'uppercase' },
+    modalTotal: { fontSize: 24, fontWeight: '800' },
+    btnPdf: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 15, borderRadius: 20, borderWidth: 1 },
+    journalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderColor: dark ? '#334155' : '#f5f5f5' },
+    journalLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    dateBadge: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+    journalName: { fontSize: 16, fontWeight: '600', color: dark ? '#F1F5F9' : '#333' },
+    journalSub: { fontSize: 12, color: '#999' },
+    journalPrice: { fontSize: 16, fontWeight: '700', color: dark ? '#F1F5F9' : '#333' },
+    emptyText: { textAlign: 'center', color: '#999', marginTop: 20, fontStyle: 'italic' },
+  });
 };

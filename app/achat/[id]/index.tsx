@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { 
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
-  TextInput, Modal, KeyboardAvoidingView, Platform, Alert, Keyboard
+  TextInput, Modal, KeyboardAvoidingView, Platform, Alert, Dimensions
 } from 'react-native';
 import { ThemedStatusBar } from '../../../src/components/ThemedStatusBar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -30,12 +30,13 @@ export default function AchatDetails() {
   const { currency, language, t } = useSettings();
   const insets = useSafeAreaInsets();
   const s = getStyles(styles);
-  const achatId = Number(useLocalSearchParams<{ id?: string }>().id);
   
-  // Référence pour scroller automatiquement vers le bas
+  const params = useLocalSearchParams<{ id?: string, readOnly?: string }>();
+  const achatId = Number(params.id);
+  const isReadOnly = params.readOnly === '1';
+
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // --- ÉTATS ---
   const [achat, setAchat] = useState<Achat | null>(null);
   const [lignes, setLignes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,7 +44,6 @@ export default function AchatDetails() {
   const [title, setTitle] = useState('');
   const [newItem, setNewItem] = useState('');
   
-  // Modals
   const [editModal, setEditModal] = useState(false);
   const [editIdx, setEditIdx] = useState(-1);
   const [editData, setEditData] = useState({ nom: '', qty: '', prix: '', unite: 'pcs' });
@@ -58,16 +58,16 @@ export default function AchatDetails() {
   const [editNameIdx, setEditNameIdx] = useState(-1);
   const [editNameValue, setEditNameValue] = useState('');
 
-  // Rappel
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [reminderDate, setReminderDate] = useState(new Date());
   const [mode, setMode] = useState<'date' | 'time'>('date');
 
-  // --- CHARGEMENT ---
   useEffect(() => {
     if (!achatId) return;
     loadData();
-    registerForPushNotificationsAsync();
+    if (!isReadOnly) {
+        registerForPushNotificationsAsync();
+    }
   }, [achatId]);
 
   const loadData = () => {
@@ -83,14 +83,15 @@ export default function AchatDetails() {
     } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
-  // --- ACTIONS ---
   const saveTitle = () => {
+    if (isReadOnly) return;
     if (!title.trim() || !achat) return;
     getDb().runSync('UPDATE Achat SET nomListe = ? WHERE id = ?', [title, achatId]);
     setAchat({ ...achat, nomListe: title });
   };
 
   const addItem = () => {
+    if (isReadOnly) return;
     const nom = newItem.trim();
     if (!nom) return;
     try {
@@ -99,15 +100,12 @@ export default function AchatDetails() {
         const newLine = { id: r.lastInsertRowId, libelleProduit: nom, quantite: 0, prixUnitaire: 0, prixTotal: 0, unite: 'pcs', checked: false };
         setLignes(prev => [...prev, newLine]);
         setNewItem('');
-        
-        // Scroll en bas après l'ajout pour voir le nouvel item
-        setTimeout(() => {
-          scrollViewRef.current?.scrollToEnd({ animated: true });
-        }, 100);
+        setTimeout(() => { scrollViewRef.current?.scrollToEnd({ animated: true }); }, 100);
     } catch(e) { console.error(e); }
   };
 
   const toggle = (item: any) => {
+    if (isReadOnly) return;
     const idx = lignes.findIndex(l => l.id === item.id);
     const l = lignes[idx];
     if (l.checked) {
@@ -134,6 +132,7 @@ export default function AchatDetails() {
   };
 
   const askDelete = (item: any) => {
+    if (isReadOnly) return;
     setItemToDelete(item);
     setDeleteModal(true);
   };
@@ -145,10 +144,11 @@ export default function AchatDetails() {
     setLignes(newLignes);
     setDeleteModal(false);
     setItemToDelete(null);
-    if(newLignes.length === 0) { router.back(); }
+    if(newLignes.length === 0 && !isReadOnly) { router.back(); }
   };
 
   const saveRename = () => {
+     if (isReadOnly) return;
      const nom = editNameValue.trim();
      if(nom && editNameIdx !== -1) {
         const l = lignes[editNameIdx];
@@ -208,10 +208,9 @@ export default function AchatDetails() {
       }
   };
 
-  // 📊 CALCULS
   const unchecked = lignes.filter(l => !l.checked);
   const checked = lignes.filter(l => l.checked);
-  const totalDepense = checked.reduce((sum, l) => sum + l.prixTotal, 0);
+  const totalDepense = lignes.reduce((sum, l) => sum + (l.prixTotal || 0), 0);
   const progress = lignes.length > 0 ? checked.length / lignes.length : 0;
 
   if (loading) return <ActivityIndicator style={s.center} color={activeTheme.primary} />;
@@ -221,13 +220,12 @@ export default function AchatDetails() {
     <View style={s.container}>
       <ThemedStatusBar transparent />
       
-      {/* HEADER */}
       <LinearGradient colors={activeTheme.gradient as any} style={[s.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => router.push('/')} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, opacity: 0.9 }}>
           <Ionicons name="home-outline" size={14} color="rgba(255,255,255,0.8)" />
           <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 11, marginLeft: 4 }}>{t('home')}</Text>
           <Ionicons name="chevron-forward" size={12} color="rgba(255,255,255,0.8)" style={{ marginHorizontal: 3 }} />
-          <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>{t('my_list')}</Text>
+          <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>{isReadOnly ? 'Historique' : t('my_list')}</Text>
         </TouchableOpacity>
         
         <View style={s.headerContent}>
@@ -235,22 +233,30 @@ export default function AchatDetails() {
               <Ionicons name="arrow-back" size={24} color="#fff" />
            </TouchableOpacity>
            <View style={{ flex: 1, marginHorizontal: 10 }}>
-               <TextInput 
-                   style={s.titleInputSimple} 
-                   value={title} 
-                   onChangeText={setTitle} 
-                   onBlur={saveTitle}
-                   placeholder={t('list_title_placeholder') || "Titre de liste"}
-                   placeholderTextColor="rgba(255,255,255,0.6)"
-                   returnKeyType="done"
-                   onSubmitEditing={saveTitle}
-               />
-               <Text style={s.headerDate}>{format(new Date(achat.dateAchat), 'dd MMMM yyyy', {locale: language === 'en' ? enUS : fr})}</Text>
+               {isReadOnly ? (
+                  <View>
+                      <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#fff' }}>{title}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                          <Ionicons name="calendar-outline" size={12} color="rgba(255,255,255,0.8)" />
+                          <Text style={s.headerDate}> {format(new Date(achat.dateAchat), 'dd MMM yyyy', {locale: language === 'en' ? enUS : fr})}</Text>
+                          <View style={s.archivedTag}>
+                              <Text style={s.archivedText}>VITA</Text>
+                          </View>
+                      </View>
+                  </View>
+               ) : (
+                  <View>
+                    <TextInput style={s.titleInputSimple} value={title} onChangeText={setTitle} onBlur={saveTitle} placeholder={t('list_title_placeholder')} placeholderTextColor="rgba(255,255,255,0.6)" returnKeyType="done" onSubmitEditing={saveTitle} />
+                    <Text style={s.headerDate}>{format(new Date(achat.dateAchat), 'dd MMMM yyyy', {locale: language === 'en' ? enUS : fr})}</Text>
+                  </View>
+               )}
            </View>
            
-           <TouchableOpacity onPress={() => { setMode('date'); setShowDatePicker(true); }} style={[s.backBtn, { marginRight: 8 }]}>
-              <Ionicons name="notifications-outline" size={22} color="#fff" />
-           </TouchableOpacity>
+           {!isReadOnly && (
+               <TouchableOpacity onPress={() => { setMode('date'); setShowDatePicker(true); }} style={[s.backBtn, { marginRight: 8 }]}>
+                  <Ionicons name="notifications-outline" size={22} color="#fff" />
+               </TouchableOpacity>
+           )}
 
            <TouchableOpacity onPress={() => router.push('/rapports')} style={s.backBtn}>
               <Ionicons name="pie-chart-outline" size={22} color="#fff" />
@@ -258,144 +264,145 @@ export default function AchatDetails() {
         </View>
       </LinearGradient>
 
-      {/* TOTAL CARD */}
-      <View style={s.summaryContainer}>
-         <View style={s.summaryCard}>
-            <View style={s.summaryRow}>
-                <View>
-                    <Text style={s.summaryLabel}>{t('total_spent')}</Text>
-                    <Text style={[s.summaryValue, { color: activeTheme.primary }]}>{formatMoney(totalDepense)} {currency}</Text>
+      <View style={{flex: 1, marginTop: -20, borderTopLeftRadius: 30, borderTopRightRadius: 30, backgroundColor: s.container.backgroundColor, overflow: 'hidden'}}>
+        
+        {isReadOnly ? (
+          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 100 }}>
+             <View style={[s.ticketCard, { shadowColor: activeTheme.primary }]}>
+                <View style={s.ticketHeader}>
+                    <View style={[s.iconBox, { backgroundColor: activeTheme.secondary }]}>
+                       <Ionicons name="receipt" size={24} color={activeTheme.primary} />
+                    </View>
+                    <View style={{ alignItems: 'center', marginTop: 10 }}>
+                       <Text style={{ fontSize: 18, fontWeight: 'bold', color: s.text.color }}>RESUME D'ACHAT</Text>
+                       <Text style={{ fontSize: 12, color: s.textSec.color }}>{lignes.length} articles</Text>
+                    </View>
                 </View>
-                <View style={[s.iconBox, { backgroundColor: activeTheme.secondary }]}>
-                    <Ionicons name="wallet-outline" size={24} color={activeTheme.primary} />
-                </View>
-            </View>
-            <View style={s.progressContainer}>
-                <View style={s.progressTextRow}>
-                    <Text style={s.progressText}>{t('progress')}</Text>
-                    <Text style={s.progressText}>{checked.length}/{lignes.length}</Text>
-                </View>
-                <View style={s.progressBarBg}>
-                    <LinearGradient colors={activeTheme.gradient as any} style={[s.progressBarFill, { width: `${progress * 100}%` }]} />
-                </View>
-            </View>
-         </View>
-      </View>
 
-      {/* 👇 MODIFICATION : Ajout de KeyboardAvoidingView pour le problème du clavier */}
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={{ flex: 1 }}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0} // Ajustement pour iOS si besoin
-      >
-        <ScrollView 
-          ref={scrollViewRef}
-          contentContainerStyle={[s.scrollContent, { paddingBottom: 150 }]} // 👇 Augmentation du padding bas
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled" // Permet de taper sur les boutons même clavier ouvert
-        >
-          
-          {/* LISTE À ACHETER */}
-          <View style={s.section}>
-              <Text style={s.sectionTitle}>{t('to_buy')} ({unchecked.length})</Text>
-              {unchecked.map((item) => {
-                  const idx = lignes.indexOf(item);
-                  return (
-                      <View key={item.id} style={s.todoItem}>
-                          <TouchableOpacity onPress={() => toggle(item)} style={[s.checkBox, { borderColor: activeTheme.primary }]} />
-                          
-                          {editNameIdx === idx ? (
-                              <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
-                                  <TextInput style={[s.inlineInput, { borderBottomColor: activeTheme.primary, color: s.text.color }]} value={editNameValue} onChangeText={setEditNameValue} autoFocus onSubmitEditing={saveRename} />
-                                  <Ionicons name="checkmark" size={20} color={activeTheme.primary} onPress={saveRename} />
-                              </View>
-                          ) : (
-                              <TouchableOpacity style={{ flex: 1 }} onPress={() => { setEditNameIdx(idx); setEditNameValue(item.libelleProduit); }}>
-                                  <Text style={s.itemText}>{item.libelleProduit}</Text>
-                              </TouchableOpacity>
-                          )}
-                          
-                          <TouchableOpacity onPress={() => askDelete(item)} style={s.miniDeleteBtn}>
-                              <Ionicons name="close" size={16} color="#fff" />
-                          </TouchableOpacity>
+                <View style={[s.dashedLine, { borderColor: s.border.borderColor }]} />
+
+                <View style={{ gap: 12, marginVertical: 10 }}>
+                   {lignes.map((item, index) => (
+                      <View key={index} style={s.ticketRow}>
+                          <View style={{ flex: 1 }}>
+                             <Text style={s.ticketItemName}>{item.libelleProduit}</Text>
+                             <Text style={s.ticketItemSub}>{item.quantite} {item.unite} x {formatMoney(item.prixUnitaire)}</Text>
+                          </View>
+                          <Text style={s.ticketItemPrice}>{formatMoney(item.prixTotal)} {currency}</Text>
                       </View>
-                  );
-              })}
+                   ))}
+                </View>
 
-              {/* BARRE D'AJOUT */}
-              <View style={[s.addItemRow, { borderColor: activeTheme.primary }]}>
-                  <Ionicons name="add" size={24} color={activeTheme.primary} />
-                  <TextInput 
-                      style={s.addItemInput} 
-                      placeholder={t('add_product_placeholder')} 
-                      placeholderTextColor={s.textSec.color}
-                      value={newItem} 
-                      onChangeText={setNewItem} 
-                      onSubmitEditing={addItem}
-                      blurOnSubmit={false} // Garde le clavier ouvert pour ajouter plusieurs items
-                  />
-                  {newItem.length > 0 && (
-                      <TouchableOpacity onPress={addItem}><Text style={[s.addBtnText, { color: activeTheme.primary }]}>{t('ok')}</Text></TouchableOpacity>
-                  )}
-              </View>
-          </View>
+                <View style={[s.dashedLine, { borderColor: s.border.borderColor }]} />
 
-          {/* LISTE ACHETÉS */}
-          {checked.length > 0 && (
+                <View style={s.ticketTotalRow}>
+                    <Text style={s.ticketTotalLabel}>TOTAL PAYÉ</Text>
+                    <Text style={[s.ticketTotalValue, { color: activeTheme.primary }]}>{formatMoney(totalDepense)} {currency}</Text>
+                </View>
+                
+                <View style={{ alignItems: 'center', marginTop: 20, opacity: 0.5 }}>
+                   <Ionicons name="barcode-outline" size={40} color={s.text.color} />
+                   <Text style={{ fontSize: 10, color: s.text.color, marginTop: 5 }}>E-TSENA APP</Text>
+                </View>
+             </View>
+          </ScrollView>
+        ) : (
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+            
+            <View style={{ paddingHorizontal: 20, marginTop: 20 }}>
+                <View style={s.summaryCard}>
+                    <View style={s.summaryRow}>
+                        <View>
+                            <Text style={s.summaryLabel}>{t('total_spent')}</Text>
+                            <Text style={[s.summaryValue, { color: activeTheme.primary }]}>{formatMoney(totalDepense)} {currency}</Text>
+                        </View>
+                        <View style={[s.iconBox, { backgroundColor: activeTheme.secondary }]}>
+                            <Ionicons name="wallet-outline" size={24} color={activeTheme.primary} />
+                        </View>
+                    </View>
+                    <View style={s.progressContainer}>
+                        <View style={s.progressTextRow}>
+                            <Text style={s.progressText}>{t('progress')}</Text>
+                            <Text style={s.progressText}>{checked.length}/{lignes.length}</Text>
+                        </View>
+                        <View style={s.progressBarBg}>
+                            <LinearGradient colors={activeTheme.gradient as any} style={[s.progressBarFill, { width: `${progress * 100}%` }]} />
+                        </View>
+                    </View>
+                </View>
+            </View>
+
+            <ScrollView ref={scrollViewRef} contentContainerStyle={[s.scrollContent, { paddingBottom: 100 }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <View style={s.section}>
-                  <Text style={s.sectionTitle}>{t('already_bought')} ({checked.length})</Text>
-                  {checked.map((item) => {
+                  <Text style={s.sectionTitle}>{t('to_buy')} ({unchecked.length})</Text>
+                  {unchecked.map((item) => {
                       const idx = lignes.indexOf(item);
                       return (
-                          <View key={item.id} style={s.doneItem}>
-                              <View style={s.doneHeader}>
-                                  <TouchableOpacity onPress={() => toggle(item)}>
-                                      <Ionicons name="checkmark-circle" size={22} color={s.success.color} />
-                                  </TouchableOpacity>
-                                  <Text style={s.doneText} numberOfLines={1}>{item.libelleProduit}</Text>
-                                  <Text style={[s.doneTotal, { color: activeTheme.primary }]}>{formatMoney(item.prixTotal)} {currency}</Text>
-                              </View>
-                              <View style={s.doneFooter}>
-                                  <Text style={s.doneSub}>{item.quantite} {item.unite} x {formatMoney(item.prixUnitaire)}</Text>
-                                  <View style={{ flexDirection: 'row', gap: 8 }}>
-                                      <TouchableOpacity style={[s.actionBtn, { backgroundColor: activeTheme.primary + '15' }]} onPress={() => { setEditIdx(idx); setEditData({ nom: item.libelleProduit, qty: item.quantite.toString(), prix: item.prixUnitaire.toString(), unite: item.unite || 'pcs' }); setEditModal(true); }}>
-                                          <Ionicons name="create-outline" size={16} color={activeTheme.primary} />
-                                      </TouchableOpacity>
-                                      <TouchableOpacity style={[s.actionBtn, { backgroundColor: s.dangerLight.backgroundColor }]} onPress={() => askDelete(item)}>
-                                          <Ionicons name="trash-outline" size={16} color={s.danger.color} />
-                                      </TouchableOpacity>
+                          <View key={item.id} style={s.todoItem}>
+                              <TouchableOpacity onPress={() => toggle(item)} style={[s.checkBox, { borderColor: activeTheme.primary }]} />
+                              {editNameIdx === idx ? (
+                                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+                                      <TextInput style={[s.inlineInput, { borderBottomColor: activeTheme.primary, color: s.text.color }]} value={editNameValue} onChangeText={setEditNameValue} autoFocus onSubmitEditing={saveRename} />
+                                      <Ionicons name="checkmark" size={20} color={activeTheme.primary} onPress={saveRename} />
                                   </View>
-                              </View>
+                              ) : (
+                                  <TouchableOpacity style={{ flex: 1 }} onPress={() => { setEditNameIdx(idx); setEditNameValue(item.libelleProduit); }}>
+                                      <Text style={s.itemText}>{item.libelleProduit}</Text>
+                                  </TouchableOpacity>
+                              )}
+                              <TouchableOpacity onPress={() => askDelete(item)} style={s.miniDeleteBtn}>
+                                  <Ionicons name="close" size={16} color="#fff" />
+                              </TouchableOpacity>
                           </View>
                       );
                   })}
+                  <View style={[s.addItemRow, { borderColor: activeTheme.primary }]}>
+                      <Ionicons name="add" size={24} color={activeTheme.primary} />
+                      <TextInput style={s.addItemInput} placeholder={t('add_product_placeholder')} placeholderTextColor={s.textSec.color} value={newItem} onChangeText={setNewItem} onSubmitEditing={addItem} />
+                  </View>
               </View>
-          )}
-        </ScrollView>
-      </KeyboardAvoidingView>
 
-      {/* ... MODALES (DatePicker, Confirm, Edit, Quick) RESTENT INCHANGÉES ... */}
+              {checked.length > 0 && (
+                  <View style={s.section}>
+                      <Text style={s.sectionTitle}>{t('already_bought')} ({checked.length})</Text>
+                      {checked.map((item) => {
+                          const idx = lignes.indexOf(item);
+                          return (
+                              <View key={item.id} style={s.doneItem}>
+                                  <View style={s.doneHeader}>
+                                      <TouchableOpacity onPress={() => toggle(item)}>
+                                          <Ionicons name="checkmark-circle" size={22} color={s.success.color} />
+                                      </TouchableOpacity>
+                                      <Text style={s.doneText} numberOfLines={1}>{item.libelleProduit}</Text>
+                                      <Text style={[s.doneTotal, { color: activeTheme.primary }]}>{formatMoney(item.prixTotal)} {currency}</Text>
+                                  </View>
+                                  <View style={s.doneFooter}>
+                                      <Text style={s.doneSub}>{item.quantite} {item.unite} x {formatMoney(item.prixUnitaire)}</Text>
+                                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                                          <TouchableOpacity style={[s.actionBtn, { backgroundColor: activeTheme.primary + '15' }]} onPress={() => { setEditIdx(idx); setEditData({ nom: item.libelleProduit, qty: item.quantite.toString(), prix: item.prixUnitaire.toString(), unite: item.unite || 'pcs' }); setEditModal(true); }}>
+                                              <Ionicons name="create-outline" size={16} color={activeTheme.primary} />
+                                          </TouchableOpacity>
+                                          <TouchableOpacity style={[s.actionBtn, { backgroundColor: activeTheme.dangerLight }]} onPress={() => askDelete(item)}>
+                                              <Ionicons name="trash-outline" size={16} color={s.danger.color} />
+                                          </TouchableOpacity>
+                                      </View>
+                                  </View>
+                              </View>
+                          );
+                      })}
+                  </View>
+              )}
+            </ScrollView>
+          </KeyboardAvoidingView>
+        )}
+      </View>
+
+      <ConfirmModal visible={deleteModal} title={t('delete_item_title')} message="Supprimer cet article ?" onConfirm={confirmDelete} onCancel={() => setDeleteModal(false)} confirmText={t('delete')} cancelText={t('cancel')} type="danger" theme={activeTheme} isDarkMode={isDarkMode} />
+      
       {showDatePicker && (
-        <DateTimePicker
-          value={reminderDate}
-          mode={Platform.OS === 'ios' ? 'datetime' : mode}
-          display="default"
-          onChange={onDateChange}
-          minimumDate={new Date()}
-        />
+        <DateTimePicker value={reminderDate} mode={Platform.OS === 'ios' ? 'datetime' : mode} display="default" onChange={onDateChange} minimumDate={new Date()} />
       )}
-      <ConfirmModal
-        visible={deleteModal}
-        title={t('delete_item_title')}
-        message={`${t('delete_item_confirm_1')} "${itemToDelete?.libelleProduit}" ${t('delete_item_confirm_2')}`}
-        onConfirm={confirmDelete}
-        onCancel={() => setDeleteModal(false)}
-        confirmText={t('delete')}
-        cancelText={t('cancel')}
-        type="danger"
-        theme={activeTheme}
-        isDarkMode={isDarkMode}
-      />
+      
       <Modal visible={editModal} transparent animationType="fade">
          <View style={s.backdrop}>
             <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={s.modalContainer}>
@@ -425,6 +432,7 @@ export default function AchatDetails() {
             </KeyboardAvoidingView>
          </View>
       </Modal>
+
       <Modal visible={quickModal} transparent animationType="fade">
          <View style={s.backdrop}>
             <View style={s.modalContainer}>
@@ -452,7 +460,6 @@ export default function AchatDetails() {
             </View>
          </View>
       </Modal>
-
     </View>
   );
 }
@@ -460,15 +467,26 @@ export default function AchatDetails() {
 const styles = (c: any) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { paddingBottom: 60, paddingHorizontal: 20, borderBottomLeftRadius: 30, borderBottomRightRadius: 30 },
+  header: { paddingBottom: 50, paddingHorizontal: 20, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
   headerContent: { flexDirection: 'row', alignItems: 'center' },
   backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
-  titleInput: { fontSize: 20, fontWeight: 'bold', color: '#fff', borderBottomWidth: 1, borderColor: '#fff' },
   titleInputSimple: { fontSize: 20, fontWeight: 'bold', color: '#fff', paddingVertical: 2 },
   headerDate: { fontSize: 12, color: 'rgba(255,255,255,0.8)' },
-  summaryContainer: { marginTop: -40, paddingHorizontal: 20, marginBottom: 10 },
-  summaryCard: { backgroundColor: c.card, borderRadius: 20, padding: 20, elevation: 5, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10 },
+  archivedTag: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 8 },
+  archivedText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
+
+  ticketCard: { backgroundColor: c.card, margin: 5, borderRadius: 20, padding: 20, paddingVertical: 30, shadowOffset: {width: 0, height: 5}, shadowOpacity: 0.15, shadowRadius: 15, elevation: 8 },
+  ticketHeader: { alignItems: 'center', marginBottom: 20 },
+  dashedLine: { borderWidth: 1, borderStyle: 'dashed', borderRadius: 1, height: 1, width: '100%', marginVertical: 10, opacity: 0.5 },
+  ticketRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  ticketItemName: { fontSize: 16, fontWeight: '600', color: c.text },
+  ticketItemSub: { fontSize: 12, color: c.textSec, marginTop: 2 },
+  ticketItemPrice: { fontSize: 16, fontWeight: 'bold', color: c.text },
+  ticketTotalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
+  ticketTotalLabel: { fontSize: 18, fontWeight: '800', color: c.text },
+  ticketTotalValue: { fontSize: 24, fontWeight: '900' },
+
+  summaryCard: { backgroundColor: c.card, borderRadius: 20, padding: 20, elevation: 5, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, marginBottom: 20 },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   summaryLabel: { fontSize: 12, color: c.textSec, fontWeight: 'bold', letterSpacing: 1 },
   summaryValue: { fontSize: 28, fontWeight: '800', color: c.text },
@@ -478,7 +496,8 @@ const styles = (c: any) => StyleSheet.create({
   progressText: { fontSize: 11, color: c.textSec, fontWeight: '600' },
   progressBarBg: { height: 6, backgroundColor: c.bg, borderRadius: 3, overflow: 'hidden' },
   progressBarFill: { height: '100%', borderRadius: 3 },
-  scrollContent: { paddingHorizontal: 20, paddingBottom: 50, paddingTop: 10 },
+  
+  scrollContent: { paddingHorizontal: 20, paddingTop: 10 },
   section: { marginBottom: 25 },
   sectionTitle: { fontSize: 12, fontWeight: '700', color: c.textSec, marginBottom: 10, letterSpacing: 1 },
   todoItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.card, padding: 15, borderRadius: 12, marginBottom: 8, elevation: 1 },
@@ -488,7 +507,6 @@ const styles = (c: any) => StyleSheet.create({
   miniDeleteBtn: { backgroundColor: c.border, width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   addItemRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderStyle: 'dashed', borderRadius: 12, padding: 12, marginTop: 5, backgroundColor: c.card },
   addItemInput: { flex: 1, fontSize: 16, marginLeft: 10, color: c.text },
-  addBtnText: { fontWeight: 'bold', paddingHorizontal: 10 },
   doneItem: { borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: c.border, elevation: 1, backgroundColor: c.card },
   doneHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
   doneText: { fontSize: 16, color: c.text, flex: 1, fontWeight: '500', textDecorationLine: 'line-through', opacity: 0.6 },
@@ -507,21 +525,10 @@ const styles = (c: any) => StyleSheet.create({
   modalActions: { flexDirection: 'row', marginTop: 25, gap: 12 },
   btnGhost: { flex: 1, padding: 14, alignItems: 'center', borderRadius: 12, backgroundColor: c.bg },
   btnPrimary: { flex: 1, padding: 14, alignItems: 'center', borderRadius: 12 },
-  deleteCard: { backgroundColor: c.modal, borderRadius: 24, padding: 30, width: '90%', alignItems: 'center', elevation: 10 },
-  deleteIconContainer: { width: 60, height: 60, borderRadius: 30, backgroundColor: c.dangerLight, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
-  deleteTitle: { fontSize: 20, fontWeight: 'bold', color: c.text, marginBottom: 10 },
-  deleteText: { fontSize: 14, color: c.textSec, textAlign: 'center', marginBottom: 25, lineHeight: 20 },
-  deleteActions: { flexDirection: 'row', gap: 15, width: '100%' },
-  btnCancel: { flex: 1, padding: 15, borderRadius: 14, backgroundColor: c.bg, alignItems: 'center' },
-  btnDelete: { flex: 1, padding: 15, borderRadius: 14, backgroundColor: c.danger, alignItems: 'center' },
-  btnCancelText: { fontWeight: '600', color: c.textSec },
-  btnDeleteText: { fontWeight: 'bold', color: '#fff' },
-  
-  // Objets de couleurs pour usage direct dans le code
   text: { color: c.text },
   textSec: { color: c.textSec },
   danger: { color: c.danger },
-  dangerLight: { backgroundColor: c.dangerLight },
   success: { color: c.success },
-  input: { backgroundColor: c.input }
+  input: { backgroundColor: c.input },
+  border: { borderColor: c.border }
 });

@@ -16,73 +16,135 @@ import { getDb } from '../../src/db/init';
 import { Logo } from '../../src/components/Logo';
 import { useTheme, THEMES } from '../../src/context/ThemeContext'; 
 import { useSettings } from '../../src/context/SettingsContext'; 
-import { ConfirmModal } from '../../src/components/ConfirmModal';
-
-// Import sécurisé
 import * as NotifService from '../../src/services/notificationService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// --- DICTIONNAIRE DE TRADUCTION LOCAL (Fallback) ---
-// Raha tsy mahita ny t() dia mampiasa an'ireto
-const LOCAL_TRANS: any = {
+// --- DICTIONNAIRE DE TRADUCTION ---
+const TRADUCTIONS: any = {
   fr: {
     ongoing: 'En cours',
     history: 'Historique',
-    to_buy_list: 'Listes à faire',
-    finished_list: 'Listes terminées',
-    mark_done: 'Terminer les courses',
+    list_ongoing_title: 'Listes à faire',
+    list_history_title: 'Courses terminées',
+    mark_done: 'Marquer comme terminé',
     reopen_list: 'Rouvrir la liste',
-    done: 'Terminé',
-    list_archived: 'Liste archivée dans l\'historique',
-    list_active: 'Liste remise en cours',
-    check_prices_title: 'Vérification',
-    check_prices_msg: 'Avez-vous bien mis à jour les prix réels payés au marché ?',
-    empty_ongoing: 'Aucune liste en cours',
-    empty_history: 'Aucun historique',
     rename: 'Renommer',
+    delete: 'Supprimer',
     delete_list: 'Supprimer la liste',
     cancel: 'Annuler',
-    confirm: 'Confirmer'
+    confirm: 'Confirmer',
+    save: 'Enregistrer',
+    empty_ongoing: 'Aucune liste en cours',
+    empty_history: 'Aucun historique',
+    search: 'Rechercher...',
+    check_prices_title: 'Vérification',
+    check_prices_msg: 'Avez-vous bien vérifié les prix réels avant de terminer ?',
+    delete_title: 'Supprimer la liste ?',
+    delete_msg: 'Cette action est irréversible.',
+    delete_list_confirm: 'Voulez-vous vraiment supprimer',
+    expenses: 'Dépenses',
+    articles: 'Articles',
+    welcome: 'Accueil',
+    reports: 'Rapports',
+    settings: 'Paramètres',
+    choose_theme: 'Choisir un thème',
+    dark_mode: 'Mode sombre',
+    language: 'Langue',
+    help: 'Aide & Astuces',
+    sort_by: 'Trier par',
+    sort_date: 'Date',
+    sort_amount: 'Montant',
+    tips_title: 'Astuces',
+    tips_content: ["Une fois dans l'historique, la liste ne peut plus être modifiée.", "Supprimez les anciennes listes pour garder l'application rapide."],
+    understood: 'Compris',
+    list_archived: "Liste déplacée dans l'historique",
+    list_active: "Liste remise dans les cours en cours",
+    done: "Terminé",
+    reopened: "Rouvert"
   },
   mg: {
     ongoing: 'Mbola atao',
-    history: 'Tantara',
-    to_buy_list: 'Lisitra mbola atao',
-    finished_list: 'Lisitra efa vita',
+    history: 'Efa vita',
+    list_ongoing_title: 'Lisitra mbola ho vidiana',
+    list_history_title: 'Lisitra efa vita',
     mark_done: 'Marihina fa vita',
     reopen_list: 'Averina sokafana',
-    done: 'Vita',
-    list_archived: "Nafindra any amin'ny Tantara",
-    list_active: "Naverina amin'ny Mbola atao",
-    check_prices_title: 'Fanamarinana',
-    check_prices_msg: 'Voamarinao ve fa tena io tokoa ny vidiny nividianana tany an-tsena?',
-    empty_ongoing: 'Tsy misy lisitra atao',
-    empty_history: 'Tsy misy tantara',
     rename: 'Hanova anarana',
-    delete_list: 'Hamafa ny lisitra',
+    delete: 'Hamafa',
+    delete_list: 'Hamafa ny liste',
     cancel: 'Foanana',
-    confirm: 'Eny, vita'
-  },
-  en: {
-    ongoing: 'Ongoing',
-    history: 'History',
-    to_buy_list: 'To Buy List',
-    finished_list: 'Finished List',
-    mark_done: 'Mark as Done',
-    reopen_list: 'Reopen List',
-    done: 'Done',
-    list_archived: 'List archived to history',
-    list_active: 'List set to active',
-    check_prices_title: 'Check Prices',
-    check_prices_msg: 'Did you update the items with the real market prices?',
-    empty_ongoing: 'No ongoing lists',
-    empty_history: 'No history',
-    rename: 'Rename',
-    delete_list: 'Delete list',
-    cancel: 'Cancel',
-    confirm: 'Yes, Done'
+    confirm: 'Hamafisina',
+    save: 'Tehirizina',
+    empty_ongoing: 'Tsy misy lisitra an-dalam-panaovana',
+    empty_history: 'Tsy misy tantara voatahiry',
+    search: 'Karoka...',
+    check_prices_title: 'Fanamarinana',
+    check_prices_msg: 'Voamarinao ve fa tena ireo ny vidiny nividianana tany an-tsena?',
+    delete_title: 'Hamafa ity lisitra ity?',
+    delete_msg: 'Tsy ho hita intsony ity rehefa voafafa.',
+    delete_list_confirm: "Te hamafa an'i",
+    expenses: 'Fandaniana',
+    articles: 'Entana',
+    welcome: 'Fandraisana',
+    reports: 'Tatitra',
+    settings: 'Fikirakirana',
+    choose_theme: 'Safidio ny loko',
+    dark_mode: 'Mode mainty',
+    language: 'Fiteny',
+    help: 'Fanampiana',
+    sort_by: 'Alahatra araka',
+    sort_date: 'Daty',
+    sort_amount: 'Vola',
+    tips_title: 'Torohevitra',
+    tips_content: ["Rehefa tafiditra ao amin'ny 'Efa vita' ny lisitra dia tsy azo ovaina intsony.", "Fafao ny lisitra tranainy mba hampilamina ny finday."],
+    understood: 'Mazava',
+    list_archived: "Nafindra any amin'ny Historique",
+    list_active: "Naverina amin'ny En cours",
+    done: "Vita",
+    reopened: "Niverina"
   }
+};
+
+// --- COMPOSANT: CONFIRMATION MODAL DESIGN ---
+const BeautifulConfirmModal = ({ visible, title, message, onConfirm, onCancel, confirmText, cancelText, activeTheme, type = 'danger' }: any) => {
+    if (!visible) return null;
+    const scaleAnim = useRef(new Animated.Value(0.8)).current;
+    const opacityAnim = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        if (visible) {
+            Animated.parallel([
+                Animated.spring(scaleAnim, { toValue: 1, friction: 6, useNativeDriver: true }),
+                Animated.timing(opacityAnim, { toValue: 1, duration: 200, useNativeDriver: true })
+            ]).start();
+        }
+    }, [visible]);
+
+    const isDanger = type === 'danger';
+    const mainColor = isDanger ? '#EF4444' : activeTheme.primary;
+
+    return (
+        <Modal transparent visible={visible} animationType="none" onRequestClose={onCancel}>
+            <View style={styles(activeTheme).modalOverlay}>
+                <Animated.View style={[styles(activeTheme).modalContent, { transform: [{ scale: scaleAnim }], opacity: opacityAnim }]}>
+                    <View style={[styles(activeTheme).iconWrapper, { backgroundColor: isDanger ? '#FEE2E2' : activeTheme.secondary }]}>
+                        <Ionicons name={isDanger ? "trash-outline" : "alert-circle-outline"} size={32} color={mainColor} />
+                    </View>
+                    <Text style={styles(activeTheme).modalTitleText}>{title}</Text>
+                    <Text style={styles(activeTheme).modalMessageText}>{message}</Text>
+                    <View style={styles(activeTheme).modalBtnRow}>
+                        <TouchableOpacity onPress={onCancel} style={styles(activeTheme).modalBtnCancel}>
+                            <Text style={styles(activeTheme).modalBtnCancelText}>{cancelText}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={onConfirm} style={[styles(activeTheme).modalBtnConfirm, { backgroundColor: mainColor }]}>
+                            <Text style={styles(activeTheme).modalBtnConfirmText}>{confirmText}</Text>
+                        </TouchableOpacity>
+                    </View>
+                </Animated.View>
+            </View>
+        </Modal>
+    );
 };
 
 // --- HEADER ANIMÉ ---
@@ -121,42 +183,84 @@ interface Achat {
   dateAchat: string;
   totalDepense: number;
   nombreArticles: number;
-  statut: number; // 0 = En cours, 1 = Terminé
+  statut: number; 
 }
 
+// --- ITEM COMPONENT (UNIFIÉ & CORRIGÉ) ---
 const AchatItem = ({ item, viewMode, s, activeTheme, language, currency, onPress, onAction }: any) => {
-  const isDone = item.statut === 1;
+  const isDone = item.statut === 1; // 0 = En cours, 1 = Historique
+
+  const iconName = isDone ? 'checkmark-circle' : 'cart-outline';
+  
+  // Correction ici : on utilise directement s.textSec si possible, sinon on passe par activeTheme si besoin
+  // Mais s.textSec est un objet {color: ...}, donc on peut l'utiliser directement dans le style
+  
   return (
-    <TouchableOpacity style={[viewMode === 'grid' ? s.cardGrid : s.cardList, isDone && { opacity: 0.8 }]} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity
+      style={viewMode === 'grid' ? s.cardGrid : s.cardList}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
       {viewMode === 'grid' ? (
+        // --- MODE GRID ---
         <>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <View style={[s.miniBadge, { backgroundColor: isDone ? '#10B981' : activeTheme.secondary }]}>
-              <Ionicons name={isDone ? "checkmark" : "cart-outline"} size={18} color={isDone ? '#fff' : activeTheme.primary} />
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <View style={[s.miniBadge, { backgroundColor: activeTheme.secondary }]}>
+              <Ionicons name={iconName} size={18} color={activeTheme.primary} />
             </View>
-            <TouchableOpacity onPress={onAction} hitSlop={{top:10,bottom:10,left:10,right:10}}><Ionicons name="ellipsis-horizontal" size={20} color={s.textSec.color} /></TouchableOpacity>
+            <TouchableOpacity onPress={onAction} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="ellipsis-horizontal" size={20} color={s.textSec.color} />
+            </TouchableOpacity>
           </View>
-          <Text style={[s.cardTitle, isDone && { textDecorationLine: 'line-through', color: s.textSec.color }]} numberOfLines={1}>{item.nomListe}</Text>
-          <Text style={s.cardDate}>{format(new Date(item.dateAchat), 'dd MMM', { locale: language === 'en' ? enUS : fr })}</Text>
-          <Text style={[s.cardPrice, { color: isDone ? s.textSec.color : activeTheme.primary }]}>{formatMoney(item.totalDepense)} {currency}</Text>
+
+          <Text style={s.cardTitle} numberOfLines={1}>{item.nomListe}</Text>
+          
+          <Text style={s.cardDate}>
+            {format(new Date(item.dateAchat), 'dd MMM', {
+              locale: language === 'en' ? enUS : fr,
+            })}
+          </Text>
+          
+          <Text style={[s.cardPrice, { color: activeTheme.primary }]}>
+            {formatMoney(item.totalDepense)} {currency}
+          </Text>
         </>
       ) : (
+        // --- MODE LIST ---
         <>
-           <View style={[s.dateBox, { backgroundColor: isDone ? '#10B981' : activeTheme.secondary }]}>
-             {isDone ? 
-               <Ionicons name="checkmark" size={24} color="#fff" /> : 
-               <><Text style={{ fontWeight: 'bold', color: activeTheme.primary }}>{format(new Date(item.dateAchat), 'dd')}</Text><Text style={{ fontSize: 10, color: activeTheme.primary }}>{format(new Date(item.dateAchat), 'MMM', { locale: language === 'en' ? enUS : fr })}</Text></>
-             }
-           </View>
-           <View style={{ flex: 1, paddingHorizontal: 15 }}>
-              <Text style={[s.cardTitle, isDone && { textDecorationLine: 'line-through', color: s.textSec.color }]} numberOfLines={1}>{item.nomListe}</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-                  <Text style={s.cardDate}>{item.nombreArticles} {language === 'mg' ? 'entana' : 'articles'}</Text>
-                  <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: '#CBD5E1', marginHorizontal: 6 }} />
-                  <Text style={{ fontSize: 14, fontWeight: '700', color: isDone ? s.textSec.color : activeTheme.primary }}>{formatMoney(item.totalDepense)} {currency}</Text>
-              </View>
-           </View>
-           <TouchableOpacity onPress={onAction} style={s.moreBtn} hitSlop={{top:10,bottom:10,left:10,right:10}}><Ionicons name="ellipsis-vertical" size={20} color={s.textSec.color} /></TouchableOpacity>
+          <View style={[s.dateBox, { backgroundColor: activeTheme.secondary }]}>
+            <Ionicons name={iconName} size={20} color={activeTheme.primary} />
+          </View>
+
+          <View style={{ flex: 1, paddingHorizontal: 15 }}>
+            <Text style={s.cardTitle} numberOfLines={1}>{item.nomListe}</Text>
+            
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+              <Text style={s.cardDate}>
+                {item.nombreArticles} {language === 'mg' ? 'entana' : 'articles'}
+              </Text>
+              <View
+                style={{
+                  width: 4,
+                  height: 4,
+                  borderRadius: 2,
+                  backgroundColor: '#CBD5E1',
+                  marginHorizontal: 6,
+                }}
+              />
+              <Text style={{ fontSize: 14, fontWeight: '700', color: activeTheme.primary }}>
+                {formatMoney(item.totalDepense)} {currency}
+              </Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            onPress={onAction}
+            style={s.moreBtn}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="ellipsis-vertical" size={20} color={s.textSec.color} />
+          </TouchableOpacity>
         </>
       )}
     </TouchableOpacity>
@@ -164,176 +268,277 @@ const AchatItem = ({ item, viewMode, s, activeTheme, language, currency, onPress
 };
 
 // --- MODALS ---
-
-const ThemesModal = ({ visible, onClose, currentTheme, setTheme, s, t, isDarkMode }: any) => (
+const ThemesModal = ({ visible, onClose, currentTheme, setTheme, s, translations, isDarkMode }: any) => (
   <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-     <TouchableOpacity style={s.backdrop} onPress={onClose} activeOpacity={1}>
-        <View style={s.modalCard}>
-           <View style={s.modalHeaderCenter}>
-               <Text style={s.modalTitle}>{t('choose_theme') || "Safidio ny loko"}</Text>
-               <TouchableOpacity onPress={onClose} style={s.closeBtn}><Ionicons name="close" size={20} color={s.textSec.color} /></TouchableOpacity>
-           </View>
-           <ScrollView contentContainerStyle={s.themeGrid} showsVerticalScrollIndicator={false}>
-              {(Object.keys(THEMES) as Array<keyof typeof THEMES>).map((key) => {
-                 const th = THEMES[key];
-                 const isActive = currentTheme === key;
-                 return (
-                 <TouchableOpacity key={key} onPress={() => { setTheme(key); onClose(); }} style={[s.themeItemWrapper, isActive && s.themeItemActive]} activeOpacity={0.8}>
-                    <View style={[s.previewPhone, { borderColor: isActive ? th.primary : s.border.borderColor }]}>
-                        <View style={[s.previewHeader, { backgroundColor: th.primary }]}>
-                            <View style={{ width: 20, height: 3, backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: 2 }} />
-                        </View>
-                        <View style={[s.previewBody, { backgroundColor: isDarkMode ? '#1E293B' : '#F8FAFC' }]}>
-                            <View style={[s.previewCard, { backgroundColor: th.secondary }]}>
-                                <View style={{ width: '40%', height: 3, backgroundColor: th.primary, opacity: 0.5, marginBottom: 2 }} />
-                            </View>
-                            <View style={[s.previewCard, { backgroundColor: isDarkMode ? '#334155' : '#E2E8F0' }]}>
-                                <View style={{ width: '50%', height: 3, backgroundColor: s.textSec.color, opacity: 0.3 }} />
-                            </View>
-                            <View style={[s.previewFab, { backgroundColor: th.primary }]}><Ionicons name="add" size={8} color="#fff" /></View>
-                        </View>
-                        {isActive && (<View style={[s.activeCheckBadge, { backgroundColor: th.primary }]}><Ionicons name="checkmark" size={10} color="#fff" /></View>)}
-                    </View>
-                    <Text style={[s.themeName, { color: isActive ? th.primary : s.textSec.color, fontWeight: isActive ? '700' : '500' }]}>{th.name}</Text>
-                 </TouchableOpacity>
-              )})}
-           </ScrollView>
+    <TouchableOpacity style={s.backdrop} onPress={onClose} activeOpacity={1}>
+      <View style={s.modalCard}>
+        <View style={s.modalHeaderCenter}>
+          <Text style={s.modalTitle}>{translations.choose_theme}</Text>
+          <TouchableOpacity onPress={onClose} style={s.closeBtn}>
+            <Ionicons name="close" size={20} color={s.textSec.color} />
+          </TouchableOpacity>
         </View>
-     </TouchableOpacity>
+        <ScrollView contentContainerStyle={s.themeGrid} showsVerticalScrollIndicator={false}>
+          {(Object.keys(THEMES) as Array<keyof typeof THEMES>).map((key) => {
+            const th = THEMES[key];
+            const isActive = currentTheme === key;
+            return (
+              <TouchableOpacity
+                key={key}
+                onPress={() => {
+                  setTheme(key);
+                  onClose();
+                }}
+                style={[s.themeItemWrapper, isActive && s.themeItemActive]}
+                activeOpacity={0.8}
+              >
+                <View style={[s.previewPhone, { borderColor: isActive ? th.primary : s.border.borderColor }]}>
+                  <View style={[s.previewHeader, { backgroundColor: th.primary }]}>
+                    <View style={{ width: 20, height: 3, backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: 2 }} />
+                  </View>
+                  <View style={[s.previewBody, { backgroundColor: isDarkMode ? '#1E293B' : '#F8FAFC' }]}>
+                    <View style={[s.previewFab, { backgroundColor: th.primary }]}>
+                      <Ionicons name="add" size={8} color="#fff" />
+                    </View>
+                  </View>
+                  {isActive && (
+                    <View style={[s.activeCheckBadge, { backgroundColor: th.primary }]}>
+                      <Ionicons name="checkmark" size={10} color="#fff" />
+                    </View>
+                  )}
+                </View>
+                <Text
+                  style={[
+                    s.themeName,
+                    { color: isActive ? th.primary : s.textSec.color, fontWeight: isActive ? '700' : '500' },
+                  ]}
+                >
+                  {th.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+    </TouchableOpacity>
   </Modal>
 );
 
-const SettingsModal = ({ visible, onClose, isDarkMode, toggleDarkMode, language, setLanguage, setShowHelp, s, activeTheme, t }: any) => (
+const SettingsModal = ({ visible, onClose, isDarkMode, toggleDarkMode, language, setLanguage, setShowHelp, s, activeTheme, translations }: any) => (
   <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
     <View style={s.modalContainerFull}>
-       <View style={s.modalHeader}>
-          <Text style={s.modalBigTitle}>{t('settings') || "Paramètres"}</Text>
-          <TouchableOpacity onPress={onClose} style={s.closeCircle}>
-             <Ionicons name="close" size={24} color={s.text.color} />
-          </TouchableOpacity>
-       </View>
-       <ScrollView style={{padding: 20}}>
-          <Text style={s.sectionHeader}>APPARENCE</Text>
-          <View style={s.settingSection}>
-             <View style={s.settingRow}>
-                <View style={[s.iconBox, { backgroundColor: activeTheme.secondary }]}><Ionicons name="moon" size={20} color={activeTheme.primary} /></View>
-                <Text style={s.settingText}>{t('dark_mode') || "Mode Sombre"}</Text>
-                <Switch value={isDarkMode} onValueChange={toggleDarkMode} trackColor={{ true: activeTheme.primary, false: '#E0E0E0' }} />
-             </View>
+      <View style={s.modalHeader}>
+        <Text style={s.modalBigTitle}>{translations.settings}</Text>
+        <TouchableOpacity onPress={onClose} style={s.closeCircle}>
+          <Ionicons name="close" size={24} color={s.text.color} />
+        </TouchableOpacity>
+      </View>
+      <ScrollView style={{ padding: 20 }}>
+        <Text style={s.sectionHeader}>APPARENCE</Text>
+        <View style={s.settingSection}>
+          <View style={s.settingRow}>
+            <View style={[s.iconBox, { backgroundColor: activeTheme.secondary }]}>
+              <Ionicons name="moon" size={20} color={activeTheme.primary} />
+            </View>
+            <Text style={s.settingText}>{translations.dark_mode}</Text>
+            <Switch
+              value={isDarkMode}
+              onValueChange={toggleDarkMode}
+              trackColor={{ true: activeTheme.primary, false: '#E0E0E0' }}
+            />
           </View>
-          <Text style={s.sectionHeader}>GÉNÉRAL</Text>
-          <View style={s.settingSection}>
-             <View style={[s.settingRow, {borderBottomWidth:0}]}>
-                <View style={[s.iconBox, { backgroundColor: '#E0F2FE' }]}><Ionicons name="language" size={20} color="#0284C7" /></View>
-                <Text style={s.settingText}>{t('language') || "Fiteny"}</Text>
-                <View style={{ flexDirection: 'row', gap: 5, backgroundColor: s.bg.backgroundColor, padding: 4, borderRadius: 8 }}>
-                   {['fr', 'mg', 'en'].map((l) => (
-                      <TouchableOpacity key={l} onPress={() => setLanguage(l as any)} style={[s.langBtn, language === l && { backgroundColor: activeTheme.primary, shadowOpacity: 0.1 }]}>
-                         <Text style={{ fontSize: 12, fontWeight: '700', color: language === l ? '#fff' : s.textSec.color }}>{l.toUpperCase()}</Text>
-                      </TouchableOpacity>
-                   ))}
-                </View>
-             </View>
+        </View>
+        <Text style={s.sectionHeader}>GÉNÉRAL</Text>
+        <View style={s.settingSection}>
+          <View style={[s.settingRow, { borderBottomWidth: 0 }]}>
+            <View style={[s.iconBox, { backgroundColor: '#E0F2FE' }]}>
+              <Ionicons name="language" size={20} color="#0284C7" />
+            </View>
+            <Text style={s.settingText}>{translations.language}</Text>
+            <View
+              style={{
+                flexDirection: 'row',
+                gap: 5,
+                backgroundColor: s.bg.backgroundColor,
+                padding: 4,
+                borderRadius: 8,
+              }}
+            >
+              {['fr', 'mg'].map((l) => (
+                <TouchableOpacity
+                  key={l}
+                  onPress={() => setLanguage(l as any)}
+                  style={[
+                    s.langBtn,
+                    language === l && { backgroundColor: activeTheme.primary, shadowOpacity: 0.1 },
+                  ]}
+                >
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: '700',
+                      color: language === l ? '#fff' : s.textSec.color,
+                    }}
+                  >
+                    {l.toUpperCase()}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
-          <Text style={s.sectionHeader}>AIDE</Text>
-          <View style={s.settingSection}>
-             <TouchableOpacity style={[s.settingRow, {borderBottomWidth:0}]} onPress={() => setShowHelp(true)}>
-                <View style={[s.iconBox, { backgroundColor: '#FEF3C7' }]}><Ionicons name="help-circle" size={20} color="#D97706" /></View>
-                <Text style={s.settingText}>{t('help') || "Fanampiana"}</Text>
-                <Ionicons name="chevron-forward" size={20} color={s.textSec.color} />
-             </TouchableOpacity>
-          </View>
-       </ScrollView>
+        </View>
+        
+        <Text style={s.sectionHeader}>AIDE</Text>
+        <View style={s.settingSection}>
+           <TouchableOpacity style={[s.settingRow, {borderBottomWidth:0}]} onPress={() => setShowHelp(true)}>
+              <View style={[s.iconBox, { backgroundColor: '#FEF3C7' }]}>
+                  <Ionicons name="bulb" size={20} color="#D97706" />
+              </View>
+              <Text style={s.settingText}>{translations.help}</Text>
+              <Ionicons name="chevron-forward" size={20} color={s.textSec.color} />
+           </TouchableOpacity>
+        </View>
+
+      </ScrollView>
     </View>
   </Modal>
 );
 
-const ActionsModal = ({ visible, onClose, selectedAchat, handleRename, handleDelete, toggleStatus, s, activeTheme, t, language }: any) => {
-  const isDone = selectedAchat?.statut === 1;
-  const tr = LOCAL_TRANS[language] || LOCAL_TRANS.fr; // Utiliser le dictionnaire local
+const ActionsModal = ({ visible, onClose, selectedAchat, handleRename, handleDelete, toggleStatus, s, activeTheme, translations }: any) => {
+  const isHistory = selectedAchat?.statut === 1;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-       <TouchableOpacity style={s.backdrop} onPress={onClose} activeOpacity={1}>
-          <View style={s.actionSheetContainer}>
-             <View style={s.dragHandle} />
-             <View style={s.actionSheetHeader}>
-                 <View style={[s.iconCircle, { backgroundColor: activeTheme.secondary }]}><Ionicons name="receipt-outline" size={24} color={activeTheme.primary} /></View>
-                 <View style={{ flex: 1 }}>
-                     <Text style={s.actionSheetTitle} numberOfLines={1}>{selectedAchat?.nomListe}</Text>
-                     <Text style={s.actionSheetSub}>{t('select_action') || "Action à effectuer"}</Text>
-                 </View>
-             </View>
-             <View style={s.actionList}>
-                 {/* 🔄 TOGGLE STATUT AVEC TEXTE AMÉLIORÉ */}
-                 <TouchableOpacity style={[s.actionSheetBtn, { borderColor: isDone ? activeTheme.primary : '#10B981' }]} onPress={toggleStatus}>
-                    <View style={[s.actionIcon, { backgroundColor: isDone ? activeTheme.secondary : '#D1FAE5' }]}>
-                      <Ionicons name={isDone ? "refresh" : "checkmark-circle"} size={20} color={isDone ? activeTheme.primary : "#059669"} />
-                    </View>
-                    <Text style={[s.actionText, { color: isDone ? activeTheme.primary : "#059669" }]}>
-                      {isDone ? (t('reopen_list') || tr.reopen_list) : (t('mark_done') || tr.mark_done)}
-                    </Text>
-                 </TouchableOpacity>
-
-                 <TouchableOpacity style={s.actionSheetBtn} onPress={handleRename}>
-                    <View style={[s.actionIcon, { backgroundColor: s.bg.backgroundColor }]}><Ionicons name="pencil" size={20} color={s.text.color} /></View>
-                    <Text style={s.actionText}>{t('rename') || tr.rename}</Text>
-                 </TouchableOpacity>
-                 
-                 <TouchableOpacity style={s.actionSheetBtn} onPress={handleDelete}>
-                    <View style={[s.actionIcon, { backgroundColor: '#FEE2E2' }]}><Ionicons name="trash" size={20} color="#EF4444" /></View>
-                    <Text style={[s.actionText, { color: '#EF4444' }]}>{t('delete_list') || tr.delete_list}</Text>
-                 </TouchableOpacity>
-             </View>
-             <TouchableOpacity style={s.cancelBtn} onPress={onClose}><Text style={s.cancelText}>{t('cancel') || tr.cancel}</Text></TouchableOpacity>
+      <TouchableOpacity style={s.backdrop} onPress={onClose} activeOpacity={1}>
+        <View style={s.actionSheetContainer}>
+          <View style={s.dragHandle} />
+          <View style={s.actionSheetHeader}>
+            <View style={[s.iconCircle, { backgroundColor: activeTheme.secondary }]}>
+              <Ionicons name="receipt-outline" size={24} color={activeTheme.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.actionSheetTitle} numberOfLines={1}>
+                {selectedAchat?.nomListe}
+              </Text>
+              <Text style={s.actionSheetSub}>{isHistory ? translations.history : translations.ongoing}</Text>
+            </View>
           </View>
-       </TouchableOpacity>
+          <View style={s.actionList}>
+            <TouchableOpacity
+              style={[s.actionSheetBtn, { borderColor: isHistory ? '#10B981' : activeTheme.primary }]}
+              onPress={toggleStatus}
+            >
+              <View style={[s.actionIcon, { backgroundColor: isHistory ? '#D1FAE5' : activeTheme.secondary }]}>
+                <Ionicons 
+                  name={isHistory ? "refresh" : "checkmark-circle"} 
+                  size={20} 
+                  color={isHistory ? "#059669" : activeTheme.primary} 
+                />
+              </View>
+              <Text style={[s.actionText, { color: isHistory ? "#059669" : activeTheme.primary }]}>
+                {isHistory ? translations.reopen_list : translations.mark_done}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={s.actionSheetBtn} onPress={handleRename}>
+              <View style={[s.actionIcon, { backgroundColor: s.bg.backgroundColor }]}>
+                <Ionicons name="pencil" size={20} color={s.text.color} />
+              </View>
+              <Text style={s.actionText}>{translations.rename}</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={s.actionSheetBtn} onPress={handleDelete}>
+              <View style={[s.actionIcon, { backgroundColor: '#FEE2E2' }]}>
+                <Ionicons name="trash" size={20} color="#EF4444" />
+              </View>
+              <Text style={[s.actionText, { color: '#EF4444' }]}>{translations.delete}</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity style={s.cancelBtn} onPress={onClose}>
+            <Text style={s.cancelText}>{translations.cancel}</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
     </Modal>
   );
 };
 
-// ... (SortModal et HelpModal restent les mêmes, mais assure-toi d'utiliser le bon t() si besoin) ...
-const SortModal = ({ visible, onClose, sortMode, setSortMode, s, activeTheme, t }: any) => (
-    <Modal visible={visible} transparent animationType="fade">
-       <TouchableOpacity style={s.backdrop} onPress={onClose}>
-          <View style={s.modalCard}>
-             <Text style={[s.modalTitle, { marginBottom: 15 }]}>{t('sort_by') || "Trier par"}</Text>
-             <TouchableOpacity onPress={() => { setSortMode('date'); onClose(); }} style={{ padding: 16, borderBottomWidth: 1, borderColor: s.border.borderColor }}>
-                <Text style={{ textTransform: 'capitalize', color: s.text.color }}>{t('date') || "Date"}</Text>
-             </TouchableOpacity>
-             <TouchableOpacity onPress={() => { setSortMode('amount'); onClose(); }} style={{ padding: 16 }}>
-                <Text style={{ textTransform: 'capitalize', color: s.text.color }}>{t('amount') || "Montant"}</Text>
-             </TouchableOpacity>
-          </View>
-       </TouchableOpacity>
-    </Modal>
+const SortModal = ({ visible, onClose, setSortMode, s, translations }: any) => (
+  <Modal visible={visible} transparent animationType="fade">
+    <TouchableOpacity style={s.backdrop} onPress={onClose}>
+      <View style={s.modalCard}>
+        <Text style={[s.modalTitle, { marginBottom: 15 }]}>{translations.sort_by}</Text>
+        <TouchableOpacity
+          onPress={() => {
+            setSortMode('date');
+            onClose();
+          }}
+          style={{ padding: 16, borderBottomWidth: 1, borderColor: s.border.borderColor }}
+        >
+          <Text style={{ textTransform: 'capitalize', color: s.text.color }}>
+            {translations.sort_date}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => {
+            setSortMode('amount');
+            onClose();
+          }}
+          style={{ padding: 16 }}
+        >
+          <Text style={{ textTransform: 'capitalize', color: s.text.color }}>
+            {translations.sort_amount}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </TouchableOpacity>
+  </Modal>
 );
 
-const HelpModal = ({ visible, onClose, s, activeTheme, t }: any) => (
-    <Modal visible={visible} transparent animationType="fade">
-       <View style={s.backdrop}>
-          <View style={s.modalCard}>
-             <Ionicons name="bulb-outline" size={40} color="#F59E0B" style={{ alignSelf: 'center', marginBottom: 10 }} />
-             <Text style={[s.modalTitle, { textAlign: 'center' }]}>{t('tips_title') || "Astuces"}</Text>
-             <ScrollView style={{maxHeight: 300, marginVertical: 15}}>
-                 <Text style={{ marginBottom: 8, color: s.textSec.color, lineHeight: 20 }}>• Cochez les articles au fur et à mesure.</Text>
-                 <Text style={{ marginBottom: 8, color: s.textSec.color, lineHeight: 20 }}>• Modifiez le prix si ça change au marché.</Text>
-                 <Text style={{ marginBottom: 8, color: s.textSec.color, lineHeight: 20 }}>• Utilisez le mode sombre pour économiser la batterie.</Text>
-             </ScrollView>
-             <TouchableOpacity onPress={onClose} style={{ backgroundColor: activeTheme.primary, padding: 12, borderRadius: 12, alignItems: 'center' }}>
-                <Text style={{ color: '#fff', fontWeight: 'bold' }}>{t('understood') || "Compris"}</Text>
-             </TouchableOpacity>
-          </View>
-       </View>
-    </Modal>
+const HelpModal = ({ visible, onClose, s, activeTheme, translations }: any) => (
+  <Modal visible={visible} transparent animationType="fade">
+    <View style={s.backdrop}>
+      <View style={s.modalCard}>
+        <Ionicons
+          name="bulb-outline"
+          size={40}
+          color="#F59E0B"
+          style={{ alignSelf: 'center', marginBottom: 10 }}
+        />
+        <Text style={[s.modalTitle, { textAlign: 'center' }]}>{translations.tips_title}</Text>
+        <ScrollView style={{ maxHeight: 300, marginVertical: 15 }}>
+          {translations.tips_content.map((tip: string, i: number) => (
+            <Text
+              key={i}
+              style={{ marginBottom: 8, color: s.textSec.color, lineHeight: 20 }}
+            >
+              • {tip}
+            </Text>
+          ))}
+        </ScrollView>
+        <TouchableOpacity
+          onPress={onClose}
+          style={{
+            backgroundColor: activeTheme.primary,
+            padding: 12,
+            borderRadius: 12,
+            alignItems: 'center',
+          }}
+        >
+          <Text style={{ color: '#fff', fontWeight: 'bold' }}>{translations.understood}</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  </Modal>
 );
 
 export default function Home() {
   const { currentTheme, setTheme, activeTheme, isDarkMode, toggleDarkMode, getStyles } = useTheme();
-  const { currency, language, setLanguage, t } = useSettings();
+  const { currency, language, setLanguage } = useSettings();
   const insets = useSafeAreaInsets();
   const s = getStyles(styles);
-  const tr = LOCAL_TRANS[language] || LOCAL_TRANS.fr;
+
+  const TEXTS = TRADUCTIONS[language] || TRADUCTIONS.fr;
   
   const [achats, setAchats] = useState<Achat[]>([]);
   const [filteredAchats, setFilteredAchats] = useState<Achat[]>([]);
@@ -341,7 +546,6 @@ export default function Home() {
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [sortMode, setSortMode] = useState<'date' | 'name' | 'amount'>('date');
   
-  // Tab actif: 'ongoing' (En cours) | 'history' (Historique)
   const [activeTab, setActiveTab] = useState<'ongoing' | 'history'>('ongoing');
 
   const [showSettings, setShowSettings] = useState(false);
@@ -350,6 +554,7 @@ export default function Home() {
   const [showActions, setShowActions] = useState(false);
   const [showThemes, setShowThemes] = useState(false);
   const [selectedAchat, setSelectedAchat] = useState<Achat | null>(null);
+  
   const [deleteModal, setDeleteModal] = useState(false);
   const [renameModal, setRenameModal] = useState(false);
   const [newListName, setNewListName] = useState('');
@@ -357,7 +562,7 @@ export default function Home() {
   const [unreadCount, setUnreadCount] = useState(0);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  // ... (Calculs Dashboard identiques)
+  // Calculs Dashboard
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
   const monthlyAchats = achats.filter(a => { const d = new Date(a.dateAchat); return d.getMonth() === currentMonth && d.getFullYear() === currentYear; });
@@ -365,7 +570,6 @@ export default function Home() {
   const monthlyArticlesCount = monthlyAchats.reduce((acc, item) => acc + item.nombreArticles, 0);
   const monthName = format(new Date(), 'MMM', { locale: language === 'en' ? enUS : fr });
 
-  // Schema check (identique)
   const ensureSchema = (db: any) => {
     try {
       const info = db.getAllSync("PRAGMA table_info(Achat)");
@@ -400,53 +604,63 @@ export default function Home() {
     let filtered = achats;
     if (searchQuery !== '') filtered = filtered.filter(a => a.nomListe.toLowerCase().includes(searchQuery.toLowerCase()));
     
-    // Filtrage par Tab
     if (activeTab === 'ongoing') {
       filtered = filtered.filter(a => (a.statut === 0 || a.statut === null));
     } else {
       filtered = filtered.filter(a => a.statut === 1);
     }
-
     setFilteredAchats(filtered);
   }, [searchQuery, achats, activeTab]);
 
   const handleCreate = () => { try { const db = getDb(); const res = db.runSync('INSERT INTO Achat (nomListe, dateAchat, statut) VALUES (?, ?, 0)', ['', new Date().toISOString()]); router.push(`/achat/${res.lastInsertRowId}`); } catch (e) { console.error(e); } };
   
-  // 🟢 LOGIQUE AMELIORÉE : Gérer le changement de statut avec avertissement Prix
+  const handleOpenList = (item: Achat) => {
+      const isReadOnly = item.statut === 1;
+      router.push({
+          pathname: `/achat/${item.id}`,
+          params: { readOnly: isReadOnly ? '1' : '0' }
+      });
+  };
+
   const toggleStatus = () => {
     if (!selectedAchat) return;
     
-    const performToggle = () => {
-        const newStatus = selectedAchat.statut === 1 ? 0 : 1;
-        try {
-          getDb().runSync('UPDATE Achat SET statut = ? WHERE id = ?', [newStatus, selectedAchat.id]);
-          setShowActions(false);
-          loadData();
-          Alert.alert(
-            newStatus === 1 ? (t('done') || tr.done) : (t('reopened') || tr.reopen_list), 
-            newStatus === 1 ? (t('list_archived') || tr.list_archived) : (t('list_active') || tr.list_active)
-          );
-        } catch (e) { console.error(e); }
-    };
-
-    // Si on veut terminer la liste (passer à 1), on demande confirmation pour les prix
-    if (selectedAchat.statut !== 1) {
+    const newStatus = selectedAchat.statut === 1 ? 0 : 1;
+    
+    // Si on veut marquer comme terminé, on demande confirmation sur les prix
+    if (newStatus === 1) {
         Alert.alert(
-            t('check_prices_title') || tr.check_prices_title,
-            t('check_prices_msg') || tr.check_prices_msg,
+            TEXTS.check_prices_title,
+            TEXTS.check_prices_msg,
             [
-                { text: t('cancel') || tr.cancel, style: "cancel" },
-                { text: t('confirm') || tr.confirm, onPress: performToggle }
+                { text: TEXTS.cancel, style: "cancel" },
+                { 
+                    text: TEXTS.confirm, 
+                    onPress: () => {
+                        try {
+                            getDb().runSync('UPDATE Achat SET statut = 1 WHERE id = ?', [selectedAchat.id]);
+                            setShowActions(false);
+                            loadData();
+                            Alert.alert(TEXTS.done, TEXTS.list_archived);
+                        } catch (e) { console.error(e); }
+                    } 
+                }
             ]
         );
     } else {
-        // Pour réouvrir, pas besoin de confirmation complexe
-        performToggle();
+        // Si on veut rouvrir
+        try {
+            getDb().runSync('UPDATE Achat SET statut = 0 WHERE id = ?', [selectedAchat.id]);
+            setShowActions(false);
+            loadData();
+            Alert.alert(TEXTS.reopened, TEXTS.list_active);
+        } catch (e) { console.error(e); }
     }
   };
 
   const handleRename = () => { if (!selectedAchat) return; setNewListName(selectedAchat.nomListe); setShowActions(false); setTimeout(() => setRenameModal(true), 300); };
   const confirmRename = () => { if (!selectedAchat || !newListName.trim()) return; try { getDb().runSync('UPDATE Achat SET nomListe = ? WHERE id = ?', [newListName.trim(), selectedAchat.id]); setRenameModal(false); setNewListName(''); loadData(); } catch (e) {} };
+  
   const handleDelete = () => { setShowActions(false); setTimeout(() => setDeleteModal(true), 300); };
   const confirmDelete = () => { if (!selectedAchat) return; try { getDb().runSync('DELETE FROM LigneAchat WHERE idAchat = ?', [selectedAchat.id]); getDb().runSync('DELETE FROM Achat WHERE id = ?', [selectedAchat.id]); setDeleteModal(false); loadData(); } catch (e) {} };
 
@@ -460,7 +674,7 @@ export default function Home() {
             <Logo size={42} colors={['#fff', '#E0E7FF'] as any} animated={true} />
             <View>
               <Text style={s.appName}>e-tsena</Text>
-              <Text style={s.appSub}>Votre assistant courses</Text>
+              <Text style={s.appSub}>Assistant courses</Text>
             </View>
           </View>
           <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -472,20 +686,15 @@ export default function Home() {
 
         <View style={s.searchBar}>
           <Ionicons name="search-outline" size={20} color="rgba(255,255,255,0.7)" />
-          <TextInput style={s.searchInput} placeholder={t('search') || "Recherche..."} placeholderTextColor="rgba(255,255,255,0.6)" value={searchQuery} onChangeText={setSearchQuery} />
+          <TextInput style={s.searchInput} placeholder={TEXTS.search} placeholderTextColor="rgba(255,255,255,0.6)" value={searchQuery} onChangeText={setSearchQuery} />
         </View>
 
-        {/* --- ONGLETS / TABS --- */}
         <View style={s.tabContainer}>
            <TouchableOpacity style={[s.tabBtn, activeTab === 'ongoing' && s.tabActive]} onPress={() => setActiveTab('ongoing')}>
-              <Text style={[s.tabText, activeTab === 'ongoing' && { color: activeTheme.primary, fontWeight: '700' }]}>
-                  {t('ongoing') || tr.ongoing}
-              </Text>
+              <Text style={[s.tabText, activeTab === 'ongoing' && { color: activeTheme.primary, fontWeight: '700' }]}>{TEXTS.ongoing}</Text>
            </TouchableOpacity>
            <TouchableOpacity style={[s.tabBtn, activeTab === 'history' && s.tabActive]} onPress={() => setActiveTab('history')}>
-              <Text style={[s.tabText, activeTab === 'history' && { color: activeTheme.primary, fontWeight: '700' }]}>
-                  {t('history') || tr.history}
-              </Text>
+              <Text style={[s.tabText, activeTab === 'history' && { color: activeTheme.primary, fontWeight: '700' }]}>{TEXTS.history}</Text>
            </TouchableOpacity>
         </View>
 
@@ -493,7 +702,7 @@ export default function Home() {
           <View style={s.summaryItem}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
               <Ionicons name="wallet-outline" size={16} color={s.textSec.color} />
-              <Text style={s.summaryLabel}>{t('expenses') || "Dépenses"} ({monthName})</Text>
+              <Text style={s.summaryLabel}>{TEXTS.expenses} ({monthName})</Text>
             </View>
             <Text style={[s.summaryValue, { color: activeTheme.primary }]}>{formatMoney(monthlyExpenses)} {currency}</Text>
           </View>
@@ -501,7 +710,7 @@ export default function Home() {
           <View style={s.summaryItem}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
               <Ionicons name="cube-outline" size={16} color={s.textSec.color} />
-              <Text style={s.summaryLabel}>{t('articles') || "Articles"} ({monthName})</Text>
+              <Text style={s.summaryLabel}>{TEXTS.articles} ({monthName})</Text>
             </View>
             <Text style={[s.summaryValue, { color: activeTheme.primary }]}>{monthlyArticlesCount}</Text>
           </View>
@@ -510,9 +719,8 @@ export default function Home() {
 
       <View style={s.content}>
         <View style={s.controlBar}>
-          {/* TITRE DYNAMIQUE SELON LE TAB */}
           <Text style={s.sectionTitle}>
-              {activeTab === 'ongoing' ? (t('to_buy_list') || tr.to_buy_list) : (t('finished_list') || tr.finished_list)}
+              {activeTab === 'ongoing' ? TEXTS.list_ongoing_title : TEXTS.list_history_title}
           </Text>
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <TouchableOpacity style={s.outlineBtn} onPress={() => setShowSort(true)}><Ionicons name="filter-outline" size={16} color={s.textSec.color} /></TouchableOpacity>
@@ -527,14 +735,14 @@ export default function Home() {
           {filteredAchats.length > 0 ? (
             <View style={viewMode === 'grid' ? s.grid : s.list}>
               {filteredAchats.map((item) => (
-                <AchatItem key={item.id} item={item} viewMode={viewMode} s={s} activeTheme={activeTheme} language={language} currency={currency} onPress={() => router.push(`/achat/${item.id}`)} onAction={() => { setSelectedAchat(item); setShowActions(true); }} />
+                <AchatItem key={item.id} item={item} viewMode={viewMode} s={s} activeTheme={activeTheme} language={language} currency={currency} onPress={() => handleOpenList(item)} onAction={() => { setSelectedAchat(item); setShowActions(true); }} />
               ))}
             </View>
           ) : (
             <View style={{ alignItems: 'center', marginTop: 50, opacity: 0.6 }}>
                <Ionicons name={activeTab === 'ongoing' ? "basket-outline" : "file-tray-outline"} size={50} color={s.textSec.color} />
                <Text style={{ color: s.textSec.color, marginTop: 10 }}>
-                  {activeTab === 'ongoing' ? (t('empty_ongoing') || tr.empty_ongoing) : (t('empty_history') || tr.empty_history)}
+                  {activeTab === 'ongoing' ? TEXTS.empty_ongoing : TEXTS.empty_history}
                </Text>
             </View>
           )}
@@ -542,28 +750,51 @@ export default function Home() {
       </View>
 
       <View style={[s.navbar, { paddingBottom: insets.bottom > 0 ? insets.bottom : 10, height: 60 + (insets.bottom > 0 ? insets.bottom : 10) }]}>
-         <TouchableOpacity style={s.navItem} onPress={loadData}><Ionicons name="home" size={24} color={activeTheme.primary} /><Text style={[s.navText, { color: activeTheme.primary }]}>{t('welcome') || "Accueil"}</Text></TouchableOpacity>
+         <TouchableOpacity style={s.navItem} onPress={loadData}><Ionicons name="home" size={24} color={activeTheme.primary} /><Text style={[s.navText, { color: activeTheme.primary }]}>{TEXTS.welcome}</Text></TouchableOpacity>
          <View style={{ top: -25 }}><TouchableOpacity style={[s.fab, { shadowColor: activeTheme.primary }]} onPress={handleCreate} activeOpacity={0.8}><LinearGradient colors={activeTheme?.gradient || ['#7143b5', '#8b5fd4']} style={s.fabGradient}><Ionicons name="add" size={32} color="#fff" /></LinearGradient></TouchableOpacity></View>
-         <TouchableOpacity style={s.navItem} onPress={() => router.push('/rapports')}><Ionicons name="pie-chart-outline" size={24} color="#9CA3AF" /><Text style={[s.navText, { color: "#9CA3AF" }]}>{t('reports') || "Rapports"}</Text></TouchableOpacity>
+         <TouchableOpacity style={s.navItem} onPress={() => router.push('/rapports')}><Ionicons name="pie-chart-outline" size={24} color="#9CA3AF" /><Text style={[s.navText, { color: "#9CA3AF" }]}>{TEXTS.reports}</Text></TouchableOpacity>
       </View>
 
-      {/* Modals */}
-      <ThemesModal visible={showThemes} onClose={() => setShowThemes(false)} currentTheme={currentTheme} setTheme={setTheme} s={s} t={t} isDarkMode={isDarkMode} />
-      <SettingsModal visible={showSettings} onClose={() => setShowSettings(false)} isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} language={language} setLanguage={setLanguage} setShowHelp={setShowHelp} s={s} activeTheme={activeTheme} t={t} />
-      <HelpModal visible={showHelp} onClose={() => setShowHelp(false)} s={s} activeTheme={activeTheme} t={t} />
-      <SortModal visible={showSort} onClose={() => setShowSort(false)} sortMode={sortMode} setSortMode={setSortMode} s={s} activeTheme={activeTheme} t={t} />
+      <ThemesModal visible={showThemes} onClose={() => setShowThemes(false)} currentTheme={currentTheme} setTheme={setTheme} s={s} translations={TEXTS} isDarkMode={isDarkMode} />
+      <SettingsModal visible={showSettings} onClose={() => setShowSettings(false)} isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} language={language} setLanguage={setLanguage} setShowHelp={setShowHelp} s={s} activeTheme={activeTheme} translations={TEXTS} />
+      <HelpModal visible={showHelp} onClose={() => setShowHelp(false)} s={s} activeTheme={activeTheme} translations={TEXTS} />
+      <SortModal visible={showSort} onClose={() => setShowSort(false)} setSortMode={setSortMode} s={s} translations={TEXTS} />
+      <ActionsModal visible={showActions} onClose={() => setShowActions(false)} selectedAchat={selectedAchat} handleRename={handleRename} handleDelete={handleDelete} toggleStatus={toggleStatus} s={s} activeTheme={activeTheme} translations={TEXTS} />
       
-      {/* Action Modal modifiée avec les bons textes */}
-      <ActionsModal visible={showActions} onClose={() => setShowActions(false)} selectedAchat={selectedAchat} handleRename={handleRename} handleDelete={handleDelete} toggleStatus={toggleStatus} s={s} activeTheme={activeTheme} t={t} language={language} />
-      
-      <ConfirmModal visible={deleteModal} title={t('delete_list') || tr.delete_list} message={`${t('delete_list_confirm') || "Voulez-vous supprimer"} "${selectedAchat?.nomListe}" ?`} onConfirm={confirmDelete} onCancel={() => setDeleteModal(false)} confirmText={t('delete') || "Supprimer"} cancelText={t('cancel') || tr.cancel} type="danger" theme={activeTheme} isDarkMode={isDarkMode} />
-      <Modal visible={renameModal} transparent animationType="fade" onRequestClose={() => setRenameModal(false)}><TouchableOpacity style={s.backdrop} onPress={() => setRenameModal(false)}><View style={s.modalCard}><Text style={s.modalTitle}>{t('rename_list') || tr.rename}</Text><TextInput style={s.simpleInput} value={newListName} onChangeText={setNewListName} placeholder={t('list_name') || "Nom de la liste"} placeholderTextColor="#999" autoFocus /><View style={{ flexDirection: 'row', gap: 10, marginTop: 15 }}><TouchableOpacity onPress={() => setRenameModal(false)} style={s.btnCancel}><Text style={s.btnCancelText}>{t('cancel') || tr.cancel}</Text></TouchableOpacity><TouchableOpacity onPress={confirmRename} style={[s.btnConfirm, { backgroundColor: activeTheme.primary }]}><Text style={s.btnConfirmText}>{t('save') || "Sauvegarder"}</Text></TouchableOpacity></View></View></TouchableOpacity></Modal>
+      <BeautifulConfirmModal 
+        visible={deleteModal} 
+        title={TEXTS.delete_title} 
+        message={`${TEXTS.delete_msg} "${selectedAchat?.nomListe}"`} 
+        onConfirm={confirmDelete} 
+        onCancel={() => setDeleteModal(false)} 
+        confirmText={TEXTS.delete} 
+        cancelText={TEXTS.cancel} 
+        activeTheme={activeTheme}
+        type="danger"
+      />
+
+      <Modal visible={renameModal} transparent animationType="fade" onRequestClose={() => setRenameModal(false)}><TouchableOpacity style={s.backdrop} onPress={() => setRenameModal(false)}><View style={s.modalCard}><Text style={s.modalTitle}>{TEXTS.rename}</Text><TextInput style={s.simpleInput} value={newListName} onChangeText={setNewListName} autoFocus /><View style={{ flexDirection: 'row', gap: 10, marginTop: 15 }}><TouchableOpacity onPress={() => setRenameModal(false)} style={s.btnCancel}><Text style={s.btnCancelText}>{TEXTS.cancel}</Text></TouchableOpacity><TouchableOpacity onPress={confirmRename} style={[s.btnConfirm, { backgroundColor: activeTheme.primary }]}><Text style={s.btnConfirmText}>{TEXTS.save}</Text></TouchableOpacity></View></View></TouchableOpacity></Modal>
     </View>
   );
 }
 
 const styles = (c: any) => StyleSheet.create({
-  // ... (Garder les mêmes styles que précédemment, pas besoin de changer le CSS)
+  // UTILS (Pour éviter l'erreur "color of undefined")
+  text: { color: c.text },
+  textSec: { color: c.textSec },
+  border: { borderColor: c.border },
+  bg: { backgroundColor: c.bg },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+  modalContent: { width: '85%', backgroundColor: c.card, borderRadius: 28, padding: 24, alignItems: 'center', shadowColor: "#000", shadowOffset: {width: 0, height: 10}, shadowOpacity: 0.3, shadowRadius: 20, elevation: 15 },
+  iconWrapper: { width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
+  modalTitleText: { fontSize: 20, fontWeight: '800', color: c.text, textAlign: 'center', marginBottom: 10 },
+  modalMessageText: { fontSize: 15, color: c.textSec, textAlign: 'center', marginBottom: 25, lineHeight: 22 },
+  modalBtnRow: { flexDirection: 'row', gap: 12, width: '100%' },
+  modalBtnCancel: { flex: 1, paddingVertical: 14, borderRadius: 16, borderWidth: 1, borderColor: c.border, alignItems: 'center' },
+  modalBtnConfirm: { flex: 1, paddingVertical: 14, borderRadius: 16, alignItems: 'center', shadowOpacity: 0.2, elevation: 4 },
+  modalBtnCancelText: { fontSize: 16, fontWeight: '600', color: c.textSec },
+  modalBtnConfirmText: { fontSize: 16, fontWeight: 'bold', color: '#fff' },
   container: { flex: 1, backgroundColor: c.bg },
   header: { paddingBottom: 80, paddingHorizontal: 20, borderBottomLeftRadius: 32, borderBottomRightRadius: 32, position: 'relative' },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
@@ -593,9 +824,9 @@ const styles = (c: any) => StyleSheet.create({
   list: { gap: 12 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   cardList: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.card, padding: 16, borderRadius: 20, marginBottom: 4, borderWidth: 1, borderColor: c.border, shadowColor: c.text, shadowOffset: {width: 0, height: 2}, shadowOpacity: c.shadow, shadowRadius: 6, elevation: 2 },
-  cardGrid: { width: (SCREEN_WIDTH - 52) / 2, height: 170, backgroundColor: c.card, padding: 16, borderRadius: 20, marginBottom: 15, justifyContent: 'space-between', borderWidth: 1, borderColor: c.border, shadowColor: c.text, shadowOffset: {width: 0, height: 2}, shadowOpacity: c.shadow, shadowRadius: 6, elevation: 2 },
+  cardGrid: { width: (SCREEN_WIDTH - 52) / 2, height: 170, backgroundColor: c.card, padding: 16, borderRadius: 20, marginBottom: 15, justifyContent: 'space-between', borderWidth: 0, shadowColor: c.text, shadowOffset: {width: 0, height: 2}, shadowOpacity: c.shadow, shadowRadius: 6, elevation: 2 },
   dateBox: { width: 50, height: 50, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
-  miniBadge: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  miniBadge: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
   cardTitle: { fontSize: 16, fontWeight: '700', color: c.text, marginTop: 8 },
   cardDate: { fontSize: 12, color: c.textSec },
   cardPrice: { fontSize: 16, fontWeight: '800', marginTop: 'auto' },
