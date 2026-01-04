@@ -168,14 +168,21 @@ export const initDatabase = () => {
       FOREIGN KEY (idAchat) REFERENCES Achat(id) ON DELETE CASCADE
     );
 
-    CREATE TABLE IF NOT EXISTS Notification (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT NOT NULL,
-      message TEXT NOT NULL,
-      date TEXT NOT NULL,
-      estLu INTEGER DEFAULT 0
-    );
-  `);
+      CREATE TABLE IF NOT EXISTS Notification (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        achatId INTEGER,
+        titre TEXT NOT NULL,
+        message TEXT NOT NULL,
+        dateRappel TEXT NOT NULL,
+        heureRappel TEXT NOT NULL,
+        type TEXT DEFAULT 'rappel',
+        lu INTEGER DEFAULT 0,
+        supprime INTEGER DEFAULT 0,
+        notificationId TEXT,
+        createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (achatId) REFERENCES Achat(id) ON DELETE CASCADE
+      )
+    `);
   
   console.log('✅ Tables créées');
   

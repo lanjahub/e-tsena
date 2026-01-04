@@ -18,10 +18,8 @@ export interface RappelItem {
   supprime: number;
   affiche: number;
   createdAt: string;
-  // Champs joints
   nomListe?: string;
   nombreArticles?: number;
-  // Champs calculés
   isToday?: boolean;
   isTomorrow?: boolean;
   isPast?: boolean;
@@ -33,7 +31,7 @@ export interface RappelItem {
 // ============================================================
 
 export function isRunningInExpoGo(): boolean {
-  return true; // Pour Expo Go, toujours true
+  return true;
 }
 
 // ============================================================
@@ -63,7 +61,7 @@ export function initNotificationTables(): void {
     
     console.log('✅ Table Rappel initialisée');
   } catch (e) {
-    console.log('⚠️ Table Rappel existe déjà ou erreur');
+    console.log('⚠️ Table Rappel existe déjà');
   }
 }
 
@@ -93,6 +91,38 @@ export function creerRappel(
     return result.lastInsertRowId as number;
   } catch (error) {
     console.error('❌ Erreur création rappel:', error);
+    return null;
+  }
+}
+
+// ============================================================
+// 📅 PROGRAMMER UN RAPPEL DE COURSES (fonction utilisée dans achat/[id])
+// ============================================================
+
+export async function scheduleShoppingReminder(
+  listName: string,
+  date: Date,
+  achatId: number
+): Promise<string | null> {
+  try {
+    const message = `N'oubliez pas d'aller faire vos courses: ${listName}`;
+    
+    const result = creerRappel(
+      achatId,
+      listName || 'Rappel courses',
+      message,
+      date,
+      'rappel'
+    );
+    
+    if (result) {
+      console.log(`✅ Rappel programmé pour ${date.toLocaleString()}`);
+      return String(result);
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('❌ Erreur programmation rappel:', error);
     return null;
   }
 }
@@ -142,7 +172,7 @@ export function marquerCommeLu(rappelId: number): void {
     const db = getDb();
     db.runSync('UPDATE Rappel SET lu = 1 WHERE id = ?', [rappelId]);
   } catch (error) {
-    console.error('❌ Erreur marquage lu:', error);
+    console.error('❌ Erreur:', error);
   }
 }
 
@@ -169,7 +199,22 @@ export function supprimerRappel(rappelId: number): void {
     db.runSync('UPDATE Rappel SET supprime = 1 WHERE id = ?', [rappelId]);
     console.log(`✅ Rappel ${rappelId} supprimé`);
   } catch (error) {
-    console.error('❌ Erreur suppression:', error);
+    console.error('❌ Erreur:', error);
+  }
+}
+
+// ============================================================
+// ❌ ANNULER UN RAPPEL (par ID string)
+// ============================================================
+
+export async function cancelShoppingReminder(notificationId: string): Promise<void> {
+  try {
+    const id = parseInt(notificationId, 10);
+    if (!isNaN(id)) {
+      supprimerRappel(id);
+    }
+  } catch (error) {
+    console.error('❌ Erreur annulation:', error);
   }
 }
 
@@ -215,7 +260,6 @@ export function verifierRappelsAafficher(): RappelItem[] {
 
     return result as RappelItem[];
   } catch (error) {
-    console.error('❌ Erreur vérification rappels:', error);
     return [];
   }
 }
@@ -262,7 +306,15 @@ export function getStats(): { total: number; nonLus: number; aujourdhui: number 
 }
 
 // ============================================================
-// 🔄 FONCTIONS LEGACY (pour compatibilité avec l'ancien code)
+// 📋 OBTENIR LES RAPPELS PROGRAMMÉS
+// ============================================================
+
+export async function getScheduledReminders(): Promise<RappelItem[]> {
+  return getRappels().filter(r => !r.isPast);
+}
+
+// ============================================================
+// 🔄 FONCTIONS LEGACY (compatibilité)
 // ============================================================
 
 export async function registerForPushNotificationsAsync(): Promise<boolean> {
@@ -274,7 +326,7 @@ export function areNotificationsAvailable(): boolean {
   return true;
 }
 
-// Alias pour compatibilité avec l'ancien code
+// Alias pour compatibilité
 export const getNotifications = getRappels;
 export const supprimerNotification = supprimerRappel;
 export const getUnreadNotificationCount = getUnreadCount;

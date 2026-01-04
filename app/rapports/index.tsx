@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
-  View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, 
-  Animated, Dimensions, Modal
+  View, Text, TouchableOpacity, StyleSheet, ScrollView, 
+  Animated, Dimensions, Modal, ActivityIndicator, Vibration, Alert
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,24 +9,305 @@ import { router, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { 
   format, addMonths, subMonths, 
-  startOfMonth, endOfMonth, // ✅ Retour au Mois
+  startOfMonth, endOfMonth, 
   startOfWeek, endOfWeek, eachDayOfInterval, 
-  addWeeks, subWeeks, isSameDay
+  addWeeks, subWeeks, isSameDay, getDaysInMonth
 } from 'date-fns';
 import formatMoney from '../../src/utils/formatMoney';
 import { fr, enUS } from 'date-fns/locale';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import Svg, { Path, Circle, Line, Text as SvgText, Defs, LinearGradient as SvgGradient, Stop, Rect } from 'react-native-svg';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
-import DateTimePicker from '@react-native-community/datetimepicker';
 
 import { getDb } from '../../src/db/init';
 import { useTheme } from '../../src/context/ThemeContext';
 import { ThemedStatusBar } from '../../src/components/ThemedStatusBar';
 import { useSettings } from '../../src/context/SettingsContext';
 
-const { width } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+// ============================================
+// 📊 GRAPHIQUE LINECHART AVEC ZOOM
+// ============================================
+interface ChartDataPoint {
+  day: number;
+  value: number;
+  date: Date;
+}
+
+interface ZoomableLineChartProps {
+  data: ChartDataPoint[];
+  height: number;
+  activeTheme: any;
+  isDarkMode: boolean;
+  currency: string;
+  onSelectDay: (day: ChartDataPoint | null) => void;
+  selectedDay: ChartDataPoint | null;
+  zoomLevel: number;
+}
+
+const ZoomableLineChart: React.FC<ZoomableLineChartProps> = ({
+  data,
+  height,
+  activeTheme,
+  isDarkMode,
+  currency,
+  onSelectDay,
+  selectedDay,
+  zoomLevel
+}) => {
+  const baseDayWidth = 35;
+  const dayWidth = baseDayWidth * zoomLevel;
+  const chartWidth = data.length * dayWidth;
+  const padding = { top: 50, right: 30, bottom: 50, left: 70 };
+  const chartHeight = height - padding.top - padding.bottom;
+  
+  const maxValue = Math.max(...data.map(d => d.value), 1000);
+  const minValue = 0;
+  
+  const yGridLines = [0, 0.25, 0.5, 0.75, 1].map(ratio => ({
+    y: padding.top + chartHeight * (1 - ratio),
+    value: Math.round(minValue + (maxValue - minValue) * ratio)
+  }));
+
+  const points = data.map((d, i) => ({
+    x: padding.left + i * dayWidth + dayWidth / 2,
+    y: padding.top + chartHeight - (d.value / maxValue) * chartHeight,
+    ...d
+  }));
+
+  const generateSmoothPath = () => {
+    if (points.length < 2) return '';
+    let path = `M ${points[0].x} ${points[0].y}`;
+    for (let i = 1; i < points.length; i++) {
+      const prev = points[i - 1];
+      const curr = points[i];
+      const tension = 0.3;
+      const cp1x = prev.x + (curr.x - prev.x) * tension;
+      const cp1y = prev.y;
+      const cp2x = curr.x - (curr.x - prev.x) * tension;
+      const cp2y = curr.y;
+      path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${curr.x} ${curr.y}`;
+    }
+    return path;
+  };
+
+  const generateAreaPath = () => {
+    if (points.length < 2) return '';
+    const linePath = generateSmoothPath();
+    const lastPoint = points[points.length - 1];
+    const firstPoint = points[0];
+    return `${linePath} L ${lastPoint.x} ${padding.top + chartHeight} L ${firstPoint.x} ${padding.top + chartHeight} Z`;
+  };
+
+  const formatYValue = (value: number) => {
+    if (!value) return '0';
+    return value.toLocaleString('fr-FR');
+  };
+
+  return (
+    <ScrollView 
+      horizontal 
+      showsHorizontalScrollIndicator={true}
+      contentContainerStyle={{ paddingVertical: 10 }}
+      scrollEventThrottle={16}
+    >
+      <Svg width={chartWidth + padding.left + padding.right} height={height}>
+        <Defs>
+          <SvgGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={activeTheme.primary} stopOpacity="0.3" />
+            <Stop offset="0.5" stopColor={activeTheme.primary} stopOpacity="0.1" />
+            <Stop offset="1" stopColor={activeTheme.primary} stopOpacity="0" />
+          </SvgGradient>
+          <SvgGradient id="lineGradient" x1="0" y1="0" x2="1" y2="0">
+            <Stop offset="0" stopColor={activeTheme.primary} stopOpacity="1" />
+            <Stop offset="1" stopColor={activeTheme.secondary || activeTheme.primary} stopOpacity="1" />
+          </SvgGradient>
+        </Defs>
+
+        {yGridLines.map((line, i) => (
+          <React.Fragment key={i}>
+            <Line
+              x1={padding.left}
+              y1={line.y}
+              x2={chartWidth + padding.left}
+              y2={line.y}
+              stroke={isDarkMode ? '#334155' : '#E2E8F0'}
+              strokeWidth="1"
+              strokeDasharray={i === 0 ? "0" : "4,4"}
+              opacity={0.6}
+            />
+            <SvgText
+              x={padding.left - 8}
+              y={line.y + 4}
+              fontSize="9"
+              fill={isDarkMode ? '#64748B' : '#94A3B8'}
+              textAnchor="end"
+              fontWeight="500"
+            >
+              {formatYValue(line.value)}
+            </SvgText>
+          </React.Fragment>
+        ))}
+
+        <Path d={generateAreaPath()} fill="url(#areaGradient)" />
+        <Path
+          d={generateSmoothPath()}
+          stroke="url(#lineGradient)"
+          strokeWidth="3"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        {points.map((point, i) => {
+          const isSelected = selectedDay?.day === point.day;
+          const hasValue = point.value > 0;
+          
+          return (
+            <React.Fragment key={i}>
+              {isSelected && (
+                <Line
+                  x1={point.x}
+                  y1={padding.top}
+                  x2={point.x}
+                  y2={padding.top + chartHeight}
+                  stroke={activeTheme.primary}
+                  strokeWidth="1"
+                  strokeDasharray="4,4"
+                  opacity={0.5}
+                />
+              )}
+              <Circle
+                cx={point.x}
+                cy={point.y}
+                r={isSelected ? 8 : hasValue ? 4 : 2}
+                fill={isSelected ? activeTheme.primary : hasValue ? activeTheme.primary : 'transparent'}
+                stroke={hasValue ? (isDarkMode ? '#0F172A' : '#fff') : (isDarkMode ? '#475569' : '#CBD5E1')}
+                strokeWidth={isSelected ? 3 : hasValue ? 2 : 1}
+                onPress={() => {
+                  Vibration.vibrate(10);
+                  onSelectDay(isSelected ? null : point);
+                }}
+              />
+              <SvgText
+                x={point.x}
+                y={height - 12}
+                fontSize={zoomLevel >= 1 ? "11" : "9"}
+                fill={isSelected ? activeTheme.primary : (isDarkMode ? '#94A3B8' : '#64748B')}
+                textAnchor="middle"
+                fontWeight={isSelected ? 'bold' : '500'}
+              >
+                {point.day}
+              </SvgText>
+              {isSelected && (
+                <>
+                  <Rect
+                    x={Math.max(point.x - 55, 5)}
+                    y={Math.max(point.y - 48, 5)}
+                    width="110"
+                    height="36"
+                    rx="10"
+                    fill={isDarkMode ? '#1E293B' : '#fff'}
+                    stroke={activeTheme.primary}
+                    strokeWidth="2"
+                  />
+                  <SvgText
+                    x={point.x}
+                    y={point.y - 26}
+                    fontSize="12"
+                    fill={activeTheme.primary}
+                    textAnchor="middle"
+                    fontWeight="bold"
+                  >
+                    {formatMoney(point.value)} {currency}
+                  </SvgText>
+                </>
+              )}
+            </React.Fragment>
+          );
+        })}
+      </Svg>
+    </ScrollView>
+  );
+};
+
+// ============================================
+// 🎯 ANIMATED METRIC CARD COMPONENT
+// ============================================
+interface AnimatedMetricCardProps {
+  icon: string;
+  iconColor: string;
+  value: string | number;
+  label: string;
+  delay: number;
+  activeTheme: any;
+  isDarkMode: boolean;
+}
+
+const AnimatedMetricCard: React.FC<AnimatedMetricCardProps> = ({
+  icon,
+  iconColor,
+  value,
+  label,
+  delay,
+  activeTheme,
+  isDarkMode
+}) => {
+  const scaleAnim = useRef(new Animated.Value(0)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.sequence([
+      Animated.delay(delay),
+      Animated.parallel([
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          tension: 100,
+          friction: 8,
+          useNativeDriver: true
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true
+        })
+      ])
+    ]).start();
+  }, []);
+
+  const c = { 
+    card: isDarkMode ? '#1E293B' : '#FFFFFF', 
+    text: isDarkMode ? '#F8FAFC' : '#1E293B', 
+    textSec: isDarkMode ? '#94A3B8' : '#64748B'
+  };
+
+  return (
+    <Animated.View
+      style={[
+        styles.animatedMetricCard,
+        {
+          backgroundColor: c.card,
+          opacity: opacityAnim,
+          transform: [{ scale: scaleAnim }]
+        }
+      ]}
+    >
+      <View style={[styles.metricIconCircle, { backgroundColor: iconColor + '15' }]}>
+        <Ionicons name={icon as any} size={22} color={iconColor} />
+      </View>
+      <Text style={[styles.metricCardValue, { color: c.text }]} numberOfLines={1}>
+        {value}
+      </Text>
+      <Text style={[styles.metricCardLabel, { color: c.textSec }]}>{label}</Text>
+    </Animated.View>
+  );
+};
+
+// ============================================
+// 🏠 COMPOSANT PRINCIPAL
+// ============================================
 export default function Rapports() {
   const { activeTheme, isDarkMode } = useTheme();
   const { currency, language, t } = useSettings();
@@ -35,105 +316,138 @@ export default function Rapports() {
 
   // --- ÉTATS ---
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  
   const [stats, setStats] = useState({
     monthTotal: 0,
     monthItems: 0,
     topProduct: '-',
-    topProductQty: 0
+    topProductQty: 0,
+    maxDay: { day: 0, amount: 0 },
+    prevMonthTotal: 0
   });
 
-  // États Rapport Hebdomadaire
+  const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
+  const [chartLoading, setChartLoading] = useState(true);
+  const [selectedChartDay, setSelectedChartDay] = useState<ChartDataPoint | null>(null);
+  const [chartZoom, setChartZoom] = useState(1);
+
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
-  const [weeklyStats, setWeeklyStats] = useState<{day: Date, total: number, percentage: number, products: any[]}[]>([]);
+  const [weeklyStats, setWeeklyStats] = useState<{day: Date, total: number, products: any[]}[]>([]);
   const [weekTotal, setWeekTotal] = useState(0);
   const [expandedDays, setExpandedDays] = useState<string[]>([]);
-  const [isExporting, setIsExporting] = useState(false);
 
-  // États Journal Quotidien
   const [showDailyJournal, setShowDailyJournal] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [dailyPurchases, setDailyPurchases] = useState<any[]>([]);
   const [dailyTotal, setDailyTotal] = useState(0);
 
-  const toggleDay = (dateKey: string) => {
-    setExpandedDays(prev => 
-      prev.includes(dateKey) 
-        ? prev.filter(d => d !== dateKey)
-        : [...prev, dateKey]
-    );
-  };
-
+  // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(50)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const headerTotalAnim = useRef(new Animated.Value(0)).current;
+  const headerTotalScale = useRef(new Animated.Value(0.8)).current;
+
+  const vibrate = () => Vibration.vibrate(10);
+
+  const zoomIn = () => { vibrate(); setChartZoom(prev => Math.min(prev + 0.3, 2)); };
+  const zoomOut = () => { vibrate(); setChartZoom(prev => Math.max(prev - 0.3, 0.5)); };
+  const resetZoom = () => { vibrate(); setChartZoom(1); };
 
   useFocusEffect(
     useCallback(() => {
-      loadMonthStats(); // ✅ On recharge les stats du mois
+      loadMonthStats();
       loadWeeklyStats();
+      loadChartData();
+      
+      // Reset et rejouer les animations
+      headerTotalAnim.setValue(0);
+      headerTotalScale.setValue(0.8);
+      
+      Animated.parallel([
+        Animated.timing(headerTotalAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+        Animated.spring(headerTotalScale, { toValue: 1, tension: 80, friction: 8, useNativeDriver: true })
+      ]).start();
     }, [currentMonth, currentWeekStart])
   );
 
   useEffect(() => {
-    const startOfSelectedMonth = startOfMonth(currentMonth);
-    const startOfFirstWeek = startOfWeek(startOfSelectedMonth, { weekStartsOn: 1 });
-    setCurrentWeekStart(startOfFirstWeek);
+    setCurrentWeekStart(startOfWeek(startOfMonth(currentMonth), { weekStartsOn: 1 }));
+    setSelectedChartDay(null);
   }, [currentMonth]);
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 800, useNativeDriver: true })
+      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, friction: 8, useNativeDriver: true })
     ]).start();
   }, []);
 
-  // 1. CHARGEMENT DES STATS (Mois sélectionné)
+  // ============================================
+  // 📊 CHARGEMENT DES DONNÉES
+  // ============================================
   function loadMonthStats() {
     try {
       const db = getDb();
-      
-      // ✅ Calcul par MOIS (comme l'accueil)
       const start = startOfMonth(currentMonth).toISOString();
       const end = endOfMonth(currentMonth).toISOString();
 
-      // 1. Total Depense (Mois)
-      const [monthRes] = db.getAllSync(`
-        SELECT SUM(l.prixTotal) as t 
-        FROM LigneAchat l JOIN Achat a ON a.id = l.idAchat 
-        WHERE a.dateAchat BETWEEN ? AND ?`, [start, end]);
+      const [monthRes] = db.getAllSync(`SELECT SUM(l.prixTotal) as t FROM LigneAchat l JOIN Achat a ON a.id = l.idAchat WHERE a.dateAchat BETWEEN ? AND ?`, [start, end]);
+      const [itemsRes] = db.getAllSync(`SELECT COUNT(l.id) as q FROM LigneAchat l JOIN Achat a ON a.id = l.idAchat WHERE a.dateAchat BETWEEN ? AND ?`, [start, end]);
+      const [topRes] = db.getAllSync(`SELECT l.libelleProduit, SUM(l.quantite) as q FROM LigneAchat l JOIN Achat a ON a.id = l.idAchat WHERE a.dateAchat BETWEEN ? AND ? GROUP BY l.libelleProduit ORDER BY q DESC LIMIT 1`, [start, end]);
       
-      // 2. Total Articles (Mois)
-      // ⚠️ MODIFICATION IMPORTANTE ICI :
-      // On utilise COUNT(l.id) au lieu de SUM(l.quantite)
-      // Pour que ça matche exactement le nombre "d'articles" affiché sur l'accueil
-      const [itemsRes] = db.getAllSync(`
-        SELECT COUNT(l.id) as q 
+      const [maxDayRes] = db.getAllSync(`
+        SELECT strftime('%d', a.dateAchat) as jour, SUM(l.prixTotal) as total 
         FROM LigneAchat l JOIN Achat a ON a.id = l.idAchat 
-        WHERE a.dateAchat BETWEEN ? AND ?`, [start, end]);
-
-      // 3. Top Product (Mois)
-      const [topRes] = db.getAllSync(`
-        SELECT l.libelleProduit, SUM(l.quantite) as q 
-        FROM LigneAchat l JOIN Achat a ON a.id = l.idAchat 
-        WHERE a.dateAchat BETWEEN ? AND ?
-        GROUP BY l.libelleProduit ORDER BY q DESC LIMIT 1
+        WHERE a.dateAchat BETWEEN ? AND ? 
+        GROUP BY jour ORDER BY total DESC LIMIT 1
       `, [start, end]);
+
+      const prevStart = startOfMonth(subMonths(currentMonth, 1)).toISOString();
+      const prevEnd = endOfMonth(subMonths(currentMonth, 1)).toISOString();
+      const [prevRes] = db.getAllSync(`SELECT SUM(l.prixTotal) as t FROM LigneAchat l JOIN Achat a ON a.id = l.idAchat WHERE a.dateAchat BETWEEN ? AND ?`, [prevStart, prevEnd]);
 
       setStats({
         monthTotal: (monthRes as any)?.t || 0,
         monthItems: (itemsRes as any)?.q || 0,
         topProduct: (topRes as any)?.libelleProduit || '-',
-        topProductQty: (topRes as any)?.q || 0
+        topProductQty: (topRes as any)?.q || 0,
+        maxDay: { 
+          day: parseInt((maxDayRes as any)?.jour) || 0, 
+          amount: (maxDayRes as any)?.total || 0 
+        },
+        prevMonthTotal: (prevRes as any)?.t || 0
       });
     } catch (e) { console.error(e); }
-  };
+  }
 
-  const prevMonth = () => setCurrentMonth(subMonths(currentMonth, 1));
-  const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
+  function loadChartData() {
+    setChartLoading(true);
+    try {
+      const db = getDb();
+      const start = startOfMonth(currentMonth).toISOString();
+      const end = endOfMonth(currentMonth).toISOString();
 
-  // ... (LE RESTE DU CODE : loadWeeklyStats, loadDailyPurchases, exportDailyPDF, handleExportPDF NE CHANGE PAS)
-  // Je remets juste les fonctions pour que le fichier soit complet et fonctionnel
+      const result = db.getAllSync(`
+        SELECT date(a.dateAchat) as jour, SUM(l.prixTotal) as total
+        FROM LigneAchat l JOIN Achat a ON a.id = l.idAchat 
+        WHERE a.dateAchat BETWEEN ? AND ?
+        GROUP BY jour ORDER BY jour ASC
+      `, [start, end]);
+
+      const daysInMonth = getDaysInMonth(currentMonth);
+      const data: ChartDataPoint[] = [];
+
+      for (let i = 1; i <= daysInMonth; i++) {
+        const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), i);
+        const dayStr = format(date, 'yyyy-MM-dd');
+        const match = (result as any[]).find(r => r.jour === dayStr);
+        data.push({ day: i, value: match?.total || 0, date });
+      }
+
+      setChartData(data);
+    } catch (e) { console.error(e); } 
+    finally { setChartLoading(false); }
+  }
 
   function loadWeeklyStats() {
     try {
@@ -142,17 +456,16 @@ export default function Rapports() {
       const end = endOfWeek(currentWeekStart, { weekStartsOn: 1 }).toISOString();
 
       const result = db.getAllSync(`
-        SELECT a.dateAchat, l.prixTotal, l.libelleProduit, l.quantite
-        FROM LigneAchat l 
-        JOIN Achat a ON a.id = l.idAchat 
-        WHERE a.dateAchat BETWEEN ? AND ?
-        ORDER BY a.dateAchat ASC
+        SELECT a.dateAchat, l.prixTotal, l.libelleProduit, l.quantite, l.prixUnitaire, l.unite
+        FROM LigneAchat l JOIN Achat a ON a.id = l.idAchat 
+        WHERE a.dateAchat BETWEEN ? AND ? ORDER BY a.dateAchat ASC
       `, [start, end]);
 
       const daysMap = new Map<string, { total: number, products: any[] }>();
       const days = eachDayOfInterval({ start: currentWeekStart, end: endOfWeek(currentWeekStart, { weekStartsOn: 1 }) });
+      
       for (const day of days) {
-          daysMap.set(format(day, 'yyyy-MM-dd'), { total: 0, products: [] });
+        daysMap.set(format(day, 'yyyy-MM-dd'), { total: 0, products: [] });
       }
 
       let wTotal = 0;
@@ -160,30 +473,26 @@ export default function Rapports() {
         const dateKey = format(new Date(row.dateAchat), 'yyyy-MM-dd');
         const current = daysMap.get(dateKey);
         if (current) {
-            current.total += row.prixTotal;
-            current.products.push({ name: row.libelleProduit, qty: row.quantite, price: row.prixTotal });
-            wTotal += row.prixTotal;
+          current.total += row.prixTotal;
+          current.products.push({ 
+            name: row.libelleProduit, 
+            qty: row.quantite, 
+            unitPrice: row.prixUnitaire,
+            price: row.prixTotal,
+            unite: row.unite 
+          });
+          wTotal += row.prixTotal;
         }
       }
 
-      const stats = days.map(day => {
-        const dateKey = format(day, 'yyyy-MM-dd');
-        const data = daysMap.get(dateKey);
-        return {
-          day,
-          total: data?.total || 0,
-          products: data?.products || [],
-          percentage: 0
-        };
-      });
-
-      setWeeklyStats(stats);
+      setWeeklyStats(days.map(day => ({
+        day,
+        total: daysMap.get(format(day, 'yyyy-MM-dd'))?.total || 0,
+        products: daysMap.get(format(day, 'yyyy-MM-dd'))?.products || []
+      })));
       setWeekTotal(wTotal);
     } catch (e) { console.error(e); }
-  };
-
-  const prevWeek = () => setCurrentWeekStart(subWeeks(currentWeekStart, 1));
-  const nextWeek = () => setCurrentWeekStart(addWeeks(currentWeekStart, 1));
+  }
 
   const loadDailyPurchases = (date: Date) => {
     try {
@@ -191,338 +500,1141 @@ export default function Rapports() {
       const dayStart = format(date, 'yyyy-MM-dd') + 'T00:00:00.000Z';
       const dayEnd = format(date, 'yyyy-MM-dd') + 'T23:59:59.999Z';
       const result = db.getAllSync(`
-        SELECT a.id as achatId, a.nomListe, a.dateAchat, l.id as ligneId, l.libelleProduit, l.quantite, l.prixUnitaire, l.prixTotal, l.unite
+        SELECT a.nomListe, l.id as ligneId, l.libelleProduit, l.quantite, l.prixUnitaire, l.prixTotal, l.unite
         FROM LigneAchat l JOIN Achat a ON a.id = l.idAchat 
-        WHERE a.dateAchat BETWEEN ? AND ? ORDER BY a.dateAchat DESC, l.libelleProduit ASC
+        WHERE a.dateAchat BETWEEN ? AND ? ORDER BY a.nomListe ASC, l.libelleProduit ASC
       `, [dayStart, dayEnd]);
-      const purchases = result as any[];
-      const total = purchases.reduce((sum, p) => sum + (p.prixTotal || 0), 0);
-      setDailyPurchases(purchases);
-      setDailyTotal(total);
-    } catch (e) { console.error(e); setDailyPurchases([]); setDailyTotal(0); }
+      setDailyPurchases(result as any[]);
+      setDailyTotal((result as any[]).reduce((sum, p) => sum + (p.prixTotal || 0), 0));
+    } catch (e) { console.error(e); }
   };
 
-  const openDailyJournal = () => { setSelectedDate(new Date()); loadDailyPurchases(new Date()); setShowDailyJournal(true); };
-  const onDateChange = (event: any, date?: Date) => { setShowDatePicker(false); if (date) { setSelectedDate(date); loadDailyPurchases(date); } };
+  const toggleDay = (dateKey: string) => {
+    vibrate();
+    setExpandedDays(prev => prev.includes(dateKey) ? prev.filter(d => d !== dateKey) : [...prev, dateKey]);
+  };
 
-  const exportDailyPDF = async () => {
-    if (dailyPurchases.length === 0) { Alert.alert(t('info'), t('no_data_to_export')); return; }
+  // ============================================
+  // 📄 GÉNÉRATION PDF
+  // ============================================
+  const generateDailyPDF = async () => {
+    const dateStr = format(selectedDate, 'EEEE d MMMM yyyy', { locale: language === 'en' ? enUS : fr });
+    
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: 'Helvetica', sans-serif; padding: 40px; background: #fff; }
+            .header { text-align: center; margin-bottom: 30px; border-bottom: 3px solid ${activeTheme.primary}; padding-bottom: 20px; }
+            .title { font-size: 28px; color: ${activeTheme.primary}; margin: 0; font-weight: bold; }
+            .date { font-size: 16px; color: #666; margin-top: 10px; text-transform: capitalize; }
+            .summary { display: flex; justify-content: space-around; margin: 25px 0; padding: 20px; background: #f8f9fa; border-radius: 12px; }
+            .summary-item { text-align: center; }
+            .summary-label { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 1px; }
+            .summary-value { font-size: 24px; font-weight: bold; color: ${activeTheme.primary}; margin-top: 5px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 25px; }
+            th { background: ${activeTheme.primary}; color: white; padding: 14px 12px; text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+            th:first-child { border-radius: 8px 0 0 0; }
+            th:last-child { border-radius: 0 8px 0 0; }
+            td { padding: 14px 12px; border-bottom: 1px solid #eee; font-size: 14px; }
+            tr:nth-child(even) { background: #f8f9fa; }
+            .text-right { text-align: right; }
+            .text-center { text-align: center; }
+            .total-row { background: ${activeTheme.primary}15 !important; font-weight: bold; font-size: 16px; }
+            .total-row td { border-top: 2px solid ${activeTheme.primary}; }
+            .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #999; padding-top: 20px; border-top: 1px solid #eee; }
+            .logo { font-size: 18px; font-weight: bold; color: ${activeTheme.primary}; margin-bottom: 5px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1 class="title">📋 Journal des Dépenses</h1>
+            <p class="date">${dateStr}</p>
+          </div>
+          
+          <div class="summary">
+            <div class="summary-item">
+              <div class="summary-label">Total Dépensé</div>
+              <div class="summary-value">${formatMoney(dailyTotal)} ${currency}</div>
+            </div>
+            <div class="summary-item">
+              <div class="summary-label">Nombre d'Articles</div>
+              <div class="summary-value">${dailyPurchases.length}</div>
+            </div>
+          </div>
+          
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 40%">Produit</th>
+                <th class="text-center" style="width: 15%">Quantité</th>
+                <th class="text-right" style="width: 20%">Prix Unitaire</th>
+                <th class="text-right" style="width: 25%">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${dailyPurchases.map(p => `
+                <tr>
+                  <td>${p.libelleProduit}</td>
+                  <td class="text-center">${p.quantite} ${p.unite || 'pcs'}</td>
+                  <td class="text-right">${formatMoney(p.prixUnitaire || 0)} ${currency}</td>
+                  <td class="text-right">${formatMoney(p.prixTotal || 0)} ${currency}</td>
+                </tr>
+              `).join('')}
+              <tr class="total-row">
+                <td colspan="3"><strong>TOTAL GÉNÉRAL</strong></td>
+                <td class="text-right"><strong>${formatMoney(dailyTotal)} ${currency}</strong></td>
+              </tr>
+            </tbody>
+          </table>
+          
+          <div class="footer">
+            <div class="logo">E-TSENA</div>
+            Document généré le ${format(new Date(), 'dd/MM/yyyy à HH:mm')}
+          </div>
+        </body>
+      </html>
+    `;
+
     try {
-      const dateStr = format(selectedDate, 'EEEE d MMMM yyyy', { locale: language === 'en' ? enUS : fr });
-      const byList = new Map<string, any[]>();
-      for (const p of dailyPurchases) {
-        const listName = p.nomListe || 'Sans nom';
-        if (!byList.has(listName)) byList.set(listName, []);
-        byList.get(listName)!.push(p);
-      }
-      let listsHtml = '';
-      byList.forEach((items, listName) => {
-        const listTotal = items.reduce((s, i) => s + i.prixTotal, 0);
-        listsHtml += `<div class="list-section"><h3 class="list-name">🛒 ${listName}</h3><table><tr><th>${t('product')}</th><th style="text-align:center">${t('quantity')}</th><th style="text-align:right">${t('unit_price')}</th><th style="text-align:right">${t('amount')}</th></tr>${items.map(p => `<tr><td>${p.libelleProduit}</td><td style="text-align:center">${p.quantite} ${p.unite || ''}</td><td style="text-align:right">${p.prixUnitaire ? formatMoney(p.prixUnitaire) : '0'} ${currency}</td><td style="text-align:right">${p.prixTotal ? formatMoney(p.prixTotal) : '0'} ${currency}</td></tr>`).join('')}<tr class="subtotal"><td colspan="3"><strong>Sous-total</strong></td><td style="text-align:right"><strong>${formatMoney(listTotal)} ${currency}</strong></td></tr></table></div>`;
-      });
-      const html = `<html><head><style>body{font-family:Helvetica,Arial,sans-serif;padding:30px;color:#333}.header{text-align:center;margin-bottom:30px;border-bottom:3px solid ${activeTheme.primary};padding-bottom:20px}.title{color:${activeTheme.primary};font-size:22px;margin:0}.date{color:#666;font-size:16px;margin-top:8px}.summary{background:#f8f9fa;padding:20px;border-radius:10px;margin-bottom:25px;text-align:center}.summary-label{font-size:12px;color:#666}.summary-value{font-size:28px;font-weight:bold;color:${activeTheme.primary}}.list-section{margin-bottom:25px}.list-name{color:${activeTheme.primary};font-size:16px;margin-bottom:10px}table{width:100%;border-collapse:collapse}th{background:${activeTheme.primary};color:white;padding:10px;text-align:left;font-size:12px}td{padding:10px;border-bottom:1px solid #eee;font-size:13px}.subtotal{background:#f0f0f0}.total{margin-top:20px;text-align:right;font-size:20px;color:${activeTheme.primary};font-weight:bold}.footer{margin-top:30px;text-align:center;color:#999;font-size:11px}</style></head><body><div class="header"><h1 class="title">📅 ${t('daily_journal')}</h1><p class="date">${dateStr}</p></div><div class="summary"><div class="summary-label">${t('total_spent')}</div><div class="summary-value">${formatMoney(dailyTotal)} ${currency}</div><div class="summary-label">${dailyPurchases.length} ${t('articles')}</div></div>${listsHtml}<div class="total">TOTAL: ${formatMoney(dailyTotal)} ${currency}</div><div class="footer">E-tsena • ${format(new Date(), 'dd/MM/yyyy HH:mm')}</div></body></html>`;
-      // Exportation PDF : proposer d'enregistrer localement ou de partager
-      const { uri } = await Print.printToFileAsync({ html });
-      Alert.alert(
-        t('export_pdf'),
-        t('choose_export_option'),
-        [
-          {
-            text: t('save_on_device'),
-            onPress: async () => {
-              try {
-                const fileName = `journal_${format(selectedDate, 'yyyyMMdd_HHmmss')}.pdf`;
-                const destPath = FileSystem.documentDirectory + fileName;
-                await FileSystem.copyAsync({ from: uri, to: destPath });
-                Alert.alert(t('success'), t('pdf_saved_to_device') + `\n${destPath}`);
-              } catch (e) {
-                Alert.alert(t('error'), t('pdf_save_failed'));
-              }
-            }
-          },
-          {
-            text: t('share'),
-            onPress: async () => {
-              await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
-            },
-            style: 'default'
-          },
-          { text: t('cancel'), style: 'cancel' }
-        ]
-      );
-    } catch (e) { Alert.alert(t('error'), t('pdf_export_failed')); }
+      const { uri } = await Print.printToFileAsync({ html, base64: false });
+      await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Erreur', 'Impossible de générer le PDF');
+    }
   };
 
-  const handleExportPDF = async () => { /* Code inchangé, reprendre celui d'avant ou demander si besoin */ };
-  const handleCreate = () => { const db = getDb(); const res = db.runSync('INSERT INTO Achat (nomListe, dateAchat) VALUES (?, ?)', ['Nouvelle Liste', new Date().toISOString()]); router.push(`/achat/${res.lastInsertRowId}`); };
+  const getEvolution = () => {
+    if (stats.prevMonthTotal === 0) return null;
+    const diff = ((stats.monthTotal - stats.prevMonthTotal) / stats.prevMonthTotal) * 100;
+    return { value: Math.abs(diff).toFixed(0), isUp: diff > 0 };
+  };
+
+  const evolution = getEvolution();
 
   return (
     <View style={s.container}>
       <ThemedStatusBar transparent />
       
-      {/* --- HEADER --- */}
+      {/* ============================================ */}
+      {/* 🎨 HEADER AMÉLIORÉ */}
+      {/* ============================================ */}
       <LinearGradient 
         colors={activeTheme.gradient as any} 
-        style={[s.header, { paddingTop: insets.top + 10 }]}
-        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+        style={[s.header, { paddingTop: insets.top + 8 }]}
       >
-        <TouchableOpacity 
-          onPress={() => router.push('/')} 
-          style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15, opacity: 0.9 }}
-        >
-          <Ionicons name="home-outline" size={16} color="rgba(255,255,255,0.8)" />
-          <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, marginLeft: 5 }}>{t('home')}</Text>
-          <Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.8)" style={{ marginHorizontal: 4 }} />
-          <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>{t('reports')}</Text>
-        </TouchableOpacity>
-
-        <View style={s.headerTopRow}>
-            <TouchableOpacity onPress={() => router.push('/')} style={s.iconBtn}>
-               <Ionicons name="arrow-back" size={24} color="white" />
+        {/* Navigation */}
+        <View style={s.headerNav}>
+          <TouchableOpacity onPress={() => router.push('/')} style={s.backBtn}>
+            <Ionicons name="arrow-back-outline" size={22} color="#fff" />
+          </TouchableOpacity>
+          
+          {/* Sélecteur de mois au centre */}
+          <View style={s.monthSelector}>
+            <TouchableOpacity onPress={() => { vibrate(); setCurrentMonth(subMonths(currentMonth, 1)); }} style={s.monthArrow}>
+              <Ionicons name="chevron-back-outline" size={18} color="rgba(255,255,255,0.9)" />
             </TouchableOpacity>
-            
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 15 }}>
-                <TouchableOpacity onPress={prevMonth}>
-                    <Ionicons name="chevron-back" size={24} color="#fff" />
-                </TouchableOpacity>
-                <Text style={[s.headerTitle, { minWidth: 120, textAlign: 'center' }]}>
-                   {format(currentMonth, 'MMMM yyyy', { locale: language === 'en' ? enUS : fr })}
-                </Text>
-                <TouchableOpacity onPress={nextMonth}>
-                    <Ionicons name="chevron-forward" size={24} color="#fff" />
-                </TouchableOpacity>
+            <View style={s.monthDisplay}>
+              <Text style={s.monthText}>
+                {format(currentMonth, 'MMMM yyyy', { locale: language === 'en' ? enUS : fr })}
+              </Text>
             </View>
-
-            <TouchableOpacity style={s.iconBtn} onPress={handleExportPDF}>
-               <Ionicons name="share-outline" size={24} color="#fff" />
+            <TouchableOpacity onPress={() => { vibrate(); setCurrentMonth(addMonths(currentMonth, 1)); }} style={s.monthArrow}>
+              <Ionicons name="chevron-forward-outline" size={18} color="rgba(255,255,255,0.9)" />
             </TouchableOpacity>
+          </View>
+          
+          <TouchableOpacity style={s.backBtn}>
+            <Ionicons name="share-outline" size={22} color="#fff" />
+          </TouchableOpacity>
         </View>
 
-        {/* SUMMARY CARD (MOIS) */}
-        <View style={s.summaryRow}>
-          <View style={s.summaryItem}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              <Ionicons name="wallet-outline" size={16} color={isDarkMode ? '#94A3B8' : '#64748B'} />
-              {/* ✅ Affichage du MOIS */}
-              <Text style={s.summaryLabel}>{t('expenses')} ({format(currentMonth, 'MMM')})</Text>
-            </View>
-            <Text style={[s.summaryValue, { color: activeTheme.primary }]}>{formatMoney(stats.monthTotal)} {currency}</Text>
+        {/* Total principal avec animation */}
+        <Animated.View 
+          style={[
+            s.mainTotal,
+            {
+              opacity: headerTotalAnim,
+              transform: [{ scale: headerTotalScale }]
+            }
+          ]}
+        >
+          <Text style={s.mainTotalLabel}>Total des dépenses</Text>
+          <View style={s.mainTotalRow}>
+            <Text style={s.mainTotalValue}>
+              {formatMoney(stats.monthTotal)}
+              <Text style={s.currencySmall}> {currency}</Text>
+            </Text>
+            
+            {evolution && (
+              <View style={[s.evolutionBadge, { backgroundColor: evolution.isUp ? 'rgba(239,68,68,0.25)' : 'rgba(16,185,129,0.25)' }]}>
+                <Ionicons 
+                  name={evolution.isUp ? 'trending-up-outline' : 'trending-down-outline'} 
+                  size={14} 
+                  color={evolution.isUp ? '#FCA5A5' : '#6EE7B7'} 
+                />
+                <Text style={{ color: evolution.isUp ? '#FCA5A5' : '#6EE7B7', fontSize: 12, fontWeight: '700' }}>
+                  {evolution.value}%
+                </Text>
+              </View>
+            )}
           </View>
-          <View style={s.verticalDivider} />
-          <View style={s.summaryItem}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              <Ionicons name="cube-outline" size={16} color={isDarkMode ? '#94A3B8' : '#64748B'} />
-              {/* ✅ Affichage du MOIS */}
-              <Text style={s.summaryLabel}>{t('articles')} ({format(currentMonth, 'MMM')})</Text>
-            </View>
-            <Text style={[s.summaryValue, { color: activeTheme.primary }]}>{stats.monthItems}</Text>
-          </View>
+        </Animated.View>
+
+        {/* Cards métriques animées dans le header */}
+        <View style={s.metricsRow}>
+          <AnimatedMetricCard
+            icon="cube-outline"
+            iconColor={activeTheme.primary}
+            value={stats.monthItems}
+            label={t('articles')}
+            delay={100}
+            activeTheme={activeTheme}
+            isDarkMode={isDarkMode}
+          />
+          <AnimatedMetricCard
+            icon="calendar-outline"
+            iconColor="#F59E0B"
+            value={stats.maxDay.day > 0 ? `${stats.maxDay.day}` : '-'}
+            label="Jour max"
+            delay={200}
+            activeTheme={activeTheme}
+            isDarkMode={isDarkMode}
+          />
+          <AnimatedMetricCard
+            icon="star-outline"
+            iconColor="#10B981"
+            value={stats.topProduct.length > 6 ? stats.topProduct.slice(0, 6) + '..' : stats.topProduct}
+            label="Top produit"
+            delay={300}
+            activeTheme={activeTheme}
+            isDarkMode={isDarkMode}
+          />
         </View>
       </LinearGradient>
 
       <Animated.ScrollView 
-        contentContainerStyle={s.scrollContent} 
+        style={[{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
+        contentContainerStyle={s.scrollContent}
         showsVerticalScrollIndicator={false}
-        style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}
       >
-        <View style={[s.actionsRow, { marginTop: 20 }]}>
-           <TouchableOpacity style={[s.actionBtn]} onPress={() => router.push('/analyse_produit')}>
-              <View style={s.actionContent}>
-                 <View style={s.actionIconBox}><Ionicons name="search" size={22} color={activeTheme.primary} /></View>
-                 <View style={{ flex: 1 }}><Text style={s.actionTitle}>{t('product_analysis')}</Text><Text style={s.actionSub}>{t('details_by_item')}</Text></View>
+        
+        {/* ============================================ */}
+        {/* 📊 GRAPHIQUE AVEC CONTRÔLES DE ZOOM */}
+        {/* ============================================ */}
+        <View style={s.section}>
+          <View style={s.sectionHeader}>
+            <Text style={s.sectionTitle}>📈 Évolution du mois</Text>
+            
+            <View style={s.zoomControls}>
+              <TouchableOpacity onPress={zoomOut} style={[s.zoomBtn, { opacity: chartZoom <= 0.5 ? 0.4 : 1 }]} disabled={chartZoom <= 0.5}>
+                <Ionicons name="remove-outline" size={18} color={activeTheme.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={resetZoom} style={s.zoomResetBtn}>
+                <Text style={[s.zoomResetText, { color: activeTheme.primary }]}>
+                  {Math.round(chartZoom * 100)}%
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={zoomIn} style={[s.zoomBtn, { opacity: chartZoom >= 2 ? 0.4 : 1 }]} disabled={chartZoom >= 2}>
+                <Ionicons name="add-outline" size={18} color={activeTheme.primary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+          
+          <View style={s.chartCard}>
+            {chartLoading ? (
+              <View style={{ height: 260, justifyContent: 'center' }}>
+                <ActivityIndicator color={activeTheme.primary} size="large" />
               </View>
-           </TouchableOpacity>
-
-           <TouchableOpacity style={[s.actionBtn]} onPress={() => router.push('/statistiques')}>
-              <View style={s.actionContent}>
-                 <View style={s.actionIconBox}><Ionicons name="bar-chart" size={22} color={activeTheme.primary} /></View>
-                 <View style={{ flex: 1 }}><Text style={s.actionTitle}>{t('charts')}</Text><Text style={s.actionSub}>{t('detailed_visuals')}</Text></View>
-              </View>
-           </TouchableOpacity>
+            ) : (
+              <>
+                <ZoomableLineChart
+                  data={chartData}
+                  height={260}
+                  activeTheme={activeTheme}
+                  isDarkMode={isDarkMode}
+                  currency={currency}
+                  selectedDay={selectedChartDay}
+                  onSelectDay={setSelectedChartDay}
+                  zoomLevel={chartZoom}
+                />
+                
+                {selectedChartDay && (
+                  <View style={[s.selectedDayInfo, { borderColor: activeTheme.primary + '30' }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                      <View style={[s.selectedDayIcon, { backgroundColor: activeTheme.primary + '20' }]}>
+                        <Ionicons name="calendar-outline" size={20} color={activeTheme.primary} />
+                      </View>
+                      <View>
+                        <Text style={s.selectedDayDate}>
+                          {format(selectedChartDay.date, 'EEEE d MMMM', { locale: fr })}
+                        </Text>
+                        <Text style={[s.selectedDayAmount, { color: activeTheme.primary }]}>
+                          {selectedChartDay.value > 0 ? `${formatMoney(selectedChartDay.value)} ${currency}` : 'Aucune dépense'}
+                        </Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity onPress={() => setSelectedChartDay(null)}>
+                      <Ionicons name="close-circle-outline" size={26} color={isDarkMode ? '#64748B' : '#94A3B8'} />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
+            )}
+          </View>
+          
+          <Text style={s.chartHint}>
+            ← Glissez pour voir tous les jours • Touchez un point pour les détails →
+          </Text>
         </View>
 
-        <TouchableOpacity style={[s.dailyJournalBtn, { borderColor: activeTheme.primary + '30' }]} onPress={openDailyJournal}>
-          <View style={s.actionContent}>
-            <View style={[s.actionIconBox, { backgroundColor: activeTheme.primary + '15' }]}><Ionicons name="calendar" size={22} color={activeTheme.primary} /></View>
-            <View style={{ flex: 1 }}><Text style={s.actionTitle}>{t('daily_journal')}</Text><Text style={s.actionSub}>{t('select_day_view_expenses')}</Text></View>
-            <View style={[s.newBadge, { backgroundColor: activeTheme.primary }]}><Text style={{ color: '#fff', fontSize: 9, fontWeight: 'bold' }}>NEW</Text></View>
-          </View>
+        {/* ============================================ */}
+        {/* 🔧 BOUTONS D'ACTIONS */}
+        {/* ============================================ */}
+        <View style={s.actionsRow}>
+          <TouchableOpacity 
+            style={s.actionCard}
+            onPress={() => { vibrate(); router.push('/analyse_produit'); }}
+            activeOpacity={0.8}
+          >
+            <View style={[s.actionIconBg, { backgroundColor: activeTheme.primary + '15' }]}>
+              <Ionicons name="barcode-outline" size={28} color={activeTheme.primary} />
+            </View>
+            <Text style={s.actionTitle}>{t('product_analysis')}</Text>
+            <Text style={s.actionSub}>{t('details_by_item')}</Text>
+            <View style={[s.actionArrow, { backgroundColor: activeTheme.primary }]}>
+              <Ionicons name="arrow-forward-outline" size={14} color="#fff" />
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={s.actionCard}
+            onPress={() => { vibrate(); router.push('/statistiques'); }}
+            activeOpacity={0.8}
+          >
+            <View style={[s.actionIconBg, { backgroundColor: activeTheme.primary + '15' }]}>
+              <Ionicons name="pie-chart-outline" size={28} color={activeTheme.primary} />
+            </View>
+            <Text style={s.actionTitle}>{t('charts')}</Text>
+            <Text style={s.actionSub}>{t('detailed_visuals')}</Text>
+            <View style={[s.actionArrow, { backgroundColor: activeTheme.primary }]}>
+              <Ionicons name="arrow-forward-outline" size={14} color="#fff" />
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* Bouton Journal */}
+        <TouchableOpacity 
+          style={s.journalButton}
+          onPress={() => { 
+            vibrate(); 
+            setSelectedDate(new Date()); 
+            loadDailyPurchases(new Date()); 
+            setShowDailyJournal(true); 
+          }}
+          activeOpacity={0.9}
+        >
+          <LinearGradient
+            colors={activeTheme.gradient as any}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+            style={s.journalButtonGradient}
+          >
+            <View style={s.journalIcon}>
+              <Ionicons name="calendar-outline" size={26} color={activeTheme.primary} />
+            </View>
+            <View style={{ flex: 1, marginLeft: 15 }}>
+              <Text style={s.journalTitle}>{t('daily_journal')}</Text>
+              <Text style={s.journalSubtitle}>{t('select_day_view_expenses')}</Text>
+            </View>
+            <View style={s.journalArrowBg}>
+              <Ionicons name="arrow-forward-outline" size={20} color="#fff" />
+            </View>
+          </LinearGradient>
         </TouchableOpacity>
 
-        {/* TOP PRODUIT (MOIS) */}
-        <View style={s.card}>
-            <View style={s.cardHeader}>
-                <Text style={s.cardTitle}>{t('top_product')} ({format(currentMonth, 'MMMM', { locale: language === 'en' ? enUS : fr })})</Text>
-                <Ionicons name="ribbon" size={20} color="#F59E0B" />
+        {/* ============================================ */}
+        {/* 📅 SEMAINE */}
+        {/* ============================================ */}
+        <View style={s.section}>
+          <View style={s.sectionHeader}>
+            <Text style={s.sectionTitle}>📅 Cette semaine</Text>
+            <View style={s.weekNavRow}>
+              <TouchableOpacity onPress={() => { vibrate(); setCurrentWeekStart(subWeeks(currentWeekStart, 1)); }} style={s.weekNavBtn}>
+                <Ionicons name="chevron-back-outline" size={18} color={activeTheme.primary} />
+              </TouchableOpacity>
+              <Text style={s.weekNavText}>
+                {format(currentWeekStart, 'd', { locale: language === 'en' ? enUS : fr })} - {format(endOfWeek(currentWeekStart, { weekStartsOn: 1 }), 'd MMM', { locale: language === 'en' ? enUS : fr })}
+              </Text>
+              <TouchableOpacity onPress={() => { vibrate(); setCurrentWeekStart(addWeeks(currentWeekStart, 1)); }} style={s.weekNavBtn}>
+                <Ionicons name="chevron-forward-outline" size={18} color={activeTheme.primary} />
+              </TouchableOpacity>
             </View>
-            <Text style={s.cardValue}>{stats.topProduct}</Text>
-            <Text style={s.cardSub}>{stats.topProductQty} {t('articles')}</Text>
-        </View>
+          </View>
 
-        {/* RAPPORT HEBDOMADAIRE */}
-        <View style={s.weeklyReportCard}>
-           <View style={s.weeklyHeader}>
-              <View>
-                <Text style={s.weeklyTitle}>{t('daily_journal')}</Text>
-                <Text style={s.cardSub}>{format(currentWeekStart, 'dd MMM', { locale: language === 'en' ? enUS : fr })} - {format(endOfWeek(currentWeekStart, { weekStartsOn: 1 }), 'dd MMM yyyy', { locale: language === 'en' ? enUS : fr })}</Text>
-              </View>
-              <View style={s.weeklyNav}>
-                 <TouchableOpacity onPress={prevWeek} style={s.weeklyNavBtn}><Ionicons name="chevron-back" size={20} color={activeTheme.primary} /></TouchableOpacity>
-                 <TouchableOpacity onPress={nextWeek} style={s.weeklyNavBtn}><Ionicons name="chevron-forward" size={20} color={activeTheme.primary} /></TouchableOpacity>
-              </View>
-           </View>
-           <View style={s.weeklyContent}>
-              {weeklyStats.length === 0 ? (<Text style={s.emptyText}>{t('no_data_week')}</Text>) : (
-                 <>
-                   <View style={s.daysListContainer}>
-                      {weeklyStats.map((stat) => {
-                        const isToday = isSameDay(stat.day, new Date());
-                        const hasData = stat.total > 0;
-                        const dateKey = format(stat.day, 'yyyy-MM-dd');
-                        const isExpanded = expandedDays.includes(dateKey);
-                        let dotBorderColor = hasData ? activeTheme.primary : (isDarkMode ? '#334155' : '#E2E8F0');
-                        let dotBgColor = isToday ? activeTheme.primary : (isDarkMode ? '#0F172A' : '#fff');
-                        let labelColor = isToday ? activeTheme.primary : (isDarkMode ? '#F1F5F9' : '#334155');
+          <View style={s.weekCard}>
+            {weeklyStats.map((stat, idx) => {
+              const isToday = isSameDay(stat.day, new Date());
+              const hasData = stat.total > 0;
+              const dateKey = format(stat.day, 'yyyy-MM-dd');
+              const isExpanded = expandedDays.includes(dateKey);
+              const barWidth = weekTotal > 0 ? Math.max((stat.total / weekTotal) * 100, 2) : 2;
 
-                        return (
-                        <View key={dateKey} style={s.dayRow}>
-                           <View style={s.timelineLeft}><View style={[s.timelineDot, { borderColor: dotBorderColor, backgroundColor: dotBgColor }]} />{stat !== weeklyStats.at(-1) && <View style={s.timelineLine} />}</View>
-                           <View style={s.dayContent}>
-                              <TouchableOpacity activeOpacity={0.7} onPress={() => hasData && toggleDay(dateKey)} style={[s.dayCard, { borderColor: isToday ? activeTheme.primary : (isDarkMode ? '#334155' : '#F1F5F9') }]}>
-                                <View style={s.dayHeader}>
-                                    <View><Text style={[s.dayLabel, { color: labelColor }]}>{format(stat.day, 'EEEE d', { locale: language === 'en' ? enUS : fr })}</Text>{hasData && !isExpanded && (<Text style={{ fontSize: 10, color: '#94A3B8' }}>{stat.products.length} {t('articles')}</Text>)}</View>
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><Text style={[s.dayTotal, { color: hasData ? activeTheme.primary : '#94A3B8' }]}>{hasData ? `${formatMoney(stat.total)} ${currency}` : '-'}</Text>{hasData && (<Ionicons name={isExpanded ? "chevron-up" : "chevron-down"} size={16} color="#94A3B8" />)}</View>
-                                </View>
-                                {isExpanded && stat.products.length > 0 && (<View style={s.productList}>{stat.products.map((p: any, idx: number) => (<View key={`product-${stat.day}-${idx}`} style={s.productRow}><Ionicons name="pricetag-outline" size={12} color="#94A3B8" style={{marginTop: 2}} /><Text style={s.productItem}>{p.name} <Text style={{color: '#94A3B8'}}>(x{p.qty})</Text></Text><Text style={s.productPrice}>{formatMoney(p.price)} {currency}</Text></View>))}</View>)}
-                              </TouchableOpacity>
-                           </View>
+              return (
+                <TouchableOpacity
+                  key={idx}
+                  style={[s.weekDayRow, isToday && { backgroundColor: activeTheme.primary + '08', borderLeftColor: activeTheme.primary, borderLeftWidth: 3 }]}
+                  onPress={() => hasData && toggleDay(dateKey)}
+                  activeOpacity={hasData ? 0.7 : 1}
+                >
+                  <View style={s.weekDayLeft}>
+                    <Text style={[s.weekDayName, isToday && { color: activeTheme.primary, fontWeight: '700' }]}>
+                      {format(stat.day, 'EEE', { locale: language === 'en' ? enUS : fr })}
+                    </Text>
+                    <Text style={[s.weekDayNum, isToday && { color: activeTheme.primary }]}>{format(stat.day, 'd')}</Text>
+                  </View>
+
+                  <View style={s.weekDayRight}>
+                    <View style={s.weekBarBg}>
+                      <View style={[s.weekBar, { width: `${barWidth}%`, backgroundColor: activeTheme.primary }]} />
+                    </View>
+                    <Text style={[s.weekDayAmount, { color: hasData ? activeTheme.primary : (isDarkMode ? '#475569' : '#CBD5E1') }]}>
+                      {hasData ? `${formatMoney(stat.total)} ${currency}` : '-'}
+                    </Text>
+                    {hasData && <Ionicons name={isExpanded ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color="#94A3B8" />}
+                  </View>
+
+                  {isExpanded && stat.products.length > 0 && (
+                    <View style={s.expandedList}>
+                      {stat.products.map((p, pIdx) => (
+                        <View key={pIdx} style={s.productRow}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={s.productName}>{p.name}</Text>
+                            <Text style={s.productDetails}>
+                              {p.qty} {p.unite || 'pcs'} × {formatMoney(p.unitPrice || 0)} {currency}
+                            </Text>
+                          </View>
+                          <Text style={[s.productTotal, { color: activeTheme.primary }]}>
+                            {formatMoney(p.price)} {currency}
+                          </Text>
                         </View>
-                      )})}
-                   </View>
-                   <View style={s.weekTotalContainer}><Text style={s.weekTotalLabel}>{t('total_spent')}</Text><Text style={[s.weekTotalValue, { color: activeTheme.primary }]}>{formatMoney(weekTotal)} {currency}</Text></View>
-                 </>
-              )}
-           </View>
+                      ))}
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+
+            <View style={[s.weekTotalRow, { backgroundColor: activeTheme.primary + '10' }]}>
+              <Text style={s.weekTotalLabel}>Total semaine</Text>
+              <Text style={[s.weekTotalValue, { color: activeTheme.primary }]}>
+                {formatMoney(weekTotal)} {currency}
+              </Text>
+            </View>
+          </View>
         </View>
-        <View style={{ height: 100 }} />
+
+        <View style={{ height: 120 }} />
       </Animated.ScrollView>
 
-      {/* MODAL JOURNAL (Code identique à avant) */}
-      <Modal visible={showDailyJournal} animationType="slide" transparent={true} onRequestClose={() => setShowDailyJournal(false)}>
-        <View style={s.modalOverlay}>
-          <View style={s.dailyJournalModal}>
-            <LinearGradient colors={activeTheme.gradient as any} style={s.dailyModalHeader} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-              <View style={s.dailyModalHeaderContent}>
-                <TouchableOpacity onPress={() => setShowDailyJournal(false)} style={s.dailyCloseBtn}><Ionicons name="close" size={24} color="#fff" /></TouchableOpacity>
-                <View style={{ flex: 1, alignItems: 'center' }}><Text style={s.dailyModalTitle}>📅 {t('daily_journal')}</Text><TouchableOpacity style={s.datePickerBtn} onPress={() => setShowDatePicker(true)}><Ionicons name="calendar-outline" size={16} color="rgba(255,255,255,0.9)" /><Text style={s.datePickerText}>{format(selectedDate, 'EEEE d MMMM yyyy', { locale: language === 'en' ? enUS : fr })}</Text><Ionicons name="chevron-down" size={14} color="rgba(255,255,255,0.9)" /></TouchableOpacity></View>
-                <TouchableOpacity onPress={exportDailyPDF} style={[s.dailyExportBtn, { opacity: dailyPurchases.length === 0 ? 0.5 : 1 }]} disabled={dailyPurchases.length === 0}><Ionicons name="share-outline" size={20} color="#fff" /></TouchableOpacity>
+      {/* ============================================ */}
+      {/* 📱 MODAL JOURNAL QUOTIDIEN */}
+      {/* ============================================ */}
+      <Modal visible={showDailyJournal} animationType="slide" transparent onRequestClose={() => setShowDailyJournal(false)}>
+        <View style={s.modalBackdrop}>
+          <View style={s.modalContainer}>
+            <View style={s.modalHandle} />
+            
+            <View style={s.modalHeader}>
+              <View>
+                <Text style={s.modalTitle}>📋 {t('daily_journal')}</Text>
+                <TouchableOpacity style={s.dateBtn} onPress={() => setShowDatePicker(true)}>
+                  <Ionicons name="calendar-outline" size={16} color={activeTheme.primary} />
+                  <Text style={[s.dateBtnText, { color: activeTheme.primary }]}>
+                    {format(selectedDate, 'EEEE d MMMM yyyy', { locale: language === 'en' ? enUS : fr })}
+                  </Text>
+                  <Ionicons name="chevron-down-outline" size={14} color={activeTheme.primary} />
+                </TouchableOpacity>
               </View>
-            </LinearGradient>
-            {showDatePicker && (<DateTimePicker value={selectedDate} mode="date" display="default" onChange={onDateChange} maximumDate={new Date()} />)}
-            <View style={s.dailySummaryCard}><View style={s.dailySummaryItem}><View style={[s.dailySummaryIcon, { backgroundColor: activeTheme.primary + '15' }]}><Ionicons name="wallet-outline" size={22} color={activeTheme.primary} /></View><View><Text style={s.dailySummaryLabel}>{t('total_spent')}</Text><Text style={[s.dailySummaryValue, { color: activeTheme.primary }]}>{formatMoney(dailyTotal)} {currency}</Text></View></View><View style={s.dailySummaryDivider} /><View style={s.dailySummaryItem}><View style={[s.dailySummaryIcon, { backgroundColor: '#10B98115' }]}><Ionicons name="cube-outline" size={22} color="#10B981" /></View><View><Text style={s.dailySummaryLabel}>{t('articles')}</Text><Text style={[s.dailySummaryValue, { color: '#10B981' }]}>{dailyPurchases.length}</Text></View></View></View>
-            <ScrollView style={s.dailyContentScroll} showsVerticalScrollIndicator={false}>{dailyPurchases.length === 0 ? (<View style={s.dailyEmptyState}><Ionicons name="cart-outline" size={60} color="#94A3B8" /><Text style={s.dailyEmptyTitle}>{t('no_purchase')}</Text><Text style={s.dailyEmptyText}>{t('no_product_bought_period')}</Text></View>) : (<>{(() => { const byList = new Map<string, any[]>(); for (const p of dailyPurchases) { const listName = p.nomListe || 'Sans nom'; if (!byList.has(listName)) byList.set(listName, []); byList.get(listName)!.push(p); } return Array.from(byList.entries()).map(([listName, items]) => (<View key={listName} style={s.dailyListSection}><View style={s.dailyListHeader}><Ionicons name="cart" size={18} color={activeTheme.primary} /><Text style={s.dailyListTitle}>{listName}</Text><Text style={s.dailyListTotal}>{formatMoney(items.reduce((s, i) => s + i.prixTotal, 0))} {currency}</Text></View>{items.map((item, idx) => (<View key={`${item.ligneId}-${idx}`} style={s.dailyProductRow}><View style={s.dailyProductInfo}><Text style={s.dailyProductName}>{item.libelleProduit}</Text><Text style={s.dailyProductQty}>{item.quantite} {item.unite || ''} × {item.prixUnitaire ? formatMoney(item.prixUnitaire) : 0} {currency}</Text></View><Text style={[s.dailyProductPrice, { color: activeTheme.primary }]}>{item.prixTotal ? formatMoney(item.prixTotal) : 0} {currency}</Text></View>))}</View>)); })()}</>)}<View style={{ height: 30 }} /></ScrollView>
-            {dailyPurchases.length > 0 && (<View style={s.dailyFooter}><Text style={s.dailyFooterLabel}>TOTAL</Text><Text style={[s.dailyFooterValue, { color: activeTheme.primary }]}>{formatMoney(dailyTotal)} {currency}</Text></View>)}
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TouchableOpacity 
+                  onPress={generateDailyPDF} 
+                  style={[s.pdfBtn, { backgroundColor: activeTheme.primary, opacity: dailyPurchases.length === 0 ? 0.5 : 1 }]}
+                  disabled={dailyPurchases.length === 0}
+                >
+                  <Ionicons name="download-outline" size={20} color="#fff" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setShowDailyJournal(false)} style={s.modalClose}>
+                  <Ionicons name="close-outline" size={22} color={isDarkMode ? '#F1F5F9' : '#1E293B'} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {showDatePicker && (
+              <DateTimePicker 
+                value={selectedDate} 
+                mode="date" 
+                display="default" 
+                onChange={(e, d) => { setShowDatePicker(false); if(d) { setSelectedDate(d); loadDailyPurchases(d); }}} 
+                maximumDate={new Date()} 
+              />
+            )}
+
+            <View style={s.modalSummary}>
+              <View style={s.modalSummaryItem}>
+                <View style={[s.modalSummaryIcon, { backgroundColor: activeTheme.primary + '15' }]}>
+                  <Ionicons name="wallet-outline" size={22} color={activeTheme.primary} />
+                </View>
+                <View>
+                  <Text style={s.modalSummaryLabel}>{t('total_spent')}</Text>
+                  <Text style={[s.modalSummaryValue, { color: activeTheme.primary }]}>{formatMoney(dailyTotal)} {currency}</Text>
+                </View>
+              </View>
+              <View style={s.modalSummaryDivider} />
+              <View style={s.modalSummaryItem}>
+                <View style={[s.modalSummaryIcon, { backgroundColor: '#10B98115' }]}>
+                  <Ionicons name="bag-outline" size={22} color="#10B981" />
+                </View>
+                <View>
+                  <Text style={s.modalSummaryLabel}>{t('articles')}</Text>
+                  <Text style={[s.modalSummaryValue, { color: '#10B981' }]}>{dailyPurchases.length}</Text>
+                </View>
+              </View>
+            </View>
+
+            {dailyPurchases.length > 0 && (
+              <View style={[s.tableHeader, { backgroundColor: activeTheme.primary }]}>
+                <Text style={[s.tableHeaderText, { flex: 2 }]}>Produit</Text>
+                <Text style={[s.tableHeaderText, { flex: 1, textAlign: 'center' }]}>Qté</Text>
+                <Text style={[s.tableHeaderText, { flex: 1, textAlign: 'right' }]}>P.U</Text>
+                <Text style={[s.tableHeaderText, { flex: 1, textAlign: 'right' }]}>Total</Text>
+              </View>
+            )}
+
+            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+              {dailyPurchases.length === 0 ? (
+                <View style={s.emptyState}>
+                  <View style={s.emptyIcon}>
+                    <Ionicons name="cart-outline" size={50} color="#94A3B8" />
+                  </View>
+                  <Text style={s.emptyText}>{t('no_purchase')}</Text>
+                  <Text style={s.emptySubText}>Aucun achat enregistré pour cette date</Text>
+                </View>
+              ) : (
+                dailyPurchases.map((item, idx) => (
+                  <View key={idx} style={s.tableRow}>
+                    <View style={{ flex: 2 }}>
+                      <Text style={s.tableCellName} numberOfLines={2}>
+                        {item.libelleProduit}
+                      </Text>
+                    </View>
+                    <Text style={[s.tableCell, { flex: 1, textAlign: 'center' }]}>
+                      {item.quantite} {item.unite || ''}
+                    </Text>
+                    <Text style={[s.tableCell, { flex: 1, textAlign: 'right' }]}>
+                      {formatMoney(item.prixUnitaire || 0)}
+                    </Text>
+                    <Text style={[s.tableCellTotal, { flex: 1, textAlign: 'right', color: activeTheme.primary }]}>
+                      {formatMoney(item.prixTotal || 0)}
+                    </Text>
+                  </View>
+                ))
+              )}
+              <View style={{ height: 20 }} />
+            </ScrollView>
+
+            {dailyPurchases.length > 0 && (
+              <View style={s.modalFooter}>
+                <Text style={s.modalFooterLabel}>TOTAL GÉNÉRAL</Text>
+                <Text style={[s.modalFooterValue, { color: activeTheme.primary }]}>{formatMoney(dailyTotal)} {currency}</Text>
+              </View>
+            )}
           </View>
         </View>
       </Modal>
 
-      <View style={[s.navbar, { paddingBottom: insets.bottom > 0 ? insets.bottom : 10, height: 60 + (insets.bottom > 0 ? insets.bottom : 10) }]}>
-         <TouchableOpacity style={s.navItem} onPress={() => router.push('/')}><Ionicons name="home-outline" size={24} color="#9CA3AF" /><Text style={[s.navText, { color: "#9CA3AF" }]}>{t('home')}</Text></TouchableOpacity>
-         <View style={{ top: -25 }}><TouchableOpacity style={[s.fab, { shadowColor: activeTheme.primary }]} onPress={handleCreate}><LinearGradient colors={activeTheme.gradient as any} style={s.fabGradient}><Ionicons name="add" size={32} color="#fff" /></LinearGradient></TouchableOpacity></View>
-         <TouchableOpacity style={s.navItem}><Ionicons name="pie-chart" size={24} color={activeTheme.primary} /><Text style={[s.navText, { color: activeTheme.primary }]}>{t('reports')}</Text></TouchableOpacity>
+      {/* ============================================ */}
+      {/* 🧭 NAVIGATION */}
+      {/* ============================================ */}
+      <View style={[s.navbar, { paddingBottom: insets.bottom + 10 }]}>
+        <TouchableOpacity onPress={() => router.push('/')} style={s.navItem}>
+          <Ionicons name="home-outline" size={24} color="#94A3B8" />
+          <Text style={s.navText}>{t('home')}</Text>
+        </TouchableOpacity>
+        
+        <View style={{ marginTop: -30 }}>
+          <TouchableOpacity 
+            style={[s.fab, { shadowColor: activeTheme.primary }]}
+            onPress={() => { 
+              vibrate();
+              const db = getDb(); 
+              const res = db.runSync('INSERT INTO Achat (nomListe, dateAchat) VALUES (?, ?)', ['Nouvelle Liste', new Date().toISOString()]); 
+              router.push(`/achat/${res.lastInsertRowId}`); 
+            }}
+          >
+            <LinearGradient colors={activeTheme.gradient as any} style={s.fabGradient}>
+              <Ionicons name="add-outline" size={30} color="#fff" />
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+        
+        <TouchableOpacity style={s.navItem}>
+          <Ionicons name="pie-chart" size={24} color={activeTheme.primary} />
+          <Text style={[s.navText, { color: activeTheme.primary }]}>{t('reports')}</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
 }
 
-// STYLES INCHANGÉS
-const getStyles = (theme: any, dark: boolean) => {
-  const c = { bg: dark ? '#0F172A' : '#F8FAFC', card: dark ? '#1E293B' : '#fff', text: dark ? '#F1F5F9' : '#1E293B', textSec: dark ? '#94A3B8' : '#64748B', border: dark ? '#334155' : '#F1F5F9', modal: dark ? '#1E293B' : '#fff', input: dark ? '#0F172A' : '#fff', shadow: dark ? 0.2 : 0.05, primary: theme.primary, gradient: theme.gradient };
-  return StyleSheet.create({
-  container: { flex: 1, backgroundColor: c.bg },
-  header: { paddingBottom: 80, paddingHorizontal: 20, borderBottomLeftRadius: 30, borderBottomRightRadius: 30, position: 'relative', zIndex: 10 },
-  headerTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
-  iconBtn: { padding: 8, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 12 },
-  summaryRow: { position: 'absolute', bottom: -35, left: 20, right: 20, flexDirection: 'row', backgroundColor: c.card, borderRadius: 20, padding: 20, justifyContent: 'space-around', shadowColor: '#000', shadowOffset: {width: 0, height: 4}, shadowOpacity: dark ? 0.3 : 0.1, shadowRadius: 8, elevation: 5 },
-  summaryItem: { alignItems: 'center' },
-  summaryLabel: { color: dark ? '#94A3B8' : '#9CA3AF', fontSize: 11, fontWeight: '600', textTransform: 'uppercase' },
-  summaryValue: { fontSize: 18, fontWeight: '800', marginTop: 4 },
-  verticalDivider: { width: 1, backgroundColor: c.border, height: '80%' },
-  scrollContent: { paddingHorizontal: 20, paddingTop: 50 },
-  card: { backgroundColor: c.card, borderRadius: 20, padding: 20, marginBottom: 20, shadowColor: '#000', shadowOffset: {width: 0, height: 2}, shadowOpacity: c.shadow, shadowRadius: 8, elevation: 3, borderWidth: 1, borderColor: c.border },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: c.text },
-  cardValue: { fontSize: 22, fontWeight: '800', color: dark ? '#F1F5F9' : '#0F172A' },
-  cardSub: { fontSize: 12, color: c.textSec, marginTop: 4 },
-  actionsRow: { flexDirection: 'row', gap: 15, marginBottom: 25 },
-  actionBtn: { flex: 1, backgroundColor: c.card, borderRadius: 20, borderWidth: 1, borderColor: c.border, shadowColor: '#000', shadowOffset: {width: 0, height: 2}, shadowOpacity: c.shadow, shadowRadius: 8, elevation: 2, padding: 15 },
-  actionContent: { alignItems: 'center', gap: 10 },
-  actionIconBox: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', backgroundColor: dark ? '#334155' : '#F1F5F9', marginBottom: 5 },
-  actionTitle: { fontSize: 14, fontWeight: '700', color: c.text, textAlign: 'center' },
-  actionSub: { fontSize: 11, color: c.textSec, textAlign: 'center' },
-  arrowCircle: { display: 'none' },
-  emptyText: { textAlign: 'center', color: c.textSec, fontStyle: 'italic', padding: 20 },
-  navbar: { flexDirection: 'row', backgroundColor: c.card, borderTopWidth: 1, borderColor: dark ? '#334155' : '#eee', justifyContent: 'space-around', paddingTop: 10, paddingHorizontal: 20, position: 'absolute', bottom: 0, width: '100%' },
-  navItem: { alignItems: 'center' },
-  navText: { fontSize: 10, fontWeight: '600', marginTop: 4 },
-  fab: { width: 56, height: 56, borderRadius: 28, shadowOpacity: 0.3, elevation: 6 },
-  fabGradient: { width: '100%', height: '100%', borderRadius: 28, justifyContent: 'center', alignItems: 'center' },
-  weeklyReportCard: { backgroundColor: c.card, borderRadius: 20, padding: 20, marginBottom: 20, shadowColor: '#000', shadowOffset: {width: 0, height: 2}, shadowOpacity: c.shadow, shadowRadius: 8, elevation: 3, borderWidth: 1, borderColor: c.border },
-  weeklyHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  weeklyTitle: { fontSize: 18, fontWeight: '700', color: c.text },
-  weeklyNav: { flexDirection: 'row', gap: 8 },
-  weeklyNavBtn: { padding: 8, borderRadius: 12, backgroundColor: dark ? '#334155' : '#F1F5F9' },
-  weeklyContent: { padding: 5 },
-  daysListContainer: { marginBottom: 15, marginTop: 10 },
-  dayRow: { flexDirection: 'row' },
-  timelineLeft: { alignItems: 'center', width: 30 },
-  timelineDot: { width: 10, height: 10, borderRadius: 5, borderWidth: 2, zIndex: 2 },
-  timelineLine: { width: 2, flex: 1, backgroundColor: c.border, marginVertical: 2 },
-  dayContent: { flex: 1, paddingBottom: 15 },
-  dayCard: { backgroundColor: c.bg, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: c.border },
-  dayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  dayLabel: { fontSize: 14, fontWeight: '600', textTransform: 'capitalize' },
-  dayTotal: { fontSize: 14, fontWeight: '700' },
-  productList: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderColor: c.border, gap: 6 },
-  productRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  productItem: { fontSize: 12, color: c.textSec, flex: 1 },
-  productPrice: { fontSize: 12, fontWeight: '600', color: dark ? '#F1F5F9' : '#334155' },
-  weekTotalContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: c.bg, padding: 16, borderRadius: 12, borderWidth: 1, borderColor: c.border },
-  weekTotalLabel: { fontWeight: '600', fontSize: 14, color: c.textSec, textTransform: 'uppercase' },
-  weekTotalValue: { fontWeight: '800', fontSize: 18 },
-  dailyJournalBtn: { backgroundColor: c.card, borderRadius: 20, marginBottom: 20, borderWidth: 2, borderStyle: 'dashed', shadowColor: '#000', shadowOffset: {width: 0, height: 2}, shadowOpacity: c.shadow, shadowRadius: 8, elevation: 2, padding: 15 },
-  newBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  dailyJournalModal: { backgroundColor: c.card, borderTopLeftRadius: 25, borderTopRightRadius: 25, maxHeight: '90%', overflow: 'hidden' },
-  dailyModalHeader: { padding: 20, paddingTop: 15 },
-  dailyModalHeaderContent: { flexDirection: 'row', alignItems: 'center' },
-  dailyCloseBtn: { padding: 5 },
-  dailyModalTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  datePickerBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, marginTop: 8 },
-  datePickerText: { color: '#fff', fontSize: 14, fontWeight: '500', textTransform: 'capitalize' },
-  dailyExportBtn: { padding: 10, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 12 },
-  dailySummaryCard: { flexDirection: 'row', backgroundColor: c.bg, margin: 15, padding: 15, borderRadius: 16, borderWidth: 1, borderColor: c.border },
-  dailySummaryItem: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  dailySummaryIcon: { width: 42, height: 42, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  dailySummaryLabel: { fontSize: 11, color: c.textSec, textTransform: 'uppercase', fontWeight: '600' },
-  dailySummaryValue: { fontSize: 18, fontWeight: '800' },
-  dailySummaryDivider: { width: 1, backgroundColor: c.border, marginHorizontal: 10 },
-  dailyContentScroll: { paddingHorizontal: 15, maxHeight: '55%' },
-  dailyEmptyState: { alignItems: 'center', padding: 40 },
-  dailyEmptyTitle: { fontSize: 16, fontWeight: '700', color: c.text, marginTop: 15 },
-  dailyEmptyText: { fontSize: 13, color: c.textSec, textAlign: 'center', marginTop: 5 },
-  dailyListSection: { backgroundColor: c.bg, borderRadius: 16, marginBottom: 15, borderWidth: 1, borderColor: c.border, overflow: 'hidden' },
-  dailyListHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, backgroundColor: dark ? '#334155' : '#F8FAFC', borderBottomWidth: 1, borderColor: c.border },
-  dailyListTitle: { flex: 1, fontSize: 14, fontWeight: '700', color: c.text },
-  dailyListTotal: { fontSize: 13, fontWeight: '700', color: c.primary },
-  dailyProductRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderBottomWidth: 1, borderColor: c.border },
-  dailyProductInfo: { flex: 1 },
-  dailyProductName: { fontSize: 14, fontWeight: '600', color: c.text },
-  dailyProductQty: { fontSize: 11, color: c.textSec, marginTop: 2 },
-  dailyProductPrice: { fontSize: 14, fontWeight: '700' },
-  dailyFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: c.bg, borderTopWidth: 1, borderColor: c.border },
-  dailyFooterLabel: { fontSize: 12, fontWeight: '700', color: c.textSec, letterSpacing: 1 },
-  dailyFooterValue: { fontSize: 22, fontWeight: '800' }
+// ============================================
+// 🎨 STYLES
+// ============================================
+const styles = StyleSheet.create({
+  animatedMetricCard: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 16,
+    marginHorizontal: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  metricIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  metricCardValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  metricCardLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
 });
+
+const getStyles = (theme: any, dark: boolean) => {
+  const c = { 
+    bg: dark ? '#0F172A' : '#F8FAFC', 
+    card: dark ? '#1E293B' : '#FFFFFF', 
+    text: dark ? '#F8FAFC' : '#1E293B', 
+    textSec: dark ? '#94A3B8' : '#64748B', 
+    border: dark ? '#334155' : '#E2E8F0'
+  };
+  
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.bg },
+    
+    // HEADER AMÉLIORÉ
+    header: { 
+      paddingHorizontal: 20, 
+      paddingBottom: 20, 
+      borderBottomLeftRadius: 30, 
+      borderBottomRightRadius: 30 
+    },
+    headerNav: { 
+      flexDirection: 'row', 
+      justifyContent: 'space-between', 
+      alignItems: 'center' 
+    },
+    backBtn: { 
+      width: 42, 
+      height: 42, 
+      borderRadius: 14, 
+      backgroundColor: 'rgba(255,255,255,0.15)', 
+      justifyContent: 'center', 
+      alignItems: 'center' 
+    },
+    
+    monthSelector: { 
+      flexDirection: 'row', 
+      alignItems: 'center', 
+      backgroundColor: 'rgba(255,255,255,0.15)', 
+      borderRadius: 14, 
+      paddingVertical: 6, 
+      paddingHorizontal: 4 
+    },
+    monthArrow: { padding: 6 },
+    monthDisplay: { minWidth: 120, alignItems: 'center' },
+    monthText: { 
+      color: '#fff', 
+      fontSize: 14, 
+      fontWeight: '700', 
+      textTransform: 'capitalize' 
+    },
+    
+    mainTotal: { 
+      alignItems: 'center', 
+      marginTop: 16, 
+      marginBottom: 16 
+    },
+    mainTotalLabel: { 
+      color: 'rgba(255,255,255,0.8)', 
+      fontSize: 11, 
+      fontWeight: '600', 
+      textTransform: 'uppercase', 
+      letterSpacing: 1 
+    },
+    mainTotalRow: { 
+      flexDirection: 'row', 
+      alignItems: 'center', 
+      gap: 12, 
+      marginTop: 6 
+    },
+    mainTotalValue: { 
+      color: '#fff', 
+      fontSize: 32, 
+      fontWeight: '800' 
+    },
+    currencySmall: { fontSize: 16, fontWeight: '600' },
+    evolutionBadge: { 
+      flexDirection: 'row', 
+      alignItems: 'center', 
+      gap: 4, 
+      paddingHorizontal: 10, 
+      paddingVertical: 5, 
+      borderRadius: 20 
+    },
+    
+    // METRICS ROW - Dans le header
+    metricsRow: { 
+      flexDirection: 'row', 
+      marginTop: 8,
+      marginHorizontal: -4,
+    },
+    
+    // CONTENT
+    scrollContent: { paddingTop: 20, paddingHorizontal: 20 },
+    
+    section: { marginBottom: 25 },
+    sectionHeader: { 
+      flexDirection: 'row', 
+      justifyContent: 'space-between', 
+      alignItems: 'center', 
+      marginBottom: 12 
+    },
+    sectionTitle: { fontSize: 18, fontWeight: '800', color: c.text },
+    
+    // ZOOM CONTROLS
+    zoomControls: { 
+      flexDirection: 'row', 
+      alignItems: 'center', 
+      backgroundColor: c.card, 
+      borderRadius: 12, 
+      padding: 4, 
+      gap: 4 
+    },
+    zoomBtn: { 
+      width: 32, 
+      height: 32, 
+      borderRadius: 8, 
+      backgroundColor: theme.primary + '15', 
+      justifyContent: 'center', 
+      alignItems: 'center' 
+    },
+    zoomResetBtn: { 
+      paddingHorizontal: 8, 
+      height: 32, 
+      justifyContent: 'center', 
+      alignItems: 'center' 
+    },
+    zoomResetText: { fontSize: 12, fontWeight: '700' },
+    
+    // CHART
+    chartCard: { 
+      backgroundColor: c.card, 
+      borderRadius: 20, 
+      padding: 15, 
+      paddingBottom: 10, 
+      shadowColor: '#000', 
+      shadowOffset: { width: 0, height: 4 }, 
+      shadowOpacity: 0.05, 
+      shadowRadius: 12, 
+      elevation: 3 
+    },
+    chartHint: { 
+      textAlign: 'center', 
+      fontSize: 11, 
+      color: c.textSec, 
+      marginTop: 10, 
+      fontStyle: 'italic' 
+    },
+    
+    selectedDayInfo: { 
+      flexDirection: 'row', 
+      alignItems: 'center', 
+      justifyContent: 'space-between', 
+      marginTop: 12, 
+      padding: 14, 
+      borderRadius: 14, 
+      borderWidth: 1, 
+      backgroundColor: dark ? '#0F172A' : '#F8FAFC' 
+    },
+    selectedDayIcon: { 
+      width: 42, 
+      height: 42, 
+      borderRadius: 12, 
+      justifyContent: 'center', 
+      alignItems: 'center' 
+    },
+    selectedDayDate: { 
+      fontSize: 14, 
+      fontWeight: '600', 
+      textTransform: 'capitalize', 
+      color: c.text 
+    },
+    selectedDayAmount: { fontSize: 18, fontWeight: '800', marginTop: 2 },
+    
+    // ACTIONS
+    actionsRow: { flexDirection: 'row', gap: 15, marginBottom: 20 },
+    actionCard: { 
+      flex: 1, 
+      backgroundColor: c.card, 
+      borderRadius: 20, 
+      padding: 20, 
+      shadowColor: '#000', 
+      shadowOffset: { width: 0, height: 4 }, 
+      shadowOpacity: 0.05, 
+      shadowRadius: 10, 
+      elevation: 3,
+      position: 'relative'
+    },
+    actionIconBg: { 
+      width: 54, 
+      height: 54, 
+      borderRadius: 16, 
+      justifyContent: 'center', 
+      alignItems: 'center', 
+      marginBottom: 12 
+    },
+    actionTitle: { fontSize: 15, fontWeight: '700', color: c.text, marginBottom: 4 },
+    actionSub: { fontSize: 11, color: c.textSec },
+    actionArrow: { 
+      position: 'absolute', 
+      top: 15, 
+      right: 15, 
+      width: 28, 
+      height: 28, 
+      borderRadius: 14, 
+      justifyContent: 'center', 
+      alignItems: 'center' 
+    },
+    
+    // JOURNAL BUTTON
+    journalButton: { 
+      marginBottom: 25, 
+      borderRadius: 22, 
+      shadowColor: theme.primary, 
+      shadowOffset: { width: 0, height: 6 }, 
+      shadowOpacity: 0.25, 
+      shadowRadius: 12, 
+      elevation: 6 
+    },
+    journalButtonGradient: { 
+      flexDirection: 'row', 
+      alignItems: 'center', 
+      padding: 6, 
+      borderRadius: 22 
+    },
+    journalIcon: { 
+      width: 52, 
+      height: 52, 
+      borderRadius: 16, 
+      backgroundColor: '#fff', 
+      justifyContent: 'center', 
+      alignItems: 'center' 
+    },
+    journalTitle: { color: '#fff', fontSize: 17, fontWeight: '800' },
+    journalSubtitle: { color: 'rgba(255,255,255,0.85)', fontSize: 12, marginTop: 3 },
+    journalArrowBg: { 
+      width: 40, 
+      height: 40, 
+      borderRadius: 20, 
+      backgroundColor: 'rgba(255,255,255,0.2)', 
+      justifyContent: 'center', 
+      alignItems: 'center', 
+      marginRight: 10 
+    },
+    
+    // WEEK
+    weekNavRow: { flexDirection: 'row', alignItems: 'center' },
+    weekNavBtn: { 
+      padding: 6, 
+      backgroundColor: theme.primary + '15', 
+      borderRadius: 8 
+    },
+    weekNavText: { 
+      fontSize: 12, 
+      color: c.textSec, 
+      fontWeight: '600', 
+      marginHorizontal: 10 
+    },
+    
+    weekCard: { 
+      backgroundColor: c.card, 
+      borderRadius: 20, 
+      overflow: 'hidden', 
+      shadowColor: '#000', 
+      shadowOffset: { width: 0, height: 2 }, 
+      shadowOpacity: 0.05, 
+      shadowRadius: 8, 
+      elevation: 2 
+    },
+    weekDayRow: { 
+      flexDirection: 'row', 
+      alignItems: 'center', 
+      paddingVertical: 14, 
+      paddingHorizontal: 16, 
+      borderBottomWidth: 1, 
+      borderBottomColor: c.border, 
+      flexWrap: 'wrap' 
+    },
+    weekDayLeft: { width: 50, alignItems: 'center' },
+    weekDayName: { 
+      fontSize: 11, 
+      color: c.textSec, 
+      fontWeight: '600', 
+      textTransform: 'uppercase' 
+    },
+    weekDayNum: { fontSize: 18, fontWeight: '700', color: c.text, marginTop: 2 },
+    weekDayRight: { 
+      flex: 1, 
+      flexDirection: 'row', 
+      alignItems: 'center', 
+      gap: 10 
+    },
+    weekBarBg: { 
+      flex: 1, 
+      height: 6, 
+      backgroundColor: c.border, 
+      borderRadius: 3, 
+      overflow: 'hidden' 
+    },
+    weekBar: { height: '100%', borderRadius: 3 },
+    weekDayAmount: { fontSize: 13, fontWeight: '700', minWidth: 90, textAlign: 'right' },
+    
+    expandedList: { 
+      width: '100%', 
+      marginTop: 12, 
+      paddingTop: 12, 
+      paddingLeft: 60, 
+      borderTopWidth: 1, 
+      borderTopColor: c.border 
+    },
+    productRow: { 
+      flexDirection: 'row', 
+      alignItems: 'center', 
+      marginBottom: 10, 
+      paddingBottom: 10, 
+      borderBottomWidth: 1, 
+      borderBottomColor: c.border 
+    },
+    productName: { fontSize: 14, fontWeight: '600', color: c.text },
+    productDetails: { fontSize: 11, color: c.textSec, marginTop: 2 },
+    productTotal: { fontSize: 14, fontWeight: '700' },
+    
+    weekTotalRow: { 
+      flexDirection: 'row', 
+      justifyContent: 'space-between', 
+      padding: 18 
+    },
+    weekTotalLabel: { 
+      fontSize: 14, 
+      fontWeight: '700', 
+      color: c.textSec, 
+      textTransform: 'uppercase' 
+    },
+    weekTotalValue: { fontSize: 20, fontWeight: '800' },
+    
+    // MODAL
+    modalBackdrop: { 
+      flex: 1, 
+      backgroundColor: 'rgba(0,0,0,0.6)', 
+      justifyContent: 'flex-end' 
+    },
+    modalContainer: { 
+      backgroundColor: c.card, 
+      borderTopLeftRadius: 30, 
+      borderTopRightRadius: 30, 
+      height: '90%' 
+    },
+    modalHandle: { 
+      width: 40, 
+      height: 5, 
+      backgroundColor: c.border, 
+      borderRadius: 3, 
+      alignSelf: 'center', 
+      marginTop: 12 
+    },
+    modalHeader: { 
+      flexDirection: 'row', 
+      justifyContent: 'space-between', 
+      alignItems: 'flex-start', 
+      padding: 20, 
+      borderBottomWidth: 1, 
+      borderBottomColor: c.border 
+    },
+    modalTitle: { fontSize: 22, fontWeight: '800', color: c.text },
+    modalClose: { 
+      width: 42, 
+      height: 42, 
+      borderRadius: 21, 
+      backgroundColor: dark ? '#334155' : '#F1F5F9', 
+      justifyContent: 'center', 
+      alignItems: 'center' 
+    },
+    pdfBtn: { 
+      width: 42, 
+      height: 42, 
+      borderRadius: 12, 
+      justifyContent: 'center', 
+      alignItems: 'center' 
+    },
+    
+    dateBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
+    dateBtnText: { fontSize: 14, fontWeight: '600', textTransform: 'capitalize' },
+    
+    modalSummary: { 
+      flexDirection: 'row', 
+      margin: 20, 
+      marginBottom: 15, 
+      padding: 16, 
+      borderRadius: 16, 
+      backgroundColor: dark ? '#0F172A' : '#F8FAFC' 
+    },
+    modalSummaryItem: { 
+      flex: 1, 
+      flexDirection: 'row', 
+      alignItems: 'center', 
+      gap: 12 
+    },
+    modalSummaryIcon: { 
+      width: 46, 
+      height: 46, 
+      borderRadius: 14, 
+      justifyContent: 'center', 
+      alignItems: 'center' 
+    },
+    modalSummaryLabel: { 
+      fontSize: 11, 
+      fontWeight: '600', 
+      textTransform: 'uppercase', 
+      color: c.textSec 
+    },
+    modalSummaryValue: { fontSize: 20, fontWeight: '800', marginTop: 2 },
+    modalSummaryDivider: { 
+      width: 1, 
+      backgroundColor: c.border, 
+      marginHorizontal: 15 
+    },
+    
+    // Table
+    tableHeader: { 
+      flexDirection: 'row', 
+      paddingVertical: 12, 
+      paddingHorizontal: 20, 
+      marginHorizontal: 20, 
+      borderRadius: 12 
+    },
+    tableHeaderText: { 
+      color: '#fff', 
+      fontSize: 11, 
+      fontWeight: '700', 
+      textTransform: 'uppercase' 
+    },
+    tableRow: { 
+      flexDirection: 'row', 
+      alignItems: 'center', 
+      paddingVertical: 14, 
+      paddingHorizontal: 20, 
+      marginHorizontal: 20, 
+      borderBottomWidth: 1, 
+      borderBottomColor: c.border 
+    },
+    tableCellName: { fontSize: 14, fontWeight: '600', color: c.text },
+    tableCell: { fontSize: 13, color: c.textSec },
+    tableCellTotal: { fontSize: 14, fontWeight: '700' },
+    
+    emptyState: { alignItems: 'center', marginTop: 80 },
+    emptyIcon: { 
+      width: 100, 
+      height: 100, 
+      borderRadius: 50, 
+      backgroundColor: dark ? '#1E293B' : '#F1F5F9', 
+      justifyContent: 'center', 
+      alignItems: 'center', 
+      marginBottom: 15 
+    },
+    emptyText: { fontSize: 18, fontWeight: '700', color: c.text },
+    emptySubText: { fontSize: 14, color: c.textSec, marginTop: 5 },
+    
+    modalFooter: { 
+      flexDirection: 'row', 
+      justifyContent: 'space-between', 
+      alignItems: 'center', 
+      padding: 20, 
+      backgroundColor: dark ? '#0F172A' : '#F8FAFC', 
+      borderTopWidth: 1, 
+      borderTopColor: c.border 
+    },
+    modalFooterLabel: { 
+      fontSize: 14, 
+      fontWeight: '700', 
+      textTransform: 'uppercase', 
+      color: c.textSec 
+    },
+    modalFooterValue: { fontSize: 26, fontWeight: '800' },
+    
+    // NAVBAR
+    navbar: { 
+      flexDirection: 'row', 
+      justifyContent: 'space-around', 
+      alignItems: 'center',
+      backgroundColor: c.card, 
+      borderTopLeftRadius: 25, 
+      borderTopRightRadius: 25,
+      paddingTop: 15, 
+      position: 'absolute', 
+      bottom: 0, 
+      width: '100%',
+      shadowColor: '#000', 
+      shadowOffset: { width: 0, height: -4 }, 
+      shadowOpacity: 0.05, 
+      shadowRadius: 10, 
+      elevation: 10 
+    },
+    navItem: { alignItems: 'center' },
+    navText: { fontSize: 11, color: '#94A3B8', marginTop: 4, fontWeight: '600' },
+    
+    fab: { 
+      width: 60, 
+      height: 60, 
+      borderRadius: 30, 
+      shadowOpacity: 0.35, 
+      shadowRadius: 10, 
+      elevation: 10 
+    },
+    fabGradient: { 
+      width: '100%', 
+      height: '100%', 
+      borderRadius: 30, 
+      justifyContent: 'center', 
+      alignItems: 'center' 
+    },
+  });
 };

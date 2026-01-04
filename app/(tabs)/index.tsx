@@ -8,172 +8,458 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
-import formatMoney from '../../src/utils/formatMoney';
-import { fr, enUS } from 'date-fns/locale';
+import { fr } from 'date-fns/locale';
 import { LinearGradient } from 'expo-linear-gradient';
+// ❌ SUPPRIMER CETTE LIGNE:
+// import * as Notifications from 'expo-notifications';
 
 import { getDb } from '../../src/db/init';
-import { Logo } from '../../src/components/Logo';
 import { useTheme, THEMES } from '../../src/context/ThemeContext'; 
 import { useSettings } from '../../src/context/SettingsContext'; 
 import * as NotifService from '../../src/services/notificationService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// --- DICTIONNAIRE DE TRADUCTION ---
-const TRADUCTIONS: any = {
-  fr: {
-    ongoing: 'En cours',
-    history: 'Historique',
-    list_ongoing_title: 'Listes à faire',
-    list_history_title: 'Courses terminées',
-    mark_done: 'Marquer comme terminé',
-    reopen_list: 'Rouvrir la liste',
-    rename: 'Renommer',
-    delete: 'Supprimer',
-    delete_list: 'Supprimer la liste',
-    cancel: 'Annuler',
-    confirm: 'Confirmer',
-    save: 'Enregistrer',
-    empty_ongoing: 'Aucune liste en cours',
-    empty_history: 'Aucun historique',
-    search: 'Rechercher...',
-    check_prices_title: 'Vérification',
-    check_prices_msg: 'Avez-vous bien vérifié les prix réels avant de terminer ?',
-    delete_title: 'Supprimer la liste ?',
-    delete_msg: 'Cette action est irréversible.',
-    delete_list_confirm: 'Voulez-vous vraiment supprimer',
-    expenses: 'Dépenses',
-    articles: 'Articles',
-    welcome: 'Accueil',
-    reports: 'Rapports',
-    settings: 'Paramètres',
-    choose_theme: 'Choisir un thème',
-    dark_mode: 'Mode sombre',
-    language: 'Langue',
-    help: 'Aide & Astuces',
-    sort_by: 'Trier par',
-    sort_date: 'Date',
-    sort_amount: 'Montant',
-    tips_title: 'Astuces',
-    tips_content: ["Une fois dans l'historique, la liste ne peut plus être modifiée.", "Supprimez les anciennes listes pour garder l'application rapide."],
-    understood: 'Compris',
-    list_archived: "Liste déplacée dans l'historique",
-    list_active: "Liste remise dans les cours en cours",
-    done: "Terminé",
-    reopened: "Rouvert"
-  },
-  mg: {
-    ongoing: 'Mbola atao',
-    history: 'Efa vita',
-    list_ongoing_title: 'Lisitra mbola ho vidiana',
-    list_history_title: 'Lisitra efa vita',
-    mark_done: 'Marihina fa vita',
-    reopen_list: 'Averina sokafana',
-    rename: 'Hanova anarana',
-    delete: 'Hamafa',
-    delete_list: 'Hamafa ny liste',
-    cancel: 'Foanana',
-    confirm: 'Hamafisina',
-    save: 'Tehirizina',
-    empty_ongoing: 'Tsy misy lisitra an-dalam-panaovana',
-    empty_history: 'Tsy misy tantara voatahiry',
-    search: 'Karoka...',
-    check_prices_title: 'Fanamarinana',
-    check_prices_msg: 'Voamarinao ve fa tena ireo ny vidiny nividianana tany an-tsena?',
-    delete_title: 'Hamafa ity lisitra ity?',
-    delete_msg: 'Tsy ho hita intsony ity rehefa voafafa.',
-    delete_list_confirm: "Te hamafa an'i",
-    expenses: 'Fandaniana',
-    articles: 'Entana',
-    welcome: 'Fandraisana',
-    reports: 'Tatitra',
-    settings: 'Fikirakirana',
-    choose_theme: 'Safidio ny loko',
-    dark_mode: 'Mode mainty',
-    language: 'Fiteny',
-    help: 'Fanampiana',
-    sort_by: 'Alahatra araka',
-    sort_date: 'Daty',
-    sort_amount: 'Vola',
-    tips_title: 'Torohevitra',
-    tips_content: ["Rehefa tafiditra ao amin'ny 'Efa vita' ny lisitra dia tsy azo ovaina intsony.", "Fafao ny lisitra tranainy mba hampilamina ny finday."],
-    understood: 'Mazava',
-    list_archived: "Nafindra any amin'ny Historique",
-    list_active: "Naverina amin'ny En cours",
-    done: "Vita",
-    reopened: "Niverina"
-  }
+// ❌ SUPPRIMER CES LIGNES (lignes 28-34):
+// Notifications.setNotificationHandler({
+//   handleNotification: async () => ({
+//     shouldShowAlert: true,
+//     shouldPlaySound: true,
+//     shouldSetBadge: false,
+//   }),
+// });
+
+
+const formatMoney = (value: number) => {
+  if (!value && value !== 0) return '0';
+  const num = Number(value);
+  if (isNaN(num)) return '0';
+  return num.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 };
 
-// --- COMPOSANT: CONFIRMATION MODAL DESIGN ---
-const BeautifulConfirmModal = ({ visible, title, message, onConfirm, onCancel, confirmText, cancelText, activeTheme, type = 'danger' }: any) => {
-    if (!visible) return null;
-    const scaleAnim = useRef(new Animated.Value(0.8)).current;
-    const opacityAnim = useRef(new Animated.Value(0)).current;
-
-    useEffect(() => {
-        if (visible) {
-            Animated.parallel([
-                Animated.spring(scaleAnim, { toValue: 1, friction: 6, useNativeDriver: true }),
-                Animated.timing(opacityAnim, { toValue: 1, duration: 200, useNativeDriver: true })
-            ]).start();
-        }
-    }, [visible]);
-
-    const isDanger = type === 'danger';
-    const mainColor = isDanger ? '#EF4444' : activeTheme.primary;
-
-    return (
-        <Modal transparent visible={visible} animationType="none" onRequestClose={onCancel}>
-            <View style={styles(activeTheme).modalOverlay}>
-                <Animated.View style={[styles(activeTheme).modalContent, { transform: [{ scale: scaleAnim }], opacity: opacityAnim }]}>
-                    <View style={[styles(activeTheme).iconWrapper, { backgroundColor: isDanger ? '#FEE2E2' : activeTheme.secondary }]}>
-                        <Ionicons name={isDanger ? "trash-outline" : "alert-circle-outline"} size={32} color={mainColor} />
-                    </View>
-                    <Text style={styles(activeTheme).modalTitleText}>{title}</Text>
-                    <Text style={styles(activeTheme).modalMessageText}>{message}</Text>
-                    <View style={styles(activeTheme).modalBtnRow}>
-                        <TouchableOpacity onPress={onCancel} style={styles(activeTheme).modalBtnCancel}>
-                            <Text style={styles(activeTheme).modalBtnCancelText}>{cancelText}</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={onConfirm} style={[styles(activeTheme).modalBtnConfirm, { backgroundColor: mainColor }]}>
-                            <Text style={styles(activeTheme).modalBtnConfirmText}>{confirmText}</Text>
-                        </TouchableOpacity>
-                    </View>
-                </Animated.View>
-            </View>
-        </Modal>
-    );
+const TEXTS = {
+  ongoing: 'En cours',
+  history: 'Historique',
+  list_ongoing_title: 'Listes à faire',
+  list_history_title: 'Courses terminées',
+  mark_done: 'Marquer comme terminé',
+  rename: 'Renommer',
+  delete: 'Supprimer',
+  cancel: 'Annuler',
+  confirm: 'Confirmer',
+  save: 'Enregistrer',
+  empty_ongoing: 'Aucune liste en cours',
+  empty_history: 'Aucun historique',
+  search: 'Rechercher une liste...',
+  check_prices_title: 'Vérification',
+  check_prices_msg: 'Avez-vous bien vérifié les prix réels avant de terminer ?',
+  delete_title: 'Supprimer la liste ?',
+  delete_msg: 'Cette action est irréversible.',
+  expenses: 'Dépenses',
+  articles: 'Articles',
+  welcome: 'Accueil',
+  reports: 'Rapports',
+  settings: 'Paramètres',
+  choose_theme: 'Choisir un thème',
+  dark_mode: 'Mode sombre',
+  help: 'Aide & Guide',
+  sort_by: 'Trier par',
+  sort_date: 'Date',
+  sort_name: 'Nom',
+  sort_amount: 'Montant',
+  list_archived: "Liste déplacée dans l'historique",
+  done: "Terminé",
+  appearance: "APPARENCE",
+  support: "SUPPORT",
+  help_title: "Aide & Guide d'utilisation",
+  help_subtitle: "Tout ce que vous devez savoir",
+  getting_started: "Premiers pas",
+  features: "Fonctionnalités",
+  tips_tricks: "Astuces",
+  faq: "Questions fréquentes",
+  got_it: "J'ai compris",
+  monthly_summary: "Ce mois",
+  gs_title: "🚀 Démarrer avec E-Tsena",
+  gs_1: "Appuyez sur le bouton + pour créer une nouvelle liste",
+  gs_2: "Ajoutez vos produits en tapant leur nom",
+  gs_3: "Touchez un produit pour entrer la quantité et le prix",
+  gs_4: "Une fois terminé, marquez la liste comme 'Terminée'",
+  gs_5: "Consultez vos rapports pour suivre vos dépenses",
+  ft_title: "✨ Fonctionnalités principales",
+  ft_1: "📝 Création de listes illimitées",
+  ft_2: "💰 Suivi du budget avec alertes",
+  ft_3: "📊 Rapports détaillés et graphiques",
+  ft_4: "🔔 Rappels programmables",
+  ft_5: "🎨 Thèmes personnalisables",
+  ft_6: "📱 Historique complet",
+  ft_7: "🔍 Recherche et tri des listes",
+  tp_title: "💡 Astuces",
+  tp_1: "Appui long sur un produit pour modifier son nom",
+  tp_2: "Les prix suggérés sont basés sur vos achats précédents",
+  tp_3: "Définissez un budget pour recevoir des alertes",
+  tp_4: "Les listes terminées ne peuvent plus être modifiées",
+  faq_title: "❓ Questions fréquentes",
+  faq_q1: "Comment supprimer un article ?",
+  faq_a1: "Appuyez sur le bouton X à côté de l'article.",
+  faq_q2: "Puis-je modifier une liste terminée ?",
+  faq_a2: "Non, les listes terminées sont en lecture seule.",
+  faq_q3: "Comment définir un budget ?",
+  faq_a3: "Touchez l'icône portefeuille dans une liste.",
+  faq_q4: "Mes données sont-elles sauvegardées ?",
+  faq_a4: "Oui, localement sur votre appareil.",
 };
 
-// --- HEADER ANIMÉ ---
-const BazarHeader = () => {
-  const anim1 = useRef(new Animated.Value(0)).current;
-  const anim2 = useRef(new Animated.Value(0)).current;
+// ============================================
+// 🎨 OVERLAPPING AVEC PANIER
+// ============================================
+const AnimatedOverlapping = () => {
+  const floatAnim = useRef(new Animated.Value(0)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const cartBounce = useRef(new Animated.Value(0)).current;
+  const sparkle1 = useRef(new Animated.Value(0)).current;
+  const sparkle2 = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const createLoop = (anim: Animated.Value, duration: number, delay: number = 0) => {
-      return Animated.loop(
-        Animated.sequence([
-          Animated.timing(anim, { toValue: 1, duration: duration, delay, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
-          Animated.timing(anim, { toValue: 0, duration: duration, useNativeDriver: true, easing: Easing.inOut(Easing.ease) })
-        ])
-      );
-    };
-    Animated.parallel([ createLoop(anim1, 4000), createLoop(anim2, 6000) ]).start();
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim, { toValue: 1, duration: 3000, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+        Animated.timing(floatAnim, { toValue: 0, duration: 3000, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+      ])
+    ).start();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(rotateAnim, { toValue: 1, duration: 4000, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+        Animated.timing(rotateAnim, { toValue: 0, duration: 4000, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+      ])
+    ).start();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(scaleAnim, { toValue: 1.08, duration: 2500, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+        Animated.timing(scaleAnim, { toValue: 1, duration: 2500, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+      ])
+    ).start();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(cartBounce, { toValue: 1, duration: 500, useNativeDriver: true, easing: Easing.bounce }),
+        Animated.delay(2000),
+        Animated.timing(cartBounce, { toValue: 0, duration: 300, useNativeDriver: true }),
+        Animated.delay(1500),
+      ])
+    ).start();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(sparkle1, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(sparkle1, { toValue: 0, duration: 800, useNativeDriver: true }),
+        Animated.delay(400),
+      ])
+    ).start();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.delay(200),
+        Animated.timing(sparkle2, { toValue: 1, duration: 600, useNativeDriver: true }),
+        Animated.timing(sparkle2, { toValue: 0, duration: 600, useNativeDriver: true }),
+        Animated.delay(600),
+      ])
+    ).start();
   }, []);
 
-  const translateY1 = anim1.interpolate({ inputRange: [0, 1], outputRange: [0, -20] });
-  const rotate1 = anim1.interpolate({ inputRange: [0, 1], outputRange: ['-5deg', '5deg'] });
+  const translateY = floatAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -25] });
+  const rotate = rotateAnim.interpolate({ inputRange: [0, 1], outputRange: ['-8deg', '8deg'] });
+  const cartScale = cartBounce.interpolate({ inputRange: [0, 1], outputRange: [1, 1.15] });
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Animated.View style={{ position: 'absolute', top: -50, right: -50, width: 300, height: 300, borderRadius: 150, backgroundColor: 'rgba(255,255,255,0.05)', transform: [{ translateY: translateY1 }] }} />
-      <View style={{ position: 'absolute', top: 10, right: 10, width: 180, height: 180 }}>
-         <Animated.View style={{ position: 'absolute', top: 0, right: 0, opacity: 0.15, transform: [{ translateY: translateY1 }, { rotate: rotate1 }] }}><Ionicons name="cart" size={160} color="#fff" /></Animated.View>
-      </View>
+      <Animated.View 
+        style={{ 
+          position: 'absolute', 
+          top: -100, 
+          right: -100, 
+          width: 300, 
+          height: 300, 
+          borderRadius: 150, 
+          backgroundColor: 'rgba(255,255,255,0.04)',
+          transform: [{ scale: scaleAnim }]
+        }} 
+      />
+      
+      <Animated.View 
+        style={{ 
+          position: 'absolute', 
+          top: -50, 
+          right: -50, 
+          width: 200, 
+          height: 200, 
+          borderRadius: 100, 
+          backgroundColor: 'rgba(255,255,255,0.06)',
+          transform: [{ scale: scaleAnim.interpolate({ inputRange: [1, 1.08], outputRange: [1.08, 1] }) }]
+        }} 
+      />
+      
+      <Animated.View 
+        style={{ 
+          position: 'absolute', 
+          top: 15, 
+          right: -15, 
+          transform: [
+            { translateY }, 
+            { rotate }, 
+            { scale: Animated.multiply(scaleAnim, cartScale) }
+          ] 
+        }}
+      >
+        <Ionicons 
+          name="cart" 
+          size={160} 
+          color="rgba(255,255,255,0.10)" 
+          style={{
+            shadowColor: 'rgba(255,255,255,0.3)',
+            shadowOffset: { width: 0, height: 10 },
+            shadowOpacity: 0.2,
+            shadowRadius: 20,
+          }}
+        />
+      </Animated.View>
+
+      <Animated.View style={{ position: 'absolute', top: 45, right: 95, opacity: sparkle1 }}>
+        <Text style={{ fontSize: 18, color: 'rgba(255,255,255,0.7)' }}>✨</Text>
+      </Animated.View>
+      
+      <Animated.View style={{ position: 'absolute', top: 85, right: 130, opacity: sparkle2 }}>
+        <Text style={{ fontSize: 16, color: 'rgba(255,255,255,0.6)' }}>✨</Text>
+      </Animated.View>
+
+      <Animated.View style={{ position: 'absolute', top: 60, right: 50, opacity: sparkle1.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }) }}>
+        <Text style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)' }}>✨</Text>
+      </Animated.View>
+
+      <Animated.View 
+        style={{ 
+          position: 'absolute', 
+          top: 100, 
+          right: 115, 
+          width: 24, 
+          height: 24, 
+          borderRadius: 12, 
+          backgroundColor: 'rgba(255,255,255,0.08)',
+          transform: [{ translateY: floatAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 18] }) }]
+        }} 
+      />
+      <Animated.View 
+        style={{ 
+          position: 'absolute', 
+          top: 65, 
+          right: 70, 
+          width: 16, 
+          height: 16, 
+          borderRadius: 8, 
+          backgroundColor: 'rgba(255,255,255,0.06)',
+          transform: [{ translateY: floatAnim.interpolate({ inputRange: [0, 1], outputRange: [10, -10] }) }]
+        }} 
+      />
+      
+      <Animated.View 
+        style={{ 
+          position: 'absolute', 
+          top: 125, 
+          right: 35, 
+          width: 12, 
+          height: 12, 
+          borderRadius: 6, 
+          backgroundColor: 'rgba(255,255,255,0.1)',
+          transform: [{ translateY: floatAnim.interpolate({ inputRange: [0, 1], outputRange: [-8, 12] }) }]
+        }} 
+      />
     </View>
+  );
+};
+
+// ============================================
+// 🎯 LOGO "e-tsena" AVEC PANIER
+// ============================================
+const UniqueLogo = ({ size = 46, activeTheme }: { size?: number; activeTheme: any }) => {
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const glowAnim = useRef(new Animated.Value(0)).current;
+  const cartWiggle = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.05, duration: 2000, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 2000, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
+      ])
+    ).start();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, { toValue: 1, duration: 1500, useNativeDriver: true }),
+        Animated.timing(glowAnim, { toValue: 0, duration: 1500, useNativeDriver: true }),
+      ])
+    ).start();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(cartWiggle, { toValue: 1, duration: 300, useNativeDriver: true, easing: Easing.bounce }),
+        Animated.delay(2500),
+        Animated.timing(cartWiggle, { toValue: 0, duration: 300, useNativeDriver: true }),
+        Animated.delay(1500),
+      ])
+    ).start();
+  }, []);
+
+  const wiggleRotate = cartWiggle.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '15deg']
+  });
+
+  return (
+    <Animated.View style={{ transform: [{ scale: pulseAnim }], flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      <View>
+        <Animated.View 
+          style={{
+            position: 'absolute',
+            width: size + 14,
+            height: size + 14,
+            borderRadius: (size + 14) / 2,
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            borderColor: glowAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: ['rgba(255,255,255,0.15)', 'rgba(255,255,255,0.4)']
+            }),
+            top: -7,
+            left: -7,
+          }}
+        />
+        
+        <View style={{
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          backgroundColor: '#fff',
+          justifyContent: 'center',
+          alignItems: 'center',
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.25,
+          shadowRadius: 8,
+          elevation: 8,
+          borderWidth: 2.5,
+          borderColor: 'rgba(255,255,255,0.95)',
+        }}>
+          <LinearGradient
+            colors={[activeTheme.primary, activeTheme.gradient?.[1] || activeTheme.secondary]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{
+              width: size - 10,
+              height: size - 10,
+              borderRadius: (size - 10) / 2,
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+          >
+            <Text style={{
+              fontSize: size * 0.48,
+              fontWeight: '900',
+              color: '#fff',
+              fontStyle: 'italic',
+              textShadowColor: 'rgba(0,0,0,0.25)',
+              textShadowOffset: { width: 1, height: 2 },
+              textShadowRadius: 3,
+              letterSpacing: -1,
+            }}>
+              e
+            </Text>
+          </LinearGradient>
+          
+          <Animated.View style={{
+            position: 'absolute',
+            bottom: -4,
+            right: -4,
+            width: 22,
+            height: 22,
+            borderRadius: 11,
+            backgroundColor: '#10B981',
+            justifyContent: 'center',
+            alignItems: 'center',
+            borderWidth: 2.5,
+            borderColor: '#fff',
+            shadowColor: '#10B981',
+            shadowOffset: { width: 0, height: 3 },
+            shadowOpacity: 0.5,
+            shadowRadius: 5,
+            elevation: 6,
+            transform: [{ rotate: wiggleRotate }]
+          }}>
+            <Ionicons name="cart" size={12} color="#fff" />
+          </Animated.View>
+        </View>
+      </View>
+
+      <Text style={{
+        fontSize: 24,
+        fontWeight: '900',
+        color: '#fff',
+        letterSpacing: -0.5,
+        textShadowColor: 'rgba(0,0,0,0.2)',
+        textShadowOffset: { width: 1, height: 2 },
+        textShadowRadius: 4,
+      }}>
+        -tsena
+      </Text>
+    </Animated.View>
+  );
+};
+
+// ============================================
+// 🔔 MODAL DE CONFIRMATION
+// ============================================
+const BeautifulConfirmModal = ({ visible, title, message, onConfirm, onCancel, confirmText, cancelText, activeTheme, isDarkMode, type = 'danger' }: any) => {
+  if (!visible) return null;
+  const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.spring(scaleAnim, { toValue: 1, friction: 6, useNativeDriver: true }),
+        Animated.timing(opacityAnim, { toValue: 1, duration: 200, useNativeDriver: true })
+      ]).start();
+    }
+  }, [visible]);
+
+  const isDanger = type === 'danger';
+  const mainColor = isDanger ? '#EF4444' : activeTheme.primary;
+  const bgColor = isDarkMode ? '#1E293B' : '#fff';
+  const textColor = isDarkMode ? '#F1F5F9' : '#1E293B';
+  const subColor = isDarkMode ? '#94A3B8' : '#64748B';
+
+  return (
+    <Modal transparent visible={visible} animationType="none" onRequestClose={onCancel}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' }}>
+        <Animated.View style={{ width: '85%', backgroundColor: bgColor, borderRadius: 28, padding: 24, alignItems: 'center', elevation: 15, transform: [{ scale: scaleAnim }], opacity: opacityAnim }}>
+          <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: isDanger ? (isDarkMode ? '#7F1D1D' : '#FEE2E2') : activeTheme.secondary, justifyContent: 'center', alignItems: 'center', marginBottom: 20 }}>
+            <Ionicons name={isDanger ? "trash-outline" : "alert-circle-outline"} size={32} color={mainColor} />
+          </View>
+          <Text style={{ fontSize: 20, fontWeight: '800', color: textColor, textAlign: 'center', marginBottom: 10 }}>{title}</Text>
+          <Text style={{ fontSize: 15, color: subColor, textAlign: 'center', marginBottom: 25, lineHeight: 22 }}>{message}</Text>
+          <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
+            <TouchableOpacity onPress={onCancel} style={{ flex: 1, paddingVertical: 14, borderRadius: 16, borderWidth: 1, borderColor: isDarkMode ? '#334155' : '#E2E8F0', alignItems: 'center' }}>
+              <Text style={{ fontSize: 16, fontWeight: '600', color: subColor }}>{cancelText}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onConfirm} style={{ flex: 1, paddingVertical: 14, borderRadius: 16, backgroundColor: mainColor, alignItems: 'center', elevation: 4 }}>
+              <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#fff' }}>{confirmText}</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      </View>
+    </Modal>
   );
 };
 
@@ -183,279 +469,425 @@ interface Achat {
   dateAchat: string;
   totalDepense: number;
   nombreArticles: number;
-  statut: number; 
+  statut: number;
 }
 
-// --- ITEM COMPONENT (UNIFIÉ & CORRIGÉ) ---
-const AchatItem = ({ item, viewMode, s, activeTheme, language, currency, onPress, onAction }: any) => {
-  const isDone = item.statut === 1; // 0 = En cours, 1 = Historique
+// ============================================
+// 🎴 CARD PROFESSIONNEL
+// ============================================
+const AchatCard = ({ item, viewMode, activeTheme, currency, onPress, onAction, isDarkMode }: any) => {
+  const isDone = item.statut === 1;
+  const formattedDate = format(new Date(item.dateAchat), 'dd MMM yyyy', { locale: fr });
+  const shortDate = format(new Date(item.dateAchat), 'dd MMM', { locale: fr });
 
-  const iconName = isDone ? 'checkmark-circle' : 'cart-outline';
-  
-  // Correction ici : on utilise directement s.textSec si possible, sinon on passe par activeTheme si besoin
-  // Mais s.textSec est un objet {color: ...}, donc on peut l'utiliser directement dans le style
-  
-  return (
-    <TouchableOpacity
-      style={viewMode === 'grid' ? s.cardGrid : s.cardList}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      {viewMode === 'grid' ? (
-        // --- MODE GRID ---
-        <>
+  const cardBg = isDarkMode ? '#1E293B' : '#FFFFFF';
+  const textColor = isDarkMode ? '#F1F5F9' : '#1E293B';
+  const subColor = isDarkMode ? '#94A3B8' : '#64748B';
+  const borderColor = isDarkMode ? '#334155' : '#E2E8F0';
+
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const onPressIn = () => {
+    Animated.spring(scaleAnim, { toValue: 0.97, friction: 8, useNativeDriver: true }).start();
+  };
+
+  const onPressOut = () => {
+    Animated.spring(scaleAnim, { toValue: 1, friction: 8, useNativeDriver: true }).start();
+  };
+
+  if (viewMode === 'grid') {
+    return (
+      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+        <TouchableOpacity
+          onPress={onPress}
+          onPressIn={onPressIn}
+          onPressOut={onPressOut}
+          activeOpacity={0.9}
+          style={{
+            width: (SCREEN_WIDTH - 52) / 2,
+            height: 175,
+            backgroundColor: cardBg,
+            borderRadius: 22,
+            padding: 16,
+            borderWidth: 2,
+            borderColor: activeTheme.primary + '25',
+            shadowColor: activeTheme.primary,
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.15,
+            shadowRadius: 12,
+            elevation: 5,
+          }}
+        >
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <View style={[s.miniBadge, { backgroundColor: activeTheme.secondary }]}>
-              <Ionicons name={iconName} size={18} color={activeTheme.primary} />
+            <View style={{ 
+              width: 44, 
+              height: 44, 
+              borderRadius: 14, 
+              backgroundColor: activeTheme.secondary, 
+              justifyContent: 'center', 
+              alignItems: 'center',
+              borderWidth: 1.5,
+              borderColor: activeTheme.primary + '30',
+            }}>
+              <Ionicons name="cart-outline" size={22} color={activeTheme.primary} />
+              {isDone && (
+                <View style={{ position: 'absolute', bottom: -4, right: -4, width: 16, height: 16, borderRadius: 8, backgroundColor: activeTheme.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: cardBg }}>
+                  <Ionicons name="checkmark" size={9} color="#fff" />
+                </View>
+              )}
             </View>
             <TouchableOpacity onPress={onAction} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name="ellipsis-horizontal" size={20} color={s.textSec.color} />
+              <Ionicons name="ellipsis-horizontal" size={20} color={subColor} />
             </TouchableOpacity>
           </View>
 
-          <Text style={s.cardTitle} numberOfLines={1}>{item.nomListe}</Text>
-          
-          <Text style={s.cardDate}>
-            {format(new Date(item.dateAchat), 'dd MMM', {
-              locale: language === 'en' ? enUS : fr,
-            })}
-          </Text>
-          
-          <Text style={[s.cardPrice, { color: activeTheme.primary }]}>
-            {formatMoney(item.totalDepense)} {currency}
-          </Text>
-        </>
-      ) : (
-        // --- MODE LIST ---
-        <>
-          <View style={[s.dateBox, { backgroundColor: activeTheme.secondary }]}>
-            <Ionicons name={iconName} size={20} color={activeTheme.primary} />
+          <View style={{ flex: 1, justifyContent: 'center', marginTop: 8 }}>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: textColor }} numberOfLines={2}>
+              {item.nomListe || 'Sans nom'}
+            </Text>
+            <Text style={{ fontSize: 12, color: subColor, marginTop: 4 }}>{shortDate}</Text>
           </View>
 
-          <View style={{ flex: 1, paddingHorizontal: 15 }}>
-            <Text style={s.cardTitle} numberOfLines={1}>{item.nomListe}</Text>
-            
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
-              <Text style={s.cardDate}>
-                {item.nombreArticles} {language === 'mg' ? 'entana' : 'articles'}
-              </Text>
-              <View
-                style={{
-                  width: 4,
-                  height: 4,
-                  borderRadius: 2,
-                  backgroundColor: '#CBD5E1',
-                  marginHorizontal: 6,
-                }}
-              />
-              <Text style={{ fontSize: 14, fontWeight: '700', color: activeTheme.primary }}>
+          <View style={{ borderTopWidth: 1, borderTopColor: borderColor, paddingTop: 10, marginTop: 8 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ fontSize: 11, color: subColor }}>{item.nombreArticles} articles</Text>
+              <Text style={{ fontSize: 16, fontWeight: '800', color: activeTheme.primary }}>
                 {formatMoney(item.totalDepense)} {currency}
               </Text>
             </View>
           </View>
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  }
 
-          <TouchableOpacity
-            onPress={onAction}
-            style={s.moreBtn}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Ionicons name="ellipsis-vertical" size={20} color={s.textSec.color} />
-          </TouchableOpacity>
-        </>
-      )}
-    </TouchableOpacity>
+  return (
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <TouchableOpacity
+        onPress={onPress}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        activeOpacity={0.9}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          backgroundColor: cardBg,
+          padding: 16,
+          borderRadius: 20,
+          borderWidth: 2,
+          borderColor: activeTheme.primary + '20',
+          shadowColor: activeTheme.primary,
+          shadowOffset: { width: 0, height: 3 },
+          shadowOpacity: 0.12,
+          shadowRadius: 10,
+          elevation: 4,
+          marginBottom: 12,
+        }}
+      >
+        <View style={{ 
+          width: 52, 
+          height: 52, 
+          borderRadius: 16, 
+          backgroundColor: activeTheme.secondary, 
+          justifyContent: 'center', 
+          alignItems: 'center',
+          borderWidth: 2,
+          borderColor: activeTheme.primary + '25',
+        }}>
+          <Ionicons name="cart-outline" size={24} color={activeTheme.primary} />
+          {isDone && (
+            <View style={{ position: 'absolute', bottom: -3, right: -3, width: 18, height: 18, borderRadius: 9, backgroundColor: activeTheme.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: cardBg }}>
+              <Ionicons name="checkmark" size={10} color="#fff" />
+            </View>
+          )}
+        </View>
+
+        <View style={{ flex: 1, paddingHorizontal: 14 }}>
+          <Text style={{ fontSize: 16, fontWeight: '700', color: textColor }} numberOfLines={1}>
+            {item.nomListe || 'Sans nom'}
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDarkMode ? '#334155' : '#F1F5F9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, gap: 4 }}>
+              <Ionicons name="calendar-outline" size={12} color={subColor} />
+              <Text style={{ fontSize: 11, fontWeight: '600', color: subColor }}>{formattedDate}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDarkMode ? '#334155' : '#F1F5F9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, gap: 4 }}>
+              <Ionicons name="cube-outline" size={12} color={subColor} />
+              <Text style={{ fontSize: 11, fontWeight: '600', color: subColor }}>{item.nombreArticles}</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={{ alignItems: 'flex-end', marginRight: 8 }}>
+          <Text style={{ fontSize: 17, fontWeight: '800', color: activeTheme.primary }}>{formatMoney(item.totalDepense)}</Text>
+          <Text style={{ fontSize: 11, fontWeight: '600', color: subColor }}>{currency}</Text>
+        </View>
+
+        <TouchableOpacity onPress={onAction} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Ionicons name="chevron-forward" size={22} color={subColor} />
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Animated.View>
   );
 };
 
-// --- MODALS ---
-const ThemesModal = ({ visible, onClose, currentTheme, setTheme, s, translations, isDarkMode }: any) => (
-  <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-    <TouchableOpacity style={s.backdrop} onPress={onClose} activeOpacity={1}>
-      <View style={s.modalCard}>
-        <View style={s.modalHeaderCenter}>
-          <Text style={s.modalTitle}>{translations.choose_theme}</Text>
-          <TouchableOpacity onPress={onClose} style={s.closeBtn}>
-            <Ionicons name="close" size={20} color={s.textSec.color} />
+// ============================================
+// 📚 MODAL AIDE
+// ============================================
+const HelpModal = ({ visible, onClose, activeTheme, isDarkMode }: any) => {
+  const [activeSection, setActiveSection] = useState<'start' | 'features' | 'tips' | 'faq'>('start');
+  const bgColor = isDarkMode ? '#0F172A' : '#F8FAFC';
+  const cardBg = isDarkMode ? '#1E293B' : '#FFFFFF';
+  const textColor = isDarkMode ? '#F1F5F9' : '#1E293B';
+  const subColor = isDarkMode ? '#94A3B8' : '#64748B';
+  const borderColor = isDarkMode ? '#334155' : '#E2E8F0';
+
+  const sections = [
+    { id: 'start', icon: 'rocket-outline', label: TEXTS.getting_started, color: '#3B82F6' },
+    { id: 'features', icon: 'star-outline', label: TEXTS.features, color: '#8B5CF6' },
+    { id: 'tips', icon: 'bulb-outline', label: TEXTS.tips_tricks, color: '#F59E0B' },
+    { id: 'faq', icon: 'help-circle-outline', label: TEXTS.faq, color: '#10B981' },
+  ];
+
+  const renderContent = () => {
+    const items: string[] = [];
+    let title = '';
+    
+    switch (activeSection) {
+      case 'start':
+        title = TEXTS.gs_title;
+        items.push(TEXTS.gs_1, TEXTS.gs_2, TEXTS.gs_3, TEXTS.gs_4, TEXTS.gs_5);
+        break;
+      case 'features':
+        title = TEXTS.ft_title;
+        items.push(TEXTS.ft_1, TEXTS.ft_2, TEXTS.ft_3, TEXTS.ft_4, TEXTS.ft_5, TEXTS.ft_6, TEXTS.ft_7);
+        break;
+      case 'tips':
+        title = TEXTS.tp_title;
+        items.push(TEXTS.tp_1, TEXTS.tp_2, TEXTS.tp_3, TEXTS.tp_4);
+        break;
+      case 'faq':
+        return (
+          <View style={{ paddingTop: 15 }}>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: textColor, marginBottom: 15 }}>{TEXTS.faq_title}</Text>
+            {[
+              { q: TEXTS.faq_q1, a: TEXTS.faq_a1 },
+              { q: TEXTS.faq_q2, a: TEXTS.faq_a2 },
+              { q: TEXTS.faq_q3, a: TEXTS.faq_a3 },
+              { q: TEXTS.faq_q4, a: TEXTS.faq_a4 },
+            ].map((item, i) => (
+              <View key={i} style={{ backgroundColor: cardBg, borderRadius: 14, borderWidth: 1, borderColor, padding: 14, marginBottom: 12 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                  <Ionicons name="help-circle" size={18} color={activeTheme.primary} />
+                  <Text style={{ flex: 1, fontSize: 14, fontWeight: '600', color: textColor }}>{item.q}</Text>
+                </View>
+                <Text style={{ fontSize: 13, lineHeight: 20, color: subColor, paddingLeft: 28 }}>{item.a}</Text>
+              </View>
+            ))}
+          </View>
+        );
+    }
+
+    return (
+      <View style={{ paddingTop: 15 }}>
+        <Text style={{ fontSize: 18, fontWeight: '800', color: textColor, marginBottom: 15 }}>{title}</Text>
+        {items.map((text, i) => (
+          <View key={i} style={{ flexDirection: 'row', backgroundColor: cardBg, borderRadius: 14, borderWidth: 1, borderColor, padding: 14, marginBottom: 10, gap: 12 }}>
+            {activeSection === 'start' && (
+              <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: activeTheme.primary, justifyContent: 'center', alignItems: 'center' }}>
+                <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>{i + 1}</Text>
+              </View>
+            )}
+            {activeSection === 'tips' && (
+              <View style={{ width: 26, height: 26, borderRadius: 8, backgroundColor: '#FEF3C7', justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name="flash" size={14} color="#F59E0B" />
+              </View>
+            )}
+            <Text style={{ flex: 1, fontSize: 14, lineHeight: 20, color: textColor }}>{text}</Text>
+          </View>
+        ))}
+      </View>
+    );
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, marginTop: 50, backgroundColor: bgColor, borderTopLeftRadius: 30, borderTopRightRadius: 30 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', padding: 20, borderBottomWidth: 1, borderColor }}>
+          <View>
+            <Text style={{ fontSize: 22, fontWeight: '800', color: textColor }}>{TEXTS.help_title}</Text>
+            <Text style={{ fontSize: 13, color: subColor, marginTop: 4 }}>{TEXTS.help_subtitle}</Text>
+          </View>
+          <TouchableOpacity onPress={onClose} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: isDarkMode ? '#334155' : '#F1F5F9', justifyContent: 'center', alignItems: 'center' }}>
+            <Ionicons name="close" size={24} color={textColor} />
           </TouchableOpacity>
         </View>
-        <ScrollView contentContainerStyle={s.themeGrid} showsVerticalScrollIndicator={false}>
-          {(Object.keys(THEMES) as Array<keyof typeof THEMES>).map((key) => {
-            const th = THEMES[key];
-            const isActive = currentTheme === key;
-            return (
-              <TouchableOpacity
-                key={key}
-                onPress={() => {
-                  setTheme(key);
-                  onClose();
-                }}
-                style={[s.themeItemWrapper, isActive && s.themeItemActive]}
-                activeOpacity={0.8}
-              >
-                <View style={[s.previewPhone, { borderColor: isActive ? th.primary : s.border.borderColor }]}>
-                  <View style={[s.previewHeader, { backgroundColor: th.primary }]}>
-                    <View style={{ width: 20, height: 3, backgroundColor: 'rgba(255,255,255,0.5)', borderRadius: 2 }} />
-                  </View>
-                  <View style={[s.previewBody, { backgroundColor: isDarkMode ? '#1E293B' : '#F8FAFC' }]}>
-                    <View style={[s.previewFab, { backgroundColor: th.primary }]}>
-                      <Ionicons name="add" size={8} color="#fff" />
-                    </View>
-                  </View>
-                  {isActive && (
-                    <View style={[s.activeCheckBadge, { backgroundColor: th.primary }]}>
-                      <Ionicons name="checkmark" size={10} color="#fff" />
-                    </View>
-                  )}
-                </View>
-                <Text
-                  style={[
-                    s.themeName,
-                    { color: isActive ? th.primary : s.textSec.color, fontWeight: isActive ? '700' : '500' },
-                  ]}
-                >
-                  {th.name}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </View>
-    </TouchableOpacity>
-  </Modal>
-);
 
-const SettingsModal = ({ visible, onClose, isDarkMode, toggleDarkMode, language, setLanguage, setShowHelp, s, activeTheme, translations }: any) => (
-  <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-    <View style={s.modalContainerFull}>
-      <View style={s.modalHeader}>
-        <Text style={s.modalBigTitle}>{translations.settings}</Text>
-        <TouchableOpacity onPress={onClose} style={s.closeCircle}>
-          <Ionicons name="close" size={24} color={s.text.color} />
-        </TouchableOpacity>
-      </View>
-      <ScrollView style={{ padding: 20 }}>
-        <Text style={s.sectionHeader}>APPARENCE</Text>
-        <View style={s.settingSection}>
-          <View style={s.settingRow}>
-            <View style={[s.iconBox, { backgroundColor: activeTheme.secondary }]}>
-              <Ionicons name="moon" size={20} color={activeTheme.primary} />
-            </View>
-            <Text style={s.settingText}>{translations.dark_mode}</Text>
-            <Switch
-              value={isDarkMode}
-              onValueChange={toggleDarkMode}
-              trackColor={{ true: activeTheme.primary, false: '#E0E0E0' }}
-            />
-          </View>
-        </View>
-        <Text style={s.sectionHeader}>GÉNÉRAL</Text>
-        <View style={s.settingSection}>
-          <View style={[s.settingRow, { borderBottomWidth: 0 }]}>
-            <View style={[s.iconBox, { backgroundColor: '#E0F2FE' }]}>
-              <Ionicons name="language" size={20} color="#0284C7" />
-            </View>
-            <Text style={s.settingText}>{translations.language}</Text>
-            <View
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 55 }} contentContainerStyle={{ paddingHorizontal: 15, paddingVertical: 8, gap: 8 }}>
+          {sections.map((section) => (
+            <TouchableOpacity
+              key={section.id}
+              onPress={() => setActiveSection(section.id as any)}
               style={{
-                flexDirection: 'row',
-                gap: 5,
-                backgroundColor: s.bg.backgroundColor,
-                padding: 4,
-                borderRadius: 8,
+                flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1,
+                borderColor: activeSection === section.id ? section.color : borderColor,
+                backgroundColor: activeSection === section.id ? section.color + '20' : 'transparent', gap: 6,
               }}
             >
-              {['fr', 'mg'].map((l) => (
-                <TouchableOpacity
-                  key={l}
-                  onPress={() => setLanguage(l as any)}
-                  style={[
-                    s.langBtn,
-                    language === l && { backgroundColor: activeTheme.primary, shadowOpacity: 0.1 },
-                  ]}
-                >
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      fontWeight: '700',
-                      color: language === l ? '#fff' : s.textSec.color,
-                    }}
-                  >
-                    {l.toUpperCase()}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
+              <Ionicons name={section.icon as any} size={18} color={activeSection === section.id ? section.color : subColor} />
+              <Text style={{ fontSize: 12, fontWeight: '600', color: activeSection === section.id ? section.color : subColor }}>{section.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        <ScrollView style={{ flex: 1, paddingHorizontal: 20 }} showsVerticalScrollIndicator={false}>
+          {renderContent()}
+          <View style={{ height: 100 }} />
+        </ScrollView>
+
+        <View style={{ padding: 20, borderTopWidth: 1, borderColor, backgroundColor: bgColor }}>
+          <TouchableOpacity onPress={onClose} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 16, borderRadius: 16, backgroundColor: activeTheme.primary, gap: 8 }}>
+            <Ionicons name="checkmark-circle" size={20} color="#fff" />
+            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>{TEXTS.got_it}</Text>
+          </TouchableOpacity>
         </View>
-        
-        <Text style={s.sectionHeader}>AIDE</Text>
-        <View style={s.settingSection}>
-           <TouchableOpacity style={[s.settingRow, {borderBottomWidth:0}]} onPress={() => setShowHelp(true)}>
-              <View style={[s.iconBox, { backgroundColor: '#FEF3C7' }]}>
-                  <Ionicons name="bulb" size={20} color="#D97706" />
+      </View>
+    </Modal>
+  );
+};
+
+const SettingsModal = ({ visible, onClose, isDarkMode, toggleDarkMode, currentTheme, setTheme, setShowHelp, activeTheme }: any) => {
+  const [showThemes, setShowThemes] = useState(false);
+  const bgColor = isDarkMode ? '#0F172A' : '#F8FAFC';
+  const cardBg = isDarkMode ? '#1E293B' : '#FFFFFF';
+  const textColor = isDarkMode ? '#F1F5F9' : '#1E293B';
+  const subColor = isDarkMode ? '#94A3B8' : '#64748B';
+  const borderColor = isDarkMode ? '#334155' : '#E2E8F0';
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, marginTop: 50, backgroundColor: bgColor, borderTopLeftRadius: 30, borderTopRightRadius: 30 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderColor }}>
+          <Text style={{ fontSize: 24, fontWeight: '800', color: textColor }}>{TEXTS.settings}</Text>
+          <TouchableOpacity onPress={onClose} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: isDarkMode ? '#334155' : '#F1F5F9', justifyContent: 'center', alignItems: 'center' }}>
+            <Ionicons name="close" size={24} color={textColor} />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView style={{ padding: 20 }}>
+          <Text style={{ fontSize: 12, fontWeight: '700', color: subColor, marginTop: 10, marginBottom: 10, letterSpacing: 1 }}>{TEXTS.appearance}</Text>
+          <View style={{ backgroundColor: cardBg, borderRadius: 16, borderWidth: 1, borderColor }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderColor }}>
+              <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: isDarkMode ? '#312E81' : '#EEF2FF', justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name="moon-outline" size={20} color={isDarkMode ? '#A5B4FC' : '#6366F1'} />
               </View>
-              <Text style={s.settingText}>{translations.help}</Text>
-              <Ionicons name="chevron-forward" size={20} color={s.textSec.color} />
-           </TouchableOpacity>
-        </View>
+              <Text style={{ flex: 1, fontSize: 16, fontWeight: '600', color: textColor, marginLeft: 14 }}>{TEXTS.dark_mode}</Text>
+              <Switch value={isDarkMode} onValueChange={toggleDarkMode} trackColor={{ true: activeTheme.primary, false: isDarkMode ? '#475569' : '#E0E0E0' }} thumbColor="#fff" />
+            </View>
 
-      </ScrollView>
-    </View>
-  </Modal>
-);
+            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', padding: 16 }} onPress={() => setShowThemes(!showThemes)}>
+              <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: activeTheme.secondary, justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name="color-palette-outline" size={20} color={activeTheme.primary} />
+              </View>
+              <Text style={{ flex: 1, fontSize: 16, fontWeight: '600', color: textColor, marginLeft: 14 }}>{TEXTS.choose_theme}</Text>
+              <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: activeTheme.primary, marginRight: 8 }} />
+              <Ionicons name={showThemes ? "chevron-up" : "chevron-down"} size={20} color={subColor} />
+            </TouchableOpacity>
 
-const ActionsModal = ({ visible, onClose, selectedAchat, handleRename, handleDelete, toggleStatus, s, activeTheme, translations }: any) => {
+            {showThemes && (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', padding: 16, gap: 12, justifyContent: 'center', borderTopWidth: 1, borderColor }}>
+                {(Object.keys(THEMES) as Array<keyof typeof THEMES>).map((key) => {
+                  const th = THEMES[key];
+                  const isActive = currentTheme === key;
+                  return (
+                    <TouchableOpacity key={key} onPress={() => setTheme(key)} style={{ width: 70, alignItems: 'center', padding: 10, borderRadius: 12, borderWidth: isActive ? 2 : 1, borderColor: isActive ? th.primary : 'transparent' }}>
+                      <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: th.primary, justifyContent: 'center', alignItems: 'center', marginBottom: 6 }}>
+                        {isActive && <Ionicons name="checkmark" size={16} color="#fff" />}
+                      </View>
+                      <Text style={{ fontSize: 11, fontWeight: '600', color: isActive ? th.primary : subColor, textAlign: 'center' }}>{th.name}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+
+          <Text style={{ fontSize: 12, fontWeight: '700', color: subColor, marginTop: 20, marginBottom: 10, letterSpacing: 1 }}>{TEXTS.support}</Text>
+          <View style={{ backgroundColor: cardBg, borderRadius: 16, borderWidth: 1, borderColor }}>
+            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', padding: 16 }} onPress={() => { onClose(); setTimeout(() => setShowHelp(true), 300); }}>
+              <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: '#FEF3C7', justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name="information-circle-outline" size={20} color="#D97706" />
+              </View>
+              <Text style={{ flex: 1, fontSize: 16, fontWeight: '600', color: textColor, marginLeft: 14 }}>{TEXTS.help}</Text>
+              <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: '#F59E0B', justifyContent: 'center', alignItems: 'center', marginRight: 8 }}>
+                <Ionicons name="help" size={12} color="#fff" />
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={subColor} />
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+};
+
+const ActionsModal = ({ visible, onClose, selectedAchat, handleRename, handleDelete, toggleStatus, activeTheme, isDarkMode }: any) => {
   const isHistory = selectedAchat?.statut === 1;
+  const bgColor = isDarkMode ? '#1E293B' : '#FFFFFF';
+  const textColor = isDarkMode ? '#F1F5F9' : '#1E293B';
+  const subColor = isDarkMode ? '#94A3B8' : '#64748B';
+  const borderColor = isDarkMode ? '#334155' : '#E2E8F0';
+  const itemBg = isDarkMode ? '#0F172A' : '#F8FAFC';
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <TouchableOpacity style={s.backdrop} onPress={onClose} activeOpacity={1}>
-        <View style={s.actionSheetContainer}>
-          <View style={s.dragHandle} />
-          <View style={s.actionSheetHeader}>
-            <View style={[s.iconCircle, { backgroundColor: activeTheme.secondary }]}>
-              <Ionicons name="receipt-outline" size={24} color={activeTheme.primary} />
+      <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' }} onPress={onClose} activeOpacity={1}>
+        <View style={{ backgroundColor: bgColor, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 40 }}>
+          <View style={{ width: 40, height: 5, backgroundColor: borderColor, borderRadius: 3, alignSelf: 'center', marginBottom: 20 }} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 15, marginBottom: 25, paddingBottom: 20, borderBottomWidth: 1, borderColor }}>
+            <View style={{ width: 52, height: 52, borderRadius: 16, backgroundColor: activeTheme.secondary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: activeTheme.primary + '30' }}>
+              <Ionicons name="cart-outline" size={24} color={activeTheme.primary} />
+              {isHistory && (
+                <View style={{ position: 'absolute', bottom: -2, right: -2, width: 18, height: 18, borderRadius: 9, backgroundColor: activeTheme.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: bgColor }}>
+                  <Ionicons name="checkmark" size={10} color="#fff" />
+                </View>
+              )}
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={s.actionSheetTitle} numberOfLines={1}>
-                {selectedAchat?.nomListe}
-              </Text>
-              <Text style={s.actionSheetSub}>{isHistory ? translations.history : translations.ongoing}</Text>
+              <Text style={{ fontSize: 18, fontWeight: '700', color: textColor }} numberOfLines={1}>{selectedAchat?.nomListe || 'Sans nom'}</Text>
+              <Text style={{ fontSize: 13, color: subColor, marginTop: 3 }}>{isHistory ? TEXTS.history : TEXTS.ongoing}</Text>
             </View>
           </View>
-          <View style={s.actionList}>
-            <TouchableOpacity
-              style={[s.actionSheetBtn, { borderColor: isHistory ? '#10B981' : activeTheme.primary }]}
-              onPress={toggleStatus}
-            >
-              <View style={[s.actionIcon, { backgroundColor: isHistory ? '#D1FAE5' : activeTheme.secondary }]}>
-                <Ionicons 
-                  name={isHistory ? "refresh" : "checkmark-circle"} 
-                  size={20} 
-                  color={isHistory ? "#059669" : activeTheme.primary} 
-                />
-              </View>
-              <Text style={[s.actionText, { color: isHistory ? "#059669" : activeTheme.primary }]}>
-                {isHistory ? translations.reopen_list : translations.mark_done}
-              </Text>
-            </TouchableOpacity>
 
-            <TouchableOpacity style={s.actionSheetBtn} onPress={handleRename}>
-              <View style={[s.actionIcon, { backgroundColor: s.bg.backgroundColor }]}>
-                <Ionicons name="pencil" size={20} color={s.text.color} />
-              </View>
-              <Text style={s.actionText}>{translations.rename}</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={s.actionSheetBtn} onPress={handleDelete}>
-              <View style={[s.actionIcon, { backgroundColor: '#FEE2E2' }]}>
+          <View style={{ gap: 10 }}>
+            {!isHistory && (
+              <>
+                <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', padding: 14, backgroundColor: itemBg, borderRadius: 14, borderWidth: 1, borderColor }} onPress={toggleStatus}>
+                  <View style={{ width: 38, height: 38, borderRadius: 10, backgroundColor: activeTheme.secondary, justifyContent: 'center', alignItems: 'center', marginRight: 14 }}>
+                    <Ionicons name="checkmark-circle" size={20} color={activeTheme.primary} />
+                  </View>
+                  <Text style={{ flex: 1, fontSize: 15, fontWeight: '600', color: activeTheme.primary }}>{TEXTS.mark_done}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', padding: 14, backgroundColor: itemBg, borderRadius: 14, borderWidth: 1, borderColor }} onPress={handleRename}>
+                  <View style={{ width: 38, height: 38, borderRadius: 10, backgroundColor: isDarkMode ? '#334155' : '#F1F5F9', justifyContent: 'center', alignItems: 'center', marginRight: 14 }}>
+                    <Ionicons name="pencil" size={20} color={textColor} />
+                  </View>
+                  <Text style={{ flex: 1, fontSize: 15, fontWeight: '600', color: textColor }}>{TEXTS.rename}</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', padding: 14, backgroundColor: itemBg, borderRadius: 14, borderWidth: 1, borderColor }} onPress={handleDelete}>
+              <View style={{ width: 38, height: 38, borderRadius: 10, backgroundColor: isDarkMode ? '#7F1D1D' : '#FEE2E2', justifyContent: 'center', alignItems: 'center', marginRight: 14 }}>
                 <Ionicons name="trash" size={20} color="#EF4444" />
               </View>
-              <Text style={[s.actionText, { color: '#EF4444' }]}>{translations.delete}</Text>
+              <Text style={{ flex: 1, fontSize: 15, fontWeight: '600', color: '#EF4444' }}>{TEXTS.delete}</Text>
             </TouchableOpacity>
           </View>
-          <TouchableOpacity style={s.cancelBtn} onPress={onClose}>
-            <Text style={s.cancelText}>{translations.cancel}</Text>
+
+          <TouchableOpacity style={{ marginTop: 15, padding: 14, alignItems: 'center' }} onPress={onClose}>
+            <Text style={{ fontSize: 15, fontWeight: '600', color: subColor }}>{TEXTS.cancel}</Text>
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -463,120 +895,72 @@ const ActionsModal = ({ visible, onClose, selectedAchat, handleRename, handleDel
   );
 };
 
-const SortModal = ({ visible, onClose, setSortMode, s, translations }: any) => (
-  <Modal visible={visible} transparent animationType="fade">
-    <TouchableOpacity style={s.backdrop} onPress={onClose}>
-      <View style={s.modalCard}>
-        <Text style={[s.modalTitle, { marginBottom: 15 }]}>{translations.sort_by}</Text>
-        <TouchableOpacity
-          onPress={() => {
-            setSortMode('date');
-            onClose();
-          }}
-          style={{ padding: 16, borderBottomWidth: 1, borderColor: s.border.borderColor }}
-        >
-          <Text style={{ textTransform: 'capitalize', color: s.text.color }}>
-            {translations.sort_date}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => {
-            setSortMode('amount');
-            onClose();
-          }}
-          style={{ padding: 16 }}
-        >
-          <Text style={{ textTransform: 'capitalize', color: s.text.color }}>
-            {translations.sort_amount}
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </TouchableOpacity>
-  </Modal>
-);
+const SortModal = ({ visible, onClose, setSortMode, sortMode, activeTheme, isDarkMode }: any) => {
+  const bgColor = isDarkMode ? '#1E293B' : '#FFFFFF';
+  const textColor = isDarkMode ? '#F1F5F9' : '#1E293B';
+  const subColor = isDarkMode ? '#94A3B8' : '#64748B';
 
-const HelpModal = ({ visible, onClose, s, activeTheme, translations }: any) => (
-  <Modal visible={visible} transparent animationType="fade">
-    <View style={s.backdrop}>
-      <View style={s.modalCard}>
-        <Ionicons
-          name="bulb-outline"
-          size={40}
-          color="#F59E0B"
-          style={{ alignSelf: 'center', marginBottom: 10 }}
-        />
-        <Text style={[s.modalTitle, { textAlign: 'center' }]}>{translations.tips_title}</Text>
-        <ScrollView style={{ maxHeight: 300, marginVertical: 15 }}>
-          {translations.tips_content.map((tip: string, i: number) => (
-            <Text
-              key={i}
-              style={{ marginBottom: 8, color: s.textSec.color, lineHeight: 20 }}
+  return (
+    <Modal visible={visible} transparent animationType="fade">
+      <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }} onPress={onClose} activeOpacity={1}>
+        <View style={{ width: '85%', backgroundColor: bgColor, padding: 24, borderRadius: 24 }}>
+          <Text style={{ fontSize: 18, fontWeight: 'bold', color: textColor, textAlign: 'center', marginBottom: 15 }}>{TEXTS.sort_by}</Text>
+          {[
+            { key: 'date', icon: 'calendar-outline', label: TEXTS.sort_date },
+            { key: 'name', icon: 'text-outline', label: TEXTS.sort_name },
+            { key: 'amount', icon: 'wallet-outline', label: TEXTS.sort_amount },
+          ].map((item) => (
+            <TouchableOpacity
+              key={item.key}
+              onPress={() => { setSortMode(item.key); onClose(); }}
+              style={{ flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 12, marginBottom: 8, gap: 12, backgroundColor: sortMode === item.key ? activeTheme.secondary : 'transparent' }}
             >
-              • {tip}
-            </Text>
+              <Ionicons name={item.icon as any} size={20} color={sortMode === item.key ? activeTheme.primary : subColor} />
+              <Text style={{ flex: 1, fontSize: 15, color: sortMode === item.key ? activeTheme.primary : textColor, fontWeight: sortMode === item.key ? '700' : '500' }}>{item.label}</Text>
+              {sortMode === item.key && <Ionicons name="checkmark" size={20} color={activeTheme.primary} />}
+            </TouchableOpacity>
           ))}
-        </ScrollView>
-        <TouchableOpacity
-          onPress={onClose}
-          style={{
-            backgroundColor: activeTheme.primary,
-            padding: 12,
-            borderRadius: 12,
-            alignItems: 'center',
-          }}
-        >
-          <Text style={{ color: '#fff', fontWeight: 'bold' }}>{translations.understood}</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  </Modal>
-);
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+};
 
 export default function Home() {
   const { currentTheme, setTheme, activeTheme, isDarkMode, toggleDarkMode, getStyles } = useTheme();
-  const { currency, language, setLanguage } = useSettings();
+  const { currency } = useSettings();
   const insets = useSafeAreaInsets();
   const s = getStyles(styles);
 
-  const TEXTS = TRADUCTIONS[language] || TRADUCTIONS.fr;
-  
   const [achats, setAchats] = useState<Achat[]>([]);
   const [filteredAchats, setFilteredAchats] = useState<Achat[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [sortMode, setSortMode] = useState<'date' | 'name' | 'amount'>('date');
-  
   const [activeTab, setActiveTab] = useState<'ongoing' | 'history'>('ongoing');
-
   const [showSettings, setShowSettings] = useState(false);
   const [showSort, setShowSort] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showActions, setShowActions] = useState(false);
-  const [showThemes, setShowThemes] = useState(false);
   const [selectedAchat, setSelectedAchat] = useState<Achat | null>(null);
-  
   const [deleteModal, setDeleteModal] = useState(false);
   const [renameModal, setRenameModal] = useState(false);
   const [newListName, setNewListName] = useState('');
-  
   const [unreadCount, setUnreadCount] = useState(0);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  // Calculs Dashboard
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
   const monthlyAchats = achats.filter(a => { const d = new Date(a.dateAchat); return d.getMonth() === currentMonth && d.getFullYear() === currentYear; });
   const monthlyExpenses = monthlyAchats.reduce((acc, item) => acc + item.totalDepense, 0);
   const monthlyArticlesCount = monthlyAchats.reduce((acc, item) => acc + item.nombreArticles, 0);
-  const monthName = format(new Date(), 'MMM', { locale: language === 'en' ? enUS : fr });
+  const monthName = format(new Date(), 'MMMM', { locale: fr });
 
   const ensureSchema = (db: any) => {
     try {
       const info = db.getAllSync("PRAGMA table_info(Achat)");
       const hasStatut = info.some((col: any) => col.name === 'statut');
-      if (!hasStatut) {
-        db.runSync("ALTER TABLE Achat ADD COLUMN statut INTEGER DEFAULT 0");
-      }
+      if (!hasStatut) db.runSync("ALTER TABLE Achat ADD COLUMN statut INTEGER DEFAULT 0");
     } catch (e) { console.log("Schema check error", e); }
   };
 
@@ -586,13 +970,11 @@ export default function Home() {
       ensureSchema(db);
       db.runSync(`DELETE FROM Achat WHERE (nomListe = 'Nouvelle Liste' OR nomListe = '' OR nomListe IS NULL) AND id NOT IN (SELECT DISTINCT idAchat FROM LigneAchat)`);
       const result = db.getAllSync(`SELECT a.id, a.nomListe, a.dateAchat, a.statut, COALESCE(SUM(l.prixTotal), 0) as totalDepense, COUNT(l.id) as nombreArticles FROM Achat a LEFT JOIN LigneAchat l ON a.id = l.idAchat GROUP BY a.id ORDER BY a.dateAchat DESC`);
-      
       if (NotifService.getUnreadNotificationCount) setUnreadCount(NotifService.getUnreadNotificationCount());
-
       let sorted = [...(result as Achat[])];
-      if (sortMode === 'name') sorted.sort((a, b) => a.nomListe.localeCompare(b.nomListe));
+      if (sortMode === 'name') sorted.sort((a, b) => (a.nomListe || '').localeCompare(b.nomListe || ''));
       else if (sortMode === 'amount') sorted.sort((a, b) => b.totalDepense - a.totalDepense);
-      
+      else sorted.sort((a, b) => new Date(b.dateAchat).getTime() - new Date(a.dateAchat).getTime());
       setAchats(sorted);
       Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
     } catch (e) { console.error(e); }
@@ -602,131 +984,128 @@ export default function Home() {
 
   useEffect(() => {
     let filtered = achats;
-    if (searchQuery !== '') filtered = filtered.filter(a => a.nomListe.toLowerCase().includes(searchQuery.toLowerCase()));
-    
-    if (activeTab === 'ongoing') {
-      filtered = filtered.filter(a => (a.statut === 0 || a.statut === null));
-    } else {
-      filtered = filtered.filter(a => a.statut === 1);
-    }
+    if (searchQuery !== '') filtered = filtered.filter(a => (a.nomListe || '').toLowerCase().includes(searchQuery.toLowerCase()));
+    if (activeTab === 'ongoing') filtered = filtered.filter(a => (a.statut === 0 || a.statut === null));
+    else filtered = filtered.filter(a => a.statut === 1);
     setFilteredAchats(filtered);
   }, [searchQuery, achats, activeTab]);
 
-  const handleCreate = () => { try { const db = getDb(); const res = db.runSync('INSERT INTO Achat (nomListe, dateAchat, statut) VALUES (?, ?, 0)', ['', new Date().toISOString()]); router.push(`/achat/${res.lastInsertRowId}`); } catch (e) { console.error(e); } };
-  
+  const handleCreate = () => {
+    try {
+      const db = getDb();
+      const res = db.runSync('INSERT INTO Achat (nomListe, dateAchat, statut) VALUES (?, ?, 0)', ['', new Date().toISOString()]);
+      router.push(`/achat/${res.lastInsertRowId}`);
+    } catch (e) { console.error(e); }
+  };
+
   const handleOpenList = (item: Achat) => {
-      const isReadOnly = item.statut === 1;
-      router.push({
-          pathname: `/achat/${item.id}`,
-          params: { readOnly: isReadOnly ? '1' : '0' }
-      });
+    router.push({ pathname: `/achat/${item.id}`, params: { readOnly: item.statut === 1 ? '1' : '0' } });
   };
 
   const toggleStatus = () => {
     if (!selectedAchat) return;
-    
-    const newStatus = selectedAchat.statut === 1 ? 0 : 1;
-    
-    // Si on veut marquer comme terminé, on demande confirmation sur les prix
-    if (newStatus === 1) {
-        Alert.alert(
-            TEXTS.check_prices_title,
-            TEXTS.check_prices_msg,
-            [
-                { text: TEXTS.cancel, style: "cancel" },
-                { 
-                    text: TEXTS.confirm, 
-                    onPress: () => {
-                        try {
-                            getDb().runSync('UPDATE Achat SET statut = 1 WHERE id = ?', [selectedAchat.id]);
-                            setShowActions(false);
-                            loadData();
-                            Alert.alert(TEXTS.done, TEXTS.list_archived);
-                        } catch (e) { console.error(e); }
-                    } 
-                }
-            ]
-        );
-    } else {
-        // Si on veut rouvrir
-        try {
-            getDb().runSync('UPDATE Achat SET statut = 0 WHERE id = ?', [selectedAchat.id]);
-            setShowActions(false);
-            loadData();
-            Alert.alert(TEXTS.reopened, TEXTS.list_active);
-        } catch (e) { console.error(e); }
-    }
+    Alert.alert(TEXTS.check_prices_title, TEXTS.check_prices_msg, [
+      { text: TEXTS.cancel, style: "cancel" },
+      { text: TEXTS.confirm, onPress: () => {
+        try { getDb().runSync('UPDATE Achat SET statut = 1 WHERE id = ?', [selectedAchat.id]); setShowActions(false); loadData(); Alert.alert(TEXTS.done, TEXTS.list_archived); } catch (e) { console.error(e); }
+      }}
+    ]);
   };
 
-  const handleRename = () => { if (!selectedAchat) return; setNewListName(selectedAchat.nomListe); setShowActions(false); setTimeout(() => setRenameModal(true), 300); };
-  const confirmRename = () => { if (!selectedAchat || !newListName.trim()) return; try { getDb().runSync('UPDATE Achat SET nomListe = ? WHERE id = ?', [newListName.trim(), selectedAchat.id]); setRenameModal(false); setNewListName(''); loadData(); } catch (e) {} };
-  
+  const handleRename = () => {
+    if (!selectedAchat || selectedAchat.statut === 1) return;
+    setNewListName(selectedAchat.nomListe || '');
+    setShowActions(false);
+    setTimeout(() => setRenameModal(true), 300);
+  };
+
+  const confirmRename = () => {
+    if (!selectedAchat || !newListName.trim()) return;
+    try { getDb().runSync('UPDATE Achat SET nomListe = ? WHERE id = ?', [newListName.trim(), selectedAchat.id]); setRenameModal(false); setNewListName(''); loadData(); } catch (e) { console.error(e); }
+  };
+
   const handleDelete = () => { setShowActions(false); setTimeout(() => setDeleteModal(true), 300); };
-  const confirmDelete = () => { if (!selectedAchat) return; try { getDb().runSync('DELETE FROM LigneAchat WHERE idAchat = ?', [selectedAchat.id]); getDb().runSync('DELETE FROM Achat WHERE id = ?', [selectedAchat.id]); setDeleteModal(false); loadData(); } catch (e) {} };
+
+  const confirmDelete = () => {
+    if (!selectedAchat) return;
+    try { getDb().runSync('DELETE FROM LigneAchat WHERE idAchat = ?', [selectedAchat.id]); getDb().runSync('DELETE FROM Achat WHERE id = ?', [selectedAchat.id]); setDeleteModal(false); loadData(); } catch (e) { console.error(e); }
+  };
 
   return (
     <View style={s.container}>
       <ThemedStatusBar transparent />
+      
+      {/* Header avec gradient */}
       <LinearGradient colors={activeTheme?.gradient || ['#7143b5', '#8b5fd4']} style={[s.header, { paddingTop: insets.top + 10 }]}>
-        <BazarHeader />
+        <AnimatedOverlapping />
+        
         <View style={s.headerTop}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <Logo size={42} colors={['#fff', '#E0E7FF'] as any} animated={true} />
-            <View>
-              <Text style={s.appName}>e-tsena</Text>
-              <Text style={s.appSub}>Assistant courses</Text>
-            </View>
-          </View>
+          <UniqueLogo size={46} activeTheme={activeTheme} />
           <View style={{ flexDirection: 'row', gap: 8 }}>
-             <TouchableOpacity style={s.iconBtn} onPress={() => setShowThemes(true)}><Ionicons name="color-palette-outline" size={20} color="#fff" /></TouchableOpacity>
-             <TouchableOpacity style={s.iconBtn} onPress={() => router.push('/notifications')}><Ionicons name="notifications-outline" size={20} color="#fff" />{unreadCount > 0 && <View style={s.badge}><Text style={s.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text></View>}</TouchableOpacity>
-             <TouchableOpacity style={s.iconBtn} onPress={() => setShowSettings(true)}><Ionicons name="settings-outline" size={20} color="#fff" /></TouchableOpacity>
+            <TouchableOpacity style={s.iconBtn} onPress={() => router.push('/notifications')}>
+              <Ionicons name="notifications-outline" size={20} color="#fff" />
+              {unreadCount > 0 && <View style={s.badge}><Text style={s.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text></View>}
+            </TouchableOpacity>
+            <TouchableOpacity style={s.iconBtn} onPress={() => setShowSettings(true)}>
+              <Ionicons name="settings-outline" size={20} color="#fff" />
+            </TouchableOpacity>
           </View>
         </View>
 
         <View style={s.searchBar}>
           <Ionicons name="search-outline" size={20} color="rgba(255,255,255,0.7)" />
           <TextInput style={s.searchInput} placeholder={TEXTS.search} placeholderTextColor="rgba(255,255,255,0.6)" value={searchQuery} onChangeText={setSearchQuery} />
+          {searchQuery.length > 0 && <TouchableOpacity onPress={() => setSearchQuery('')}><Ionicons name="close-circle" size={20} color="rgba(255,255,255,0.7)" /></TouchableOpacity>}
         </View>
 
         <View style={s.tabContainer}>
-           <TouchableOpacity style={[s.tabBtn, activeTab === 'ongoing' && s.tabActive]} onPress={() => setActiveTab('ongoing')}>
-              <Text style={[s.tabText, activeTab === 'ongoing' && { color: activeTheme.primary, fontWeight: '700' }]}>{TEXTS.ongoing}</Text>
-           </TouchableOpacity>
-           <TouchableOpacity style={[s.tabBtn, activeTab === 'history' && s.tabActive]} onPress={() => setActiveTab('history')}>
-              <Text style={[s.tabText, activeTab === 'history' && { color: activeTheme.primary, fontWeight: '700' }]}>{TEXTS.history}</Text>
-           </TouchableOpacity>
-        </View>
-
-        <View style={s.summaryRow}>
-          <View style={s.summaryItem}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              <Ionicons name="wallet-outline" size={16} color={s.textSec.color} />
-              <Text style={s.summaryLabel}>{TEXTS.expenses} ({monthName})</Text>
-            </View>
-            <Text style={[s.summaryValue, { color: activeTheme.primary }]}>{formatMoney(monthlyExpenses)} {currency}</Text>
-          </View>
-          <View style={s.verticalDivider} />
-          <View style={s.summaryItem}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              <Ionicons name="cube-outline" size={16} color={s.textSec.color} />
-              <Text style={s.summaryLabel}>{TEXTS.articles} ({monthName})</Text>
-            </View>
-            <Text style={[s.summaryValue, { color: activeTheme.primary }]}>{monthlyArticlesCount}</Text>
-          </View>
+          <TouchableOpacity style={[s.tabBtn, activeTab === 'ongoing' && s.tabActive]} onPress={() => setActiveTab('ongoing')}>
+            <Ionicons name="cart-outline" size={16} color={activeTab === 'ongoing' ? activeTheme.primary : 'rgba(255,255,255,0.7)'} style={{ marginRight: 6 }} />
+            <Text style={[s.tabText, activeTab === 'ongoing' && { color: activeTheme.primary, fontWeight: '700' }]}>{TEXTS.ongoing}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[s.tabBtn, activeTab === 'history' && s.tabActive]} onPress={() => setActiveTab('history')}>
+            <Ionicons name="checkmark-circle-outline" size={16} color={activeTab === 'history' ? activeTheme.primary : 'rgba(255,255,255,0.7)'} style={{ marginRight: 6 }} />
+            <Text style={[s.tabText, activeTab === 'history' && { color: activeTheme.primary, fontWeight: '700' }]}>{TEXTS.history}</Text>
+          </TouchableOpacity>
         </View>
       </LinearGradient>
 
+      {/* ✅ CARD SUMMARY RÉDUITE */}
+      <View style={{ paddingHorizontal: 20, marginTop: -35, marginBottom: 15, zIndex: 20 }}>
+        <View style={s.summaryCard}>
+          <View style={{ alignItems: 'center', marginBottom: 8 }}>
+            <Text style={s.summaryCardTitle}>{TEXTS.monthly_summary} • {monthName}</Text>
+          </View>
+          
+          <View style={{ flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center' }}>
+            <View style={{ alignItems: 'center', flex: 1 }}>
+              <Text style={s.summaryLabel}>{TEXTS.expenses}</Text>
+              <Text style={[s.summaryValue, { color: activeTheme.primary }]}>
+                {formatMoney(monthlyExpenses)} {currency}
+              </Text>
+            </View>
+            
+            <View style={s.verticalDivider} />
+            
+            <View style={{ alignItems: 'center', flex: 1 }}>
+              <Text style={s.summaryLabel}>{TEXTS.articles}</Text>
+              <Text style={[s.summaryValue, { color: activeTheme.primary }]}>
+                {monthlyArticlesCount}
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
+
+      {/* Content */}
       <View style={s.content}>
         <View style={s.controlBar}>
-          <Text style={s.sectionTitle}>
-              {activeTab === 'ongoing' ? TEXTS.list_ongoing_title : TEXTS.list_history_title}
-          </Text>
+          <Text style={s.sectionTitle}>{activeTab === 'ongoing' ? TEXTS.list_ongoing_title : TEXTS.list_history_title}</Text>
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <TouchableOpacity style={s.outlineBtn} onPress={() => setShowSort(true)}><Ionicons name="filter-outline" size={16} color={s.textSec.color} /></TouchableOpacity>
+            <TouchableOpacity style={s.outlineBtn} onPress={() => setShowSort(true)}><Ionicons name="swap-vertical-outline" size={18} color={s.textSec.color} /></TouchableOpacity>
             <View style={s.viewToggle}>
-               <TouchableOpacity onPress={() => setViewMode('list')} style={[s.toggleBtn, viewMode === 'list' && s.toggleActive]}><Ionicons name="list" size={18} color={viewMode === 'list' ? activeTheme.primary : s.text.color} /></TouchableOpacity>
-               <TouchableOpacity onPress={() => setViewMode('grid')} style={[s.toggleBtn, viewMode === 'grid' && s.toggleActive]}><Ionicons name="grid" size={16} color={viewMode === 'grid' ? activeTheme.primary : s.text.color} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setViewMode('list')} style={[s.toggleBtn, viewMode === 'list' && s.toggleActive]}><Ionicons name="list" size={18} color={viewMode === 'list' ? activeTheme.primary : s.text.color} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setViewMode('grid')} style={[s.toggleBtn, viewMode === 'grid' && s.toggleActive]}><Ionicons name="grid" size={16} color={viewMode === 'grid' ? activeTheme.primary : s.text.color} /></TouchableOpacity>
             </View>
           </View>
         </View>
@@ -735,151 +1114,132 @@ export default function Home() {
           {filteredAchats.length > 0 ? (
             <View style={viewMode === 'grid' ? s.grid : s.list}>
               {filteredAchats.map((item) => (
-                <AchatItem key={item.id} item={item} viewMode={viewMode} s={s} activeTheme={activeTheme} language={language} currency={currency} onPress={() => handleOpenList(item)} onAction={() => { setSelectedAchat(item); setShowActions(true); }} />
+                <AchatCard key={item.id} item={item} viewMode={viewMode} activeTheme={activeTheme} currency={currency} isDarkMode={isDarkMode} onPress={() => handleOpenList(item)} onAction={() => { setSelectedAchat(item); setShowActions(true); }} />
               ))}
             </View>
           ) : (
-            <View style={{ alignItems: 'center', marginTop: 50, opacity: 0.6 }}>
-               <Ionicons name={activeTab === 'ongoing' ? "basket-outline" : "file-tray-outline"} size={50} color={s.textSec.color} />
-               <Text style={{ color: s.textSec.color, marginTop: 10 }}>
-                  {activeTab === 'ongoing' ? TEXTS.empty_ongoing : TEXTS.empty_history}
-               </Text>
+            <View style={s.emptyState}>
+              <View style={[s.emptyIcon, { backgroundColor: isDarkMode ? '#1E293B' : '#F1F5F9' }]}>
+                <Ionicons name={activeTab === 'ongoing' ? "basket-outline" : "checkmark-done-circle-outline"} size={50} color={s.textSec.color} />
+              </View>
+              <Text style={s.emptyTitle}>{activeTab === 'ongoing' ? TEXTS.empty_ongoing : TEXTS.empty_history}</Text>
+              {activeTab === 'ongoing' && <Text style={s.emptySubtitle}>Appuyez sur + pour créer une liste</Text>}
             </View>
           )}
         </Animated.ScrollView>
       </View>
 
+      {/* Navbar */}
       <View style={[s.navbar, { paddingBottom: insets.bottom > 0 ? insets.bottom : 10, height: 60 + (insets.bottom > 0 ? insets.bottom : 10) }]}>
-         <TouchableOpacity style={s.navItem} onPress={loadData}><Ionicons name="home" size={24} color={activeTheme.primary} /><Text style={[s.navText, { color: activeTheme.primary }]}>{TEXTS.welcome}</Text></TouchableOpacity>
-         <View style={{ top: -25 }}><TouchableOpacity style={[s.fab, { shadowColor: activeTheme.primary }]} onPress={handleCreate} activeOpacity={0.8}><LinearGradient colors={activeTheme?.gradient || ['#7143b5', '#8b5fd4']} style={s.fabGradient}><Ionicons name="add" size={32} color="#fff" /></LinearGradient></TouchableOpacity></View>
-         <TouchableOpacity style={s.navItem} onPress={() => router.push('/rapports')}><Ionicons name="pie-chart-outline" size={24} color="#9CA3AF" /><Text style={[s.navText, { color: "#9CA3AF" }]}>{TEXTS.reports}</Text></TouchableOpacity>
+        <TouchableOpacity style={s.navItem} onPress={loadData}><Ionicons name="home" size={24} color={activeTheme.primary} /><Text style={[s.navText, { color: activeTheme.primary }]}>{TEXTS.welcome}</Text></TouchableOpacity>
+        <View style={{ top: -25 }}><TouchableOpacity style={[s.fab, { shadowColor: activeTheme.primary }]} onPress={handleCreate} activeOpacity={0.8}><LinearGradient colors={activeTheme?.gradient || ['#7143b5', '#8b5fd4']} style={s.fabGradient}><Ionicons name="add" size={32} color="#fff" /></LinearGradient></TouchableOpacity></View>
+        <TouchableOpacity style={s.navItem} onPress={() => router.push('/rapports')}><Ionicons name="pie-chart-outline" size={24} color={s.textSec.color} /><Text style={[s.navText, { color: s.textSec.color }]}>{TEXTS.reports}</Text></TouchableOpacity>
       </View>
 
-      <ThemesModal visible={showThemes} onClose={() => setShowThemes(false)} currentTheme={currentTheme} setTheme={setTheme} s={s} translations={TEXTS} isDarkMode={isDarkMode} />
-      <SettingsModal visible={showSettings} onClose={() => setShowSettings(false)} isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} language={language} setLanguage={setLanguage} setShowHelp={setShowHelp} s={s} activeTheme={activeTheme} translations={TEXTS} />
-      <HelpModal visible={showHelp} onClose={() => setShowHelp(false)} s={s} activeTheme={activeTheme} translations={TEXTS} />
-      <SortModal visible={showSort} onClose={() => setShowSort(false)} setSortMode={setSortMode} s={s} translations={TEXTS} />
-      <ActionsModal visible={showActions} onClose={() => setShowActions(false)} selectedAchat={selectedAchat} handleRename={handleRename} handleDelete={handleDelete} toggleStatus={toggleStatus} s={s} activeTheme={activeTheme} translations={TEXTS} />
-      
-      <BeautifulConfirmModal 
-        visible={deleteModal} 
-        title={TEXTS.delete_title} 
-        message={`${TEXTS.delete_msg} "${selectedAchat?.nomListe}"`} 
-        onConfirm={confirmDelete} 
-        onCancel={() => setDeleteModal(false)} 
-        confirmText={TEXTS.delete} 
-        cancelText={TEXTS.cancel} 
-        activeTheme={activeTheme}
-        type="danger"
-      />
+      {/* Modals */}
+      <SettingsModal visible={showSettings} onClose={() => setShowSettings(false)} isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} currentTheme={currentTheme} setTheme={setTheme} setShowHelp={setShowHelp} activeTheme={activeTheme} />
+      <HelpModal visible={showHelp} onClose={() => setShowHelp(false)} activeTheme={activeTheme} isDarkMode={isDarkMode} />
+      <SortModal visible={showSort} onClose={() => setShowSort(false)} setSortMode={setSortMode} sortMode={sortMode} activeTheme={activeTheme} isDarkMode={isDarkMode} />
+      <ActionsModal visible={showActions} onClose={() => setShowActions(false)} selectedAchat={selectedAchat} handleRename={handleRename} handleDelete={handleDelete} toggleStatus={toggleStatus} activeTheme={activeTheme} isDarkMode={isDarkMode} />
+      <BeautifulConfirmModal visible={deleteModal} title={TEXTS.delete_title} message={`${TEXTS.delete_msg} "${selectedAchat?.nomListe || 'cette liste'}"`} onConfirm={confirmDelete} onCancel={() => setDeleteModal(false)} confirmText={TEXTS.delete} cancelText={TEXTS.cancel} activeTheme={activeTheme} isDarkMode={isDarkMode} type="danger" />
 
-      <Modal visible={renameModal} transparent animationType="fade" onRequestClose={() => setRenameModal(false)}><TouchableOpacity style={s.backdrop} onPress={() => setRenameModal(false)}><View style={s.modalCard}><Text style={s.modalTitle}>{TEXTS.rename}</Text><TextInput style={s.simpleInput} value={newListName} onChangeText={setNewListName} autoFocus /><View style={{ flexDirection: 'row', gap: 10, marginTop: 15 }}><TouchableOpacity onPress={() => setRenameModal(false)} style={s.btnCancel}><Text style={s.btnCancelText}>{TEXTS.cancel}</Text></TouchableOpacity><TouchableOpacity onPress={confirmRename} style={[s.btnConfirm, { backgroundColor: activeTheme.primary }]}><Text style={s.btnConfirmText}>{TEXTS.save}</Text></TouchableOpacity></View></View></TouchableOpacity></Modal>
+      {/* Rename Modal */}
+      <Modal visible={renameModal} transparent animationType="fade" onRequestClose={() => setRenameModal(false)}>
+        <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }} onPress={() => setRenameModal(false)} activeOpacity={1}>
+          <View style={[s.modalCard, { backgroundColor: isDarkMode ? '#1E293B' : '#FFFFFF' }]}>
+            <Text style={[s.modalTitle, { color: isDarkMode ? '#F1F5F9' : '#1E293B' }]}>{TEXTS.rename}</Text>
+            <TextInput style={[s.simpleInput, { backgroundColor: isDarkMode ? '#0F172A' : '#F8FAFC', color: isDarkMode ? '#F1F5F9' : '#1E293B', borderColor: isDarkMode ? '#334155' : '#E2E8F0' }]} value={newListName} onChangeText={setNewListName} autoFocus placeholderTextColor={isDarkMode ? '#64748B' : '#94A3B8'} placeholder="Nom de la liste" />
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 15 }}>
+              <TouchableOpacity onPress={() => setRenameModal(false)} style={[s.btnCancel, { borderColor: isDarkMode ? '#334155' : '#E2E8F0' }]}><Text style={[s.btnCancelText, { color: isDarkMode ? '#94A3B8' : '#64748B' }]}>{TEXTS.cancel}</Text></TouchableOpacity>
+              <TouchableOpacity onPress={confirmRename} style={[s.btnConfirm, { backgroundColor: activeTheme.primary }]}><Text style={s.btnConfirmText}>{TEXTS.save}</Text></TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
 
 const styles = (c: any) => StyleSheet.create({
-  // UTILS (Pour éviter l'erreur "color of undefined")
   text: { color: c.text },
   textSec: { color: c.textSec },
   border: { borderColor: c.border },
   bg: { backgroundColor: c.bg },
-
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
-  modalContent: { width: '85%', backgroundColor: c.card, borderRadius: 28, padding: 24, alignItems: 'center', shadowColor: "#000", shadowOffset: {width: 0, height: 10}, shadowOpacity: 0.3, shadowRadius: 20, elevation: 15 },
-  iconWrapper: { width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
-  modalTitleText: { fontSize: 20, fontWeight: '800', color: c.text, textAlign: 'center', marginBottom: 10 },
-  modalMessageText: { fontSize: 15, color: c.textSec, textAlign: 'center', marginBottom: 25, lineHeight: 22 },
-  modalBtnRow: { flexDirection: 'row', gap: 12, width: '100%' },
-  modalBtnCancel: { flex: 1, paddingVertical: 14, borderRadius: 16, borderWidth: 1, borderColor: c.border, alignItems: 'center' },
-  modalBtnConfirm: { flex: 1, paddingVertical: 14, borderRadius: 16, alignItems: 'center', shadowOpacity: 0.2, elevation: 4 },
-  modalBtnCancelText: { fontSize: 16, fontWeight: '600', color: c.textSec },
-  modalBtnConfirmText: { fontSize: 16, fontWeight: 'bold', color: '#fff' },
   container: { flex: 1, backgroundColor: c.bg },
-  header: { paddingBottom: 80, paddingHorizontal: 20, borderBottomLeftRadius: 32, borderBottomRightRadius: 32, position: 'relative' },
-  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  appName: { fontSize: 22, fontWeight: '800', color: '#fff' },
-  appSub: { fontSize: 12, color: 'rgba(255,255,255,0.85)', fontWeight: '600' },
-  iconBtn: { width: 42, height: 42, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 14, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
-  badge: { position: 'absolute', top: 8, right: 8, backgroundColor: '#EF4444', borderRadius: 10, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' },
+  header: { paddingBottom: 80, paddingHorizontal: 20, borderBottomLeftRadius: 32, borderBottomRightRadius: 32, position: 'relative', overflow: 'hidden' },
+  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, zIndex: 10 },
+  iconBtn: { width: 44, height: 44, backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 14, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)' },
+  badge: { position: 'absolute', top: 6, right: 6, backgroundColor: '#EF4444', borderRadius: 10, minWidth: 18, height: 18, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#fff' },
   badgeText: { color: '#fff', fontSize: 9, fontWeight: '800', paddingHorizontal: 3 },
-  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 18, height: 52, paddingHorizontal: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)' },
-  searchInput: { flex: 1, marginLeft: 10, color: '#fff', fontSize: 16 },
-  tabContainer: { flexDirection: 'row', marginTop: 15, backgroundColor: 'rgba(0,0,0,0.1)', padding: 4, borderRadius: 12, marginHorizontal: 20 },
-  tabBtn: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 10 },
-  tabActive: { backgroundColor: '#fff', shadowColor: '#000', shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.1, elevation: 2 },
+  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 16, height: 50, paddingHorizontal: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)', zIndex: 10 },
+  searchInput: { flex: 1, marginLeft: 10, color: '#fff', fontSize: 15 },
+  tabContainer: { flexDirection: 'row', marginTop: 15, backgroundColor: 'rgba(0,0,0,0.15)', padding: 4, borderRadius: 14, marginHorizontal: 10, zIndex: 10 },
+  tabBtn: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 10, borderRadius: 10 },
+  tabActive: { backgroundColor: '#fff', elevation: 3 },
   tabText: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.8)' },
-  summaryRow: { position: 'absolute', bottom: -35, left: 20, right: 20, flexDirection: 'row', backgroundColor: c.card, borderRadius: 24, paddingVertical: 20, paddingHorizontal: 10, justifyContent: 'space-around', shadowColor: '#000', shadowOffset: {width: 0, height: 8}, shadowOpacity: c.shadow, shadowRadius: 12, elevation: 8, borderWidth: 1, borderColor: c.border },
-  summaryItem: { alignItems: 'center', flex: 1 },
-  summaryLabel: { color: c.textSec, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
-  summaryValue: { fontSize: 20, fontWeight: '800', marginTop: 4 },
-  verticalDivider: { width: 1, backgroundColor: c.border, height: '60%' },
-  content: { flex: 1, marginTop: 55, paddingHorizontal: 20 },
+  
+  // ✅ SUMMARY CARD RÉDUITE ET OPTIMISÉE
+  summaryCard: { 
+    backgroundColor: c.card, 
+    borderRadius: 18, 
+    paddingVertical: 12, 
+    paddingHorizontal: 16, 
+    elevation: 8, 
+    borderWidth: 1, 
+    borderColor: c.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
+  summaryCardTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: c.textSec,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  summaryLabel: { 
+    color: c.textSec, 
+    fontSize: 10, 
+    fontWeight: '600',
+    marginBottom: 2,
+    textTransform: 'uppercase'
+  },
+  summaryValue: { 
+    fontSize: 18, 
+    fontWeight: '800', 
+  },
+  verticalDivider: { 
+    width: 1, 
+    backgroundColor: c.border, 
+    height: '60%', 
+    marginHorizontal: 10,
+  },
+  
+  content: { flex: 1, paddingHorizontal: 20, paddingTop: 5 },
   controlBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   sectionTitle: { fontSize: 18, fontWeight: '800', color: c.text },
-  outlineBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: c.border, borderRadius: 12, backgroundColor: c.card },
-  viewToggle: { flexDirection: 'row', borderWidth: 1, borderColor: c.border, borderRadius: 12, backgroundColor: c.card, overflow: 'hidden' },
-  toggleBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  outlineBtn: { width: 42, height: 42, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: c.border, borderRadius: 12, backgroundColor: c.card },
+  viewToggle: { flexDirection: 'row', borderWidth: 1.5, borderColor: c.border, borderRadius: 12, backgroundColor: c.card, overflow: 'hidden' },
+  toggleBtn: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
   toggleActive: { backgroundColor: c.border },
-  list: { gap: 12 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  cardList: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.card, padding: 16, borderRadius: 20, marginBottom: 4, borderWidth: 1, borderColor: c.border, shadowColor: c.text, shadowOffset: {width: 0, height: 2}, shadowOpacity: c.shadow, shadowRadius: 6, elevation: 2 },
-  cardGrid: { width: (SCREEN_WIDTH - 52) / 2, height: 170, backgroundColor: c.card, padding: 16, borderRadius: 20, marginBottom: 15, justifyContent: 'space-between', borderWidth: 0, shadowColor: c.text, shadowOffset: {width: 0, height: 2}, shadowOpacity: c.shadow, shadowRadius: 6, elevation: 2 },
-  dateBox: { width: 50, height: 50, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
-  miniBadge: { width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
-  cardTitle: { fontSize: 16, fontWeight: '700', color: c.text, marginTop: 8 },
-  cardDate: { fontSize: 12, color: c.textSec },
-  cardPrice: { fontSize: 16, fontWeight: '800', marginTop: 'auto' },
-  moreBtn: { width: 30, height: 30, justifyContent: 'center', alignItems: 'center' },
+  list: {},
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12 },
+  emptyState: { alignItems: 'center', marginTop: 60, paddingHorizontal: 40 },
+  emptyIcon: { width: 100, height: 100, borderRadius: 50, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
+  emptyTitle: { fontSize: 17, fontWeight: '700', color: c.text, textAlign: 'center' },
+  emptySubtitle: { fontSize: 14, color: c.textSec, marginTop: 8, textAlign: 'center' },
   navbar: { flexDirection: 'row', backgroundColor: c.card, borderTopWidth: 1, borderColor: c.border, justifyContent: 'space-around', paddingTop: 10, paddingHorizontal: 20, position: 'absolute', bottom: 0, width: '100%' },
   navItem: { alignItems: 'center' },
   navText: { fontSize: 10, fontWeight: '600', marginTop: 4 },
-  fab: { width: 56, height: 56, borderRadius: 28, shadowOpacity: 0.3, elevation: 6 },
-  fabGradient: { width: '100%', height: '100%', borderRadius: 28, justifyContent: 'center', alignItems: 'center' },
-  actionSheetContainer: { width: '100%', backgroundColor: c.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40, position: 'absolute', bottom: 0, shadowColor: '#000', shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.1, shadowRadius: 10, elevation: 20 },
-  dragHandle: { width: 40, height: 4, backgroundColor: c.border, borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
-  actionSheetHeader: { flexDirection: 'row', alignItems: 'center', gap: 15, marginBottom: 25, paddingBottom: 20, borderBottomWidth: 1, borderColor: c.border },
-  iconCircle: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
-  actionSheetTitle: { fontSize: 18, fontWeight: '700', color: c.text },
-  actionSheetSub: { fontSize: 13, color: c.textSec, marginTop: 2 },
-  actionList: { gap: 12 },
-  actionSheetBtn: { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: c.bg, borderRadius: 16, borderWidth: 1, borderColor: c.border },
-  actionIcon: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-  actionText: { flex: 1, fontSize: 16, fontWeight: '600', color: c.text },
-  cancelBtn: { marginTop: 20, padding: 16, alignItems: 'center' },
-  cancelText: { fontSize: 16, fontWeight: '600', color: c.textSec },
-  themeGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: 10, paddingBottom: 20 },
-  themeItemWrapper: { width: '30%', marginBottom: 20, alignItems: 'center', opacity: 0.9 },
-  themeItemActive: { opacity: 1, transform: [{ scale: 1.05 }] },
-  previewPhone: { width: 75, height: 130, borderRadius: 10, overflow: 'hidden', borderWidth: 1.5, shadowColor: "#000", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 4, backgroundColor: c.bg, position: 'relative' },
-  previewHeader: { width: '100%', height: 35, justifyContent: 'center', alignItems: 'center', paddingTop: 5 },
-  previewBody: { flex: 1, padding: 6, gap: 6, position: 'relative' },
-  previewCard: { width: '100%', height: 20, borderRadius: 6, padding: 4, justifyContent: 'center' },
-  previewFab: { position: 'absolute', bottom: 8, right: 8, width: 18, height: 18, borderRadius: 9, justifyContent: 'center', alignItems: 'center', shadowColor: "#000", shadowOffset: {width: 0, height: 1}, shadowOpacity: 0.2, elevation: 2 },
-  activeCheckBadge: { position: 'absolute', top: 4, right: 4, width: 16, height: 16, borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#fff', zIndex: 10 },
-  themeName: { fontSize: 12, marginTop: 8, textAlign: 'center' },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  modalCard: { width: '85%', backgroundColor: c.card, padding: 24, borderRadius: 24, elevation: 10, maxHeight: '80%' },
-  modalContainerFull: { flex: 1, backgroundColor: c.bg, marginTop: 50, borderTopLeftRadius: 30, borderTopRightRadius: 30, overflow: 'hidden' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderColor: c.border },
-  modalHeaderCenter: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 20, position: 'relative' },
-  closeBtn: { position: 'absolute', right: 0, padding: 5 },
-  closeCircle: { padding: 8, backgroundColor: c.border, borderRadius: 20 },
-  modalTitle: { fontSize: 18, fontWeight: 'bold', color: c.text, textAlign: 'center' },
-  modalBigTitle: { fontSize: 24, fontWeight: '800', color: c.text },
-  sectionHeader: { fontSize: 12, fontWeight: '700', color: c.textSec, marginTop: 20, marginBottom: 10, letterSpacing: 1 },
-  settingSection: { backgroundColor: c.card, borderRadius: 16, overflow: 'hidden' },
-  settingRow: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderColor: c.border },
-  settingText: { flex: 1, fontSize: 16, fontWeight: '600', color: c.text, marginLeft: 15 },
-  iconBox: { width: 32, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  langBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
-  simpleInput: { backgroundColor: c.input, borderWidth: 1, borderColor: c.border, borderRadius: 12, padding: 14, fontSize: 16, color: c.text, marginVertical: 15 },
-  btnCancel: { flex: 1, padding: 14, borderRadius: 12, backgroundColor: c.bg, alignItems: 'center', borderWidth: 1, borderColor: c.border },
+  fab: { width: 58, height: 58, borderRadius: 29, shadowOpacity: 0.35, shadowRadius: 8, elevation: 8 },
+  fabGradient: { width: '100%', height: '100%', borderRadius: 29, justifyContent: 'center', alignItems: 'center' },
+  modalCard: { width: '85%', padding: 24, borderRadius: 24, elevation: 10 },
+  modalTitle: { fontSize: 18, fontWeight: 'bold', textAlign: 'center' },
+  simpleInput: { borderWidth: 1, borderRadius: 12, padding: 14, fontSize: 16, marginVertical: 15 },
+  btnCancel: { flex: 1, padding: 14, borderRadius: 12, alignItems: 'center', borderWidth: 1 },
   btnConfirm: { flex: 1, padding: 14, borderRadius: 12, alignItems: 'center' },
-  btnCancelText: { color: c.textSec, fontWeight: '600' },
+  btnCancelText: { fontWeight: '600' },
   btnConfirmText: { color: '#fff', fontWeight: 'bold' },
-  bg: { backgroundColor: c.bg },
-  text: { color: c.text },
-  textSec: { color: c.textSec },
-  border: { borderColor: c.border }
 });
