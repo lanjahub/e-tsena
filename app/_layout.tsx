@@ -1,4 +1,3 @@
-// app/_layout.tsx
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { View, ActivityIndicator, Text, AppState, AppStateStatus, Alert, Vibration } from 'react-native';
@@ -9,10 +8,7 @@ import { initDatabase, checkDatabase } from '../src/db/init';
 import { ThemedStatusBar } from '../src/components/ThemedStatusBar';
 import { useTheme, ThemeProvider } from '../src/context/ThemeContext';
 import { SettingsProvider } from '../src/context/SettingsContext';
-import { ToastProvider } from '../src/context/ToastContext';
-
-// ⚠️ NE PAS importer NotificationChecker du fichier externe
-// On le définit directement ici pour éviter les conflits
+import { ToastProvider } from '../src/context/ToastContext'
 
 import { 
   initNotificationTables,
@@ -20,17 +16,12 @@ import {
 } from '../src/services/notificationService';
 import { getDb } from '../src/db/init';
 
-// ============================================================
-// 🔔 NOTIFICATION CHECKER (vérifie les rappels périodiquement)
-// ============================================================
-
 function NotificationChecker() {
   const router = useRouter();
   const appState = useRef(AppState.currentState);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const isChecking = useRef(false);
 
-  // Vérifier les rappels en attente
   const checkRappels = useCallback(() => {
     if (isChecking.current) return;
     isChecking.current = true;
@@ -41,7 +32,7 @@ function NotificationChecker() {
       const dateStr = now.toISOString().split('T')[0];
       const heureStr = now.toTimeString().slice(0, 5);
 
-      // Vérifier s'il y a la table Rappel
+     
       const tableExists = db.getAllSync(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='Rappel'"
       );
@@ -51,7 +42,7 @@ function NotificationChecker() {
         return;
       }
 
-      // Récupérer les rappels dont l'heure est passée et non encore affichés
+     
       const rappelsAafficher = db.getAllSync(`
         SELECT r.*, a.nomListe
         FROM Rappel r
@@ -69,10 +60,10 @@ function NotificationChecker() {
       if (rappelsAafficher.length > 0) {
         const rappel = rappelsAafficher[0];
 
-        // Vibrer pour attirer l'attention
+        
         Vibration.vibrate([0, 500, 200, 500]);
 
-        // Afficher l'alerte
+       
         Alert.alert(
           `🛒 ${rappel.titre || 'Rappel courses'}`,
           `${rappel.message}\n\n📍 ${rappel.nomListe || 'Liste de courses'}`,
@@ -81,14 +72,14 @@ function NotificationChecker() {
               text: 'Plus tard',
               style: 'cancel',
               onPress: () => {
-                // Marquer comme affiché mais pas lu
+                
                 db.runSync('UPDATE Rappel SET affiche = 1 WHERE id = ?', [rappel.id]);
               },
             },
             {
               text: 'Voir la liste',
               onPress: () => {
-                // Marquer comme lu
+                
                 db.runSync('UPDATE Rappel SET affiche = 1, lu = 1 WHERE id = ?', [rappel.id]);
                 if (rappel.achatId) {
                   router.push(`/achat/${rappel.achatId}`);
@@ -99,26 +90,26 @@ function NotificationChecker() {
           { cancelable: false }
         );
 
-        // Marquer comme affiché
+       
         db.runSync('UPDATE Rappel SET affiche = 1 WHERE id = ?', [rappel.id]);
       }
     } catch (e) {
-      // Silencieux - la table n'existe peut-être pas encore
+      
     } finally {
       isChecking.current = false;
     }
   }, [router]);
 
   useEffect(() => {
-    // Vérifier immédiatement au montage (avec délai pour laisser l'app se charger)
+    
     const initialTimeout = setTimeout(() => {
       checkRappels();
     }, 2000);
 
-    // Vérifier toutes les 30 secondes
+  
     intervalRef.current = setInterval(checkRappels, 30000);
 
-    // Écouter quand l'app revient au premier plan
+    
     const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
       if (
         appState.current.match(/inactive|background/) &&
@@ -141,10 +132,6 @@ function NotificationChecker() {
 
   return null;
 }
-
-// ============================================================
-// 🧭 NAVIGATION PRINCIPALE
-// ============================================================
 
 function RootLayoutNav() {
   const { activeTheme } = useTheme();
@@ -188,22 +175,20 @@ export default function Layout() {
   useEffect(() => {
     async function prepare() {
       try {
-        // 1. Charger les fonts
+        
         await Font.loadAsync({ ...Ionicons.font });
         setFontsLoaded(true);
         
-        // 2. Initialiser la base de données principale
+       
         initDatabase();
         
-        // 3. Initialiser les tables de notifications/rappels
         initNotificationTables();
         
-        // 4. Vérifier la DB
         if (checkDatabase()) {
           setDbReady(true);
         }
 
-        // 5. Log du mode
+        
         if (isRunningInExpoGo()) {
           console.log('📱 Mode Expo Go - Rappels locaux actifs');
         } else {

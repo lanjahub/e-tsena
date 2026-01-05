@@ -3,32 +3,20 @@ import { getDb } from '../db/init';
 
 export const DepenseService = {
   /**
-   * Calcule le total des dépenses pour un mois donné
-   * @param month Index du mois (0-11)
-   * @param year Année (ex: 2025)
+   * @param month 
+   * @param year 
    */
   async calculerDepensesMensuelles(month: number, year: number): Promise<number> {
-    // Définir la période (du 1er au dernier jour du mois)
+
     const startDate = new Date(year, month, 1).toISOString();
     const endDate = new Date(year, month + 1, 0).toISOString();
-
     const achats = await AchatRepo.getAchatsByPeriod(startDate, endDate);
-    
-    // Somme des montants
     return (achats as Achat[]).reduce((total, achat) => total + (achat.montantTotal || 0), 0);
   },
-
-  /**
-   * Calcule le total global des dépenses enregistrées
-   */
   async calculerTotalGlobal(): Promise<number> {
     const achats = await AchatRepo.listAchats();
     return (achats as Achat[]).reduce((total, achat) => total + (achat.montantTotal || 0), 0);
   },
-
-  /**
-   * Récupère les dépenses groupées par jour pour un graphique
-   */
   async getDepensesParJour(month: number, year: number) {
     const startDate = new Date(year, month, 1).toISOString();
     const endDate = new Date(year, month + 1, 0).toISOString();
@@ -38,16 +26,14 @@ export const DepenseService = {
     const result: Record<string, number> = {};
     
     for (const achat of (achats as Achat[])) {
-      const day = achat.dateAchat.split('T')[0]; // YYYY-MM-DD
+      const day = achat.dateAchat.split('T')[0]; 
       result[day] = (result[day] || 0) + (achat.montantTotal || 0);
     }
 
     return result;
   },
 
-  /**
-   * Récupère la répartition des dépenses par produit (Global)
-   */
+  
   async getRepartitionParProduit() {
     const db = getDb();
     const res = db.getAllSync(`
@@ -58,9 +44,6 @@ export const DepenseService = {
     return res as { name: string; montant: number }[];
   },
 
-  /**
-   * Récupère le total des dépenses sur une période donnée
-   */
   async getTotalSurPeriode(startDate: string, endDate: string) {
     const db = getDb();
     const res = db.getAllSync(`
@@ -71,9 +54,7 @@ export const DepenseService = {
     return (res[0] as any)?.t || 0;
   },
 
-  /**
-   * Récupère les statistiques comparatives (montant + nombre d'achats) sur une période
-   */
+  
   async getStatsComparatives(startDate: string, endDate: string) {
     const db = getDb();
     const res = db.getAllSync(`
@@ -86,9 +67,7 @@ export const DepenseService = {
     };
   },
 
-  /**
-   * Récupère le détail des produits achetés sur une période
-   */
+ 
   async getDetailsProduitsSurPeriode(startDate: string, endDate: string) {
     const db = getDb();
     // Debug: Afficher les dates de requête

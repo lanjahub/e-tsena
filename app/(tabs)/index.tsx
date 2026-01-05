@@ -10,8 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { LinearGradient } from 'expo-linear-gradient';
-// ❌ SUPPRIMER CETTE LIGNE:
-// import * as Notifications from 'expo-notifications';
+
 
 import { getDb } from '../../src/db/init';
 import { useTheme, THEMES } from '../../src/context/ThemeContext'; 
@@ -19,16 +18,6 @@ import { useSettings } from '../../src/context/SettingsContext';
 import * as NotifService from '../../src/services/notificationService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-// ❌ SUPPRIMER CES LIGNES (lignes 28-34):
-// Notifications.setNotificationHandler({
-//   handleNotification: async () => ({
-//     shouldShowAlert: true,
-//     shouldPlaySound: true,
-//     shouldSetBadge: false,
-//   }),
-// });
-
 
 const formatMoney = (value: number) => {
   if (!value && value !== 0) return '0';

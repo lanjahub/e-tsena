@@ -348,28 +348,21 @@ export default function AchatDetails() {
   const titleInputRef = useRef<TextInput>(null);
   const addInputRef = useRef<TextInput>(null);
   
-  // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
   const successAnim = useRef(new Animated.Value(0)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
-  // Data States
   const [achat, setAchat] = useState<Achat | null>(null);
   const [lignes, setLignes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // UI States
   const [title, setTitle] = useState('');
   const [titleError, setTitleError] = useState('');
   const [newItem, setNewItem] = useState('');
   const [isInputFocused, setIsInputFocused] = useState(false);
-  
-  // Suggestions from history
   const [historySuggestions, setHistorySuggestions] = useState<SuggestedProduct[]>([]);
   const [filteredSuggestions, setFilteredSuggestions] = useState<SuggestedProduct[]>([]);
-  
-  // Recipe suggestions (based on title)
   const [recipeSuggestion, setRecipeSuggestion] = useState<{ icon: string; name: string; items: { nom: string; unite: string }[] } | null>(null);
   const [showRecipeSuggestion, setShowRecipeSuggestion] = useState(true);
   

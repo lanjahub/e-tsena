@@ -1,29 +1,26 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-// Composants d'icônes optimisés
+
 const HomeIcon = ({ color, size }: { color: string; size: number }) => (
   <Ionicons name="home" color={color} size={size} />
 );
-
 const ReportsIcon = ({ color, size }: { color: string; size: number }) => (
   <Ionicons name="analytics" color={color} size={size} />
 );
-
 const StatsIcon = ({ color, size }: { color: string; size: number }) => (
   <Ionicons name="stats-chart" color={color} size={size} />
 );
-
 export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarHideOnKeyboard: true, // Cache la tab bar quand le clavier est ouvert
-        tabBarActiveTintColor: '#6366f1', // Indigo moderne
+        tabBarHideOnKeyboard: true, 
+        tabBarActiveTintColor: '#6366f1', 
         tabBarInactiveTintColor: '#999',
         tabBarStyle: {
-          display: 'none', // Cache la tab bar puisqu'on a qu'un seul tab
+          display: 'none', 
         },
         tabBarLabelStyle: {
           fontSize: 12,
@@ -36,7 +33,7 @@ export default function TabsLayout() {
         options={{ 
           title: 'Accueil', 
           tabBarIcon: HomeIcon,
-          href: '/', // Route par défaut
+          href: '/', 
         }} 
       />
     </Tabs>

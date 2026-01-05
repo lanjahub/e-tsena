@@ -90,7 +90,7 @@ const CustomPieChart: React.FC<CustomPieChartProps> = ({
       const percent = (item.population / total) * 100;
       const angle = (item.population / total) * 360;
       
-      // Calcul géométrique
+      
       const midAngle = currentAngle + angle / 2;
       const startRad = (currentAngle * Math.PI) / 180;
       const endRad = ((currentAngle + angle) * Math.PI) / 180;
@@ -105,7 +105,6 @@ const CustomPieChart: React.FC<CustomPieChartProps> = ({
       const ix2 = center + innerRadius * Math.cos(endRad);
       const iy2 = center + innerRadius * Math.sin(endRad);
       
-      // Position du texte : on le pousse un peu vers l'extérieur pour les petites parts
       const labelRadius = innerRadius > 0 ? (radius + innerRadius) / 2 : radius * 0.70;
       const labelX = center + labelRadius * Math.cos(midRad);
       const labelY = center + labelRadius * Math.sin(midRad);
@@ -127,7 +126,7 @@ const CustomPieChart: React.FC<CustomPieChartProps> = ({
 
   const truncateName = (name: string, maxLength: number) => name.length <= maxLength ? name : name.substring(0, maxLength - 1) + '.';
   
-  // Fonction utilitaire pour la couleur du texte (noir ou blanc selon le fond)
+  
   const getTextColor = (bgColor: string) => { 
     try { 
       const hex = bgColor.replace('#', ''); 
@@ -152,12 +151,12 @@ const CustomPieChart: React.FC<CustomPieChartProps> = ({
       <Svg width={size} height={size}>
         <G>
           {slices.map((slice, index) => {
-            // Logique d'affichage dynamique
+            
             const isBigSlice = slice.percent > 15;
             const isMediumSlice = slice.percent > 8;
-            const isSmallSlice = slice.percent > 4; // Seuil minimum pour afficher du texte
+            const isSmallSlice = slice.percent > 4; 
             
-            // Si c'est trop petit (< 4%), on n'affiche rien DANS le camembert pour éviter le chaos
+            
             const showText = isSmallSlice;
             const textColor = getTextColor(slice.color);
 
@@ -239,28 +238,23 @@ const CustomPieChart: React.FC<CustomPieChartProps> = ({
   );
 };
 
-// --- ECRAN PRINCIPAL STATS ---
+
 export default function StatsScreen() {
   const { activeTheme, isDarkMode } = useTheme();
   const { currency, language, t } = useSettings();
   const insets = useSafeAreaInsets();
   const s = useMemo(() => getStyles(activeTheme, isDarkMode), [activeTheme, isDarkMode]);
   const locale = useMemo(() => language === 'en' ? enUS : fr, [language]);
-
-  // --- ÉTATS ---
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<ChartData[]>([]);
   const [allProducts, setAllProducts] = useState<ProductItem[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [showAllProductsModal, setShowAllProductsModal] = useState(false);
-  
   const [totalGlobal, setTotalGlobal] = useState(0);
   const [totalYear, setTotalYear] = useState(0);
   const [totalMonth, setTotalMonth] = useState(0);
   const [filteredTotal, setFilteredTotal] = useState(0);
-  
   const [viewMode, setViewMode] = useState<ViewMode>('repartition'); 
-  
   const [weeklyData, setWeeklyData] = useState<ComparativeData[]>([]);
   const [monthlyData, setMonthlyData] = useState<ComparativeData[]>([]);
 
@@ -270,13 +264,12 @@ export default function StatsScreen() {
   
   const [showMenu, setShowMenu] = useState(false);
 
-  // Animations
+  
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const scaleChart = useRef(new Animated.Value(0)).current;
   const rotateChart = useRef(new Animated.Value(0)).current;
 
-  // --- DONNÉES GRAPHIQUES LIGNES ---
   const weeklyLineData = useMemo(() => {
     if (!weeklyData.length) return null;
     const sorted = [...weeklyData].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
@@ -296,7 +289,6 @@ export default function StatsScreen() {
   const maxWeeklyAmount = useMemo(() => Math.max(...weeklyData.map(i => i.montant), 1), [weeklyData]);
   const maxMonthlyAmount = useMemo(() => Math.max(...monthlyData.map(i => i.montant), 1), [monthlyData]);
 
-  // --- EFFETS ---
   useFocusEffect(useCallback(() => { loadAllData(); }, [language]));
 
   useEffect(() => {

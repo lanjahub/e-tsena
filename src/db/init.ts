@@ -9,7 +9,7 @@ export const getDb = () => {
   return dbInstance;
 };
 
-// Vérifier si une colonne existe dans une table
+
 const columnExists = (db: SQLite.SQLiteDatabase, table: string, column: string): boolean => {
   try {
     const result = db.getAllSync(`PRAGMA table_info(${table})`);
@@ -19,17 +19,17 @@ const columnExists = (db: SQLite.SQLiteDatabase, table: string, column: string):
   }
 };
 
-// Migration : Ajouter la colonne 'unite' si elle n'existe pas
+
 const migrateDatabase = (db: SQLite.SQLiteDatabase) => {
   console.log('🔄 Vérification des migrations...');
   
-  // Vérifier si la colonne 'unite' existe dans la table Produit
+ 
   if (!columnExists(db, 'Produit', 'unite')) {
     console.log('📝 Migration: Ajout de la colonne "unite" à Produit');
     try {
       db.execSync(`ALTER TABLE Produit ADD COLUMN unite TEXT DEFAULT 'pcs'`);
       
-      // Mettre à jour les unités des produits existants
+      
       db.execSync(`
         UPDATE Produit SET unite = 'kg' WHERE libelle IN ('Riz', 'Poulet', 'Viande');
         UPDATE Produit SET unite = 'L' WHERE libelle IN ('Huile', 'Lait');
@@ -43,7 +43,7 @@ const migrateDatabase = (db: SQLite.SQLiteDatabase) => {
     console.log('✅ Colonne "unite" déjà présente');
   }
   
-  // Migration: Ajouter la colonne 'unite' à LigneAchat si elle n'existe pas
+ 
   if (!columnExists(db, 'LigneAchat', 'unite')) {
     console.log('📝 Migration: Ajout de la colonne "unite" à LigneAchat');
     try {
@@ -54,7 +54,7 @@ const migrateDatabase = (db: SQLite.SQLiteDatabase) => {
     }
   }
 
-  // Migration: Ajouter achatId à Notification
+  
   if (!columnExists(db, 'Notification', 'achatId')) {
     console.log('📝 Migration: Ajout de la colonne "achatId" à Notification');
     try {
@@ -65,14 +65,13 @@ const migrateDatabase = (db: SQLite.SQLiteDatabase) => {
     }
   }
   
-  // Migration: Ajouter libelleProduit et supprimer idProduit dans LigneAchat
+  
   if (columnExists(db, 'LigneAchat', 'idProduit') && !columnExists(db, 'LigneAchat', 'libelleProduit')) {
     console.log('📝 Migration: Restructuration de LigneAchat (ajout libelleProduit)');
     try {
-      // Nettoyer toute table temporaire d'une précédente migration échouée
       db.execSync('DROP TABLE IF EXISTS LigneAchat_new');
 
-      // Créer une table temporaire avec la nouvelle structure
+      
       db.execSync(`
         CREATE TABLE LigneAchat_new (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -86,8 +85,7 @@ const migrateDatabase = (db: SQLite.SQLiteDatabase) => {
         );
       `);
       
-      // Copier les données existantes avec un libellé sécurisé
-      // Récupérer l'unité du produit si elle existe, sinon utiliser 'pcs'
+     
       const hasUniteColumn = columnExists(db, 'LigneAchat', 'unite');
       if (hasUniteColumn) {
         db.execSync(`
@@ -119,14 +117,14 @@ const migrateDatabase = (db: SQLite.SQLiteDatabase) => {
         `);
       }
       
-      // Supprimer l'ancienne table et renommer la nouvelle
+
       db.execSync('DROP TABLE LigneAchat');
       db.execSync('ALTER TABLE LigneAchat_new RENAME TO LigneAchat');
       
       console.log('✅ Migration LigneAchat réussie');
     } catch (e) {
       console.error('❌ Erreur migration LigneAchat:', e);
-      // Nettoyer la table temporaire pour permettre une nouvelle tentative
+     
       try {
         db.execSync('DROP TABLE IF EXISTS LigneAchat_new');
       } catch (cleanupError) {
@@ -140,23 +138,20 @@ export const initDatabase = () => {
   console.log('🚀 Initialisation de la base de données...');
   const db = getDb();
   
-  // Créer les tables
+  
   db.execSync(`
     PRAGMA journal_mode = WAL;
-    
     CREATE TABLE IF NOT EXISTS Produit (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       libelle TEXT NOT NULL,
       unite TEXT DEFAULT 'pcs'
     );
-    
     CREATE TABLE IF NOT EXISTS Achat (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       nomListe TEXT,
       dateAchat TEXT,
       montantTotal REAL DEFAULT 0
     );
-    
     CREATE TABLE IF NOT EXISTS LigneAchat (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       idAchat INTEGER NOT NULL,
@@ -167,7 +162,6 @@ export const initDatabase = () => {
       unite TEXT DEFAULT 'pcs',
       FOREIGN KEY (idAchat) REFERENCES Achat(id) ON DELETE CASCADE
     );
-
       CREATE TABLE IF NOT EXISTS Notification (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         achatId INTEGER,
@@ -270,10 +264,8 @@ export const resetDatabase = () => {
       DROP TABLE IF EXISTS DepenseParProduit;
       DROP TABLE IF EXISTS DepenseParDate;
     `);
-    
     console.log('✅ Tables supprimées');
     console.log('🔄 Réinitialisation...');
-    
     initDatabase();
     
     console.log('✅ Base de données réinitialisée avec succès');
