@@ -54,7 +54,7 @@ interface ProductItem {
   montant: number;
 }
 
-type ViewMode = 'repartition' | 'weekly' | 'monthly';
+type ViewMode = 'repartition' | 'weekly' | 'monthly' | 'yearly';
 
 const COLOR_PALETTE = [
   '#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6',
@@ -105,7 +105,7 @@ const CustomPieChart: React.FC<CustomPieChartProps> = ({
       const ix2 = center + innerRadius * Math.cos(endRad);
       const iy2 = center + innerRadius * Math.sin(endRad);
       
-      const labelRadius = innerRadius > 0 ? (radius + innerRadius) / 2 : radius * 0.70;
+      const labelRadius = innerRadius > 0 ? (radius + innerRadius) / 2 : radius * 0.7;
       const labelX = center + labelRadius * Math.cos(midRad);
       const labelY = center + labelRadius * Math.sin(midRad);
       
@@ -130,9 +130,9 @@ const CustomPieChart: React.FC<CustomPieChartProps> = ({
   const getTextColor = (bgColor: string) => { 
     try { 
       const hex = bgColor.replace('#', ''); 
-      const r = parseInt(hex.substr(0, 2), 16); 
-      const g = parseInt(hex.substr(2, 2), 16); 
-      const b = parseInt(hex.substr(4, 2), 16); 
+      const r = Number.parseInt(hex.substring(0, 2), 16); 
+      const g = Number.parseInt(hex.substring(2, 4), 16); 
+      const b = Number.parseInt(hex.substring(4, 6), 16); 
       return ((0.299 * r + 0.587 * g + 0.114 * b) / 255) > 0.6 ? '#1F2937' : '#FFFFFF'; 
     } catch { return '#FFFFFF'; } 
   };
@@ -151,17 +151,16 @@ const CustomPieChart: React.FC<CustomPieChartProps> = ({
       <Svg width={size} height={size}>
         <G>
           {slices.map((slice, index) => {
+            // 🎯 SOLUTION 3 : Seuils optimisés
+            const isBigSlice = slice.percent >= 8;    // Portions >= 8% = texte normal
+            const isMediumSlice = slice.percent >= 3; // Portions 3-8% = texte réduit
+            const isSmallSlice = slice.percent < 3;   // Portions < 3% = pas de texte
             
-            const isBigSlice = slice.percent > 15;
-            const isMediumSlice = slice.percent > 8;
-            const isSmallSlice = slice.percent > 4; 
-            
-            
-            const showText = isSmallSlice;
+            const showText = !isSmallSlice; // Afficher texte si >= 3%
             const textColor = getTextColor(slice.color);
 
             return (
-              <React.Fragment key={index}>
+              <React.Fragment key={`slice-${index}-${slice.name}`}>
                 <Path d={slice.path} fill={slice.color} stroke={isDarkMode ? '#0F172A' : '#FFFFFF'} strokeWidth={1.5} />
                 
                 {showText && (
@@ -169,35 +168,34 @@ const CustomPieChart: React.FC<CustomPieChartProps> = ({
                     {/* LIGNE 1 : NOM DU PRODUIT */}
                     <SvgText 
                       x={slice.labelX} 
-                      y={slice.labelY - (isBigSlice ? 14 : 10)} 
-                      fontSize={isBigSlice ? 11 : 9} 
+                      y={slice.labelY - (isBigSlice ? 14 : isMediumSlice ? 11 : 8)} 
+                      fontSize={isBigSlice ? 11 : isMediumSlice ? 9 : 7} 
                       fontWeight="bold" 
                       fill={textColor} 
                       textAnchor="middle" 
                       alignmentBaseline="middle"
                     >
-                      {truncateName(slice.name, isBigSlice ? 12 : 6)}
+                      {truncateName(slice.name, isBigSlice ? 12 : isMediumSlice ? 8 : 5)}
                     </SvgText>
 
-                    {/* LIGNE 2 : PRIX (NOUVEAU) */}
+                    {/* LIGNE 2 : PRIX */}
                     <SvgText 
                       x={slice.labelX} 
                       y={slice.labelY} 
-                      fontSize={isBigSlice ? 12 : 9} 
+                      fontSize={isBigSlice ? 12 : isMediumSlice ? 10 : 7} 
                       fontWeight="800" 
                       fill={textColor} 
                       textAnchor="middle" 
                       alignmentBaseline="middle"
                     >
-                      {/* Format compact pour le prix dans le camembert */}
                       {Math.round(slice.value).toLocaleString()} {currency}
                     </SvgText>
 
                     {/* LIGNE 3 : POURCENTAGE */}
                     <SvgText 
                       x={slice.labelX} 
-                      y={slice.labelY + (isBigSlice ? 14 : 10)} 
-                      fontSize={isBigSlice ? 10 : 8} 
+                      y={slice.labelY + (isBigSlice ? 14 : isMediumSlice ? 11 : 8)} 
+                      fontSize={isBigSlice ? 10 : isMediumSlice ? 8 : 6} 
                       fontWeight="600" 
                       fill={textColor} 
                       textAnchor="middle" 
@@ -222,7 +220,7 @@ const CustomPieChart: React.FC<CustomPieChartProps> = ({
         </Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
           {slices.map((slice, index) => (
-            <View key={index} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDarkMode ? '#0F172A' : '#F8FAFC', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: slice.color + '40' }}>
+            <View key={`legend-${slice.name}-${index}`} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDarkMode ? '#0F172A' : '#F8FAFC', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: slice.color + '40' }}>
               <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: slice.color, marginRight: 6 }} />
               <Text style={{ fontSize: 11, color: isDarkMode ? '#E5E7EB' : '#374151', fontWeight: '500' }}>{slice.name}</Text>
               <Text style={{ fontSize: 11, color: slice.color, fontWeight: 'bold', marginLeft: 4 }}>{Math.round(slice.percent)}%</Text>
@@ -250,13 +248,13 @@ export default function StatsScreen() {
   const [allProducts, setAllProducts] = useState<ProductItem[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [showAllProductsModal, setShowAllProductsModal] = useState(false);
-  const [totalGlobal, setTotalGlobal] = useState(0);
   const [totalYear, setTotalYear] = useState(0);
   const [totalMonth, setTotalMonth] = useState(0);
   const [filteredTotal, setFilteredTotal] = useState(0);
   const [viewMode, setViewMode] = useState<ViewMode>('repartition'); 
   const [weeklyData, setWeeklyData] = useState<ComparativeData[]>([]);
   const [monthlyData, setMonthlyData] = useState<ComparativeData[]>([]);
+  const [yearlyData, setYearlyData] = useState<ComparativeData[]>([]);
 
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<ComparativeData | null>(null);
@@ -273,21 +271,36 @@ export default function StatsScreen() {
   const weeklyLineData = useMemo(() => {
     if (!weeklyData.length) return null;
     const sorted = [...weeklyData].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-    const values = sorted.map(w => w.montant || 0);
-    if (values.every(v => v === 0)) values[0] = 0.01;
+    let values: number[] = sorted.map(w => w.montant || 0);
+    if (values.every(v => v === 0)) {
+      values = [0.01, ...values.slice(1)];
+    }
     return { labels: sorted.map(w => format(new Date(w.startDate), 'dd/MM')), values };
   }, [weeklyData]);
 
   const monthlyLineData = useMemo(() => {
     if (!monthlyData.length) return null;
     const sorted = [...monthlyData].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-    const values = sorted.map(m => m.montant || 0);
-    if (values.every(v => v === 0)) values[0] = 0.01;
+    let values: number[] = sorted.map(m => m.montant || 0);
+    if (values.every(v => v === 0)) {
+      values = [0.01, ...values.slice(1)];
+    }
     return { labels: sorted.map(m => format(new Date(m.startDate), 'MMM', { locale })), values };
   }, [monthlyData, locale]);
 
+  const yearlyLineData = useMemo(() => {
+    if (!yearlyData.length) return null;
+    const sorted = [...yearlyData].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+    let values: number[] = sorted.map(y => y.montant || 0);
+    if (values.every(v => v === 0)) {
+      values = [0.01, ...values.slice(1)];
+    }
+    return { labels: sorted.map(y => format(new Date(y.startDate), 'yyyy')), values };
+  }, [yearlyData, locale]);
+
   const maxWeeklyAmount = useMemo(() => Math.max(...weeklyData.map(i => i.montant), 1), [weeklyData]);
   const maxMonthlyAmount = useMemo(() => Math.max(...monthlyData.map(i => i.montant), 1), [monthlyData]);
+  const maxYearlyAmount = useMemo(() => Math.max(...yearlyData.map(i => i.montant), 1), [yearlyData]);
 
   useFocusEffect(useCallback(() => { loadAllData(); }, [language]));
 
@@ -314,7 +327,7 @@ export default function StatsScreen() {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      const tGlobal = await DepenseService.calculerTotalGlobal(); setTotalGlobal(tGlobal || 0);
+      await DepenseService.calculerTotalGlobal();
       const now = new Date();
       const tYear = await DepenseService.getTotalSurPeriode(format(startOfYear(now), 'yyyy-MM-dd'), format(endOfYear(now), 'yyyy-MM-dd')); setTotalYear(tYear || 0);
       const tMonth = await DepenseService.getTotalSurPeriode(format(startOfMonth(now), 'yyyy-MM-dd'), format(endOfMonth(now), 'yyyy-MM-dd')); setTotalMonth(tMonth || 0);
@@ -330,6 +343,7 @@ export default function StatsScreen() {
       }
 
       await loadComparative();
+      await loadYearlyComparative();
     } catch (e) { 
       console.error(e); 
       Alert.alert(t('error') || 'Erreur', t('error_loading_stats') || 'Erreur de chargement');
@@ -337,12 +351,42 @@ export default function StatsScreen() {
   };
 
   const updateChartData = (products: ProductItem[], selection: string[]) => {
-    const filteredRows = products.filter(p => selection.includes(p.name));
+    let filteredRows = products.filter(p => selection.includes(p.name));
+    
+    // 🎯 SOLUTION 1 & 2 : Tri par montant décroissant
+    filteredRows.sort((a, b) => (b.montant || 0) - (a.montant || 0));
+    
     const total = filteredRows.reduce((sum, p) => sum + (p.montant || 0), 0);
     setFilteredTotal(total);
+    
     if (filteredRows.length === 0 || total === 0) { setData([]); return; }
-    setData(filteredRows.map((r, i) => ({
-      name: r.name, population: r.montant || 0, color: COLOR_PALETTE[i % COLOR_PALETTE.length], legendFontColor: isDarkMode ? '#ccc' : '#666', legendFontSize: 12
+    
+    // 🎯 SOLUTION 1 : Limitation intelligente - Top 7 + Autres
+    const MAX_DISPLAY = 7;
+    let finalData: ProductItem[] = [];
+    
+    if (filteredRows.length > MAX_DISPLAY) {
+      // Prendre les 7 premiers (déjà triés)
+      const topProducts = filteredRows.slice(0, MAX_DISPLAY);
+      const otherProducts = filteredRows.slice(MAX_DISPLAY);
+      
+      // Calculer le total des "Autres"
+      const otherTotal = otherProducts.reduce((sum, p) => sum + (p.montant || 0), 0);
+      
+      finalData = [
+        ...topProducts,
+        { name: `Autres (${otherProducts.length})`, montant: otherTotal }
+      ];
+    } else {
+      finalData = filteredRows;
+    }
+    
+    setData(finalData.map((r, i) => ({
+      name: r.name, 
+      population: r.montant || 0, 
+      color: COLOR_PALETTE[i % COLOR_PALETTE.length], 
+      legendFontColor: isDarkMode ? '#ccc' : '#666', 
+      legendFontSize: 12
     })));
   };
 
@@ -380,6 +424,28 @@ export default function StatsScreen() {
     } catch (e) { console.error(e); }
   };
 
+  const loadYearlyComparative = async () => {
+    try {
+      const years: ComparativeData[] = [];
+      for (let i = 0; i < 3; i++) {
+        const year = new Date().getFullYear() - i;
+        const sStr = `${year}-01-01`;
+        const eStr = `${year}-12-31`;
+        const stats = await DepenseService.getStatsComparatives(sStr, eStr);
+        years.push({ 
+          id: `y-${i}`, 
+          period: `${year}`, 
+          fullLabel: `Année ${year}`, 
+          montant: stats?.montant || 0, 
+          nbAchats: stats?.nbAchats || 0, 
+          startDate: sStr, 
+          endDate: eStr 
+        });
+      }
+      setYearlyData(years);
+    } catch (e) { console.error(e); }
+  };
+
   const openDetailModal = async (item: ComparativeData) => {
     setSelectedPeriod(item);
     try {
@@ -395,6 +461,20 @@ export default function StatsScreen() {
     propsForBackgroundLines: { strokeDasharray: '', stroke: isDarkMode ? '#1F2937' : '#E5E7EB' }
   }), [isDarkMode, activeTheme]);
 
+  const getActiveTabColor = () => '#fff';
+  const getInactiveTabColor = () => isDarkMode ? '#94A3B8' : '#64748B';
+  
+  const getTabIconColor = (isActive: boolean) => {
+    return isActive ? getActiveTabColor() : getInactiveTabColor();
+  };
+
+  const getSelectAllText = () => {
+    const isAllSelected = selectedProducts.length === allProducts.length;
+    return isAllSelected ? 
+      (t('deselect_all') || 'Tout désélectionner') : 
+      (t('select_all') || 'Tout sélectionner');
+  };
+
   const renderProgressBar = useCallback((item: ComparativeData, max: number) => {
     const percent = max > 0 ? (item.montant / max) * 100 : 0;
     return (
@@ -403,7 +483,7 @@ export default function StatsScreen() {
           <Text style={s.progressLabel}>{item.period}</Text>
           <Text style={s.progressValue}>{formatMoney(item.montant)} {currency}</Text>
         </View>
-        <View style={s.track}><LinearGradient colors={[activeTheme.primary, activeTheme.secondary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[s.bar, { width: `${Math.min(percent, 100)}%` }]} /></View>
+        <View style={s.track}><LinearGradient colors={[activeTheme.primary, activeTheme.secondary] as readonly [string, string, ...string[]]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[s.bar, { width: `${Math.min(percent, 100)}%` }]} /></View>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
           <Text style={s.progressSub}>{item.nbAchats} {t('purchase_s') || 'achats'}</Text>
           <Text style={[s.progressSub, { color: activeTheme.primary, fontWeight: 'bold' }]}>{t('see_details') || 'Voir détails'} →</Text>
@@ -412,17 +492,21 @@ export default function StatsScreen() {
     );
   }, [s, currency, activeTheme, t]);
 
-  const renderProductItem = useCallback(({ item, index }: { item: ProductItem; index: number }) => {
+  const renderProductItem = useCallback(({ item }: { item: ProductItem; index: number }) => {
     const isSelected = selectedProducts.includes(item.name);
     const totalAll = allProducts.reduce((sum, p) => sum + (p.montant || 0), 0);
-    const percent = totalAll > 0 ? ((item.montant / totalAll) * 100).toFixed(1) : '0';
-    const badgeColor = COLOR_PALETTE[index % COLOR_PALETTE.length];
+      const percent = totalAll > 0 ? ((item.montant / totalAll) * 100).toFixed(1) : '0';
+    const badgeColor = COLOR_PALETTE[0]; // Utilisé statiquement au lieu d'index
+    
+    // Séparer la ternaire imbriquée
+    const checkboxBg = isSelected ? activeTheme.primary : (isDarkMode ? '#334155' : '#E5E7EB');
+    
     return (
       <TouchableOpacity style={[s.productItem, isSelected && { borderColor: activeTheme.primary, borderWidth: 2 }]} onPress={() => toggleProductSelection(item.name)} activeOpacity={0.7}>
-        <View style={[s.productCheckbox, { backgroundColor: isSelected ? activeTheme.primary : (isDarkMode ? '#334155' : '#E5E7EB') }]}>{isSelected && <Ionicons name="checkmark" size={20} color="#fff" />}</View>
+        <View style={[s.productCheckbox, { backgroundColor: checkboxBg }]}>{isSelected && <Ionicons name="checkmark" size={20} color="#fff" />}</View>
         <View style={{ flex: 1, marginLeft: 14 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><View style={[s.colorDot, { backgroundColor: badgeColor }]} /><Text style={[s.productName, !isSelected && { opacity: 0.5 }]} numberOfLines={1}>{item.name}</Text></View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 8 }}><Text style={s.productAmount}>{formatMoney(item.montant)} {currency}</Text><View style={[s.percentBadge, { backgroundColor: badgeColor + '20' }]}><Text style={[s.percentText, { color: badgeColor }]}>{percent}%</Text></View></View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 8 }}><Text style={s.productAmount}>{formatMoney(item.montant)} {currency}</Text><View style={[s.percentBadge, { backgroundColor: badgeColor + '20' }]}><Text style={[s.percentText, { color: badgeColor }]}>{`${percent}%`}</Text></View></View>
         </View>
       </TouchableOpacity>
     );
@@ -434,13 +518,13 @@ export default function StatsScreen() {
     <View style={s.container}>
       <ThemedStatusBar transparent />
       {/* HEADER */}
-      <LinearGradient colors={activeTheme.gradient} style={[s.header, { paddingTop: insets.top + 10 }]}>
+      <LinearGradient colors={activeTheme.gradient as [string, string, ...string[]]} style={[s.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity onPress={() => router.push('/')} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, opacity: 0.9 }}>
-          <Ionicons name="home-outline" size={16} color="rgba(255,255,255,0.8)" /><Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, marginLeft: 5 }}>{t('home') || 'Accueil'}</Text><Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.8)" style={{ marginHorizontal: 4 }} /><Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>{t('statistics') || 'Statistiques'}</Text>
+          <Ionicons name="home-outline" size={16} color="rgba(255,255,255,0.8)" /><Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, marginLeft: 5 }}>{t('home') || 'Accueil'}</Text><Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.8)" style={{ marginHorizontal: 4 }} /><Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>{t('statistics') || 'Graphiques'}</Text>
         </TouchableOpacity>
         <View style={s.headerTop}>
           <TouchableOpacity onPress={() => router.back()} style={s.iconBtn}><Ionicons name="arrow-back" size={24} color="white" /></TouchableOpacity>
-          <Text style={s.headerTitle}>{t('statistics') || 'Statistiques'}</Text>
+          <Text style={s.headerTitle}>{t('statistics') || 'Graphiques'}</Text>
           <TouchableOpacity onPress={() => setShowMenu(true)} style={s.iconBtn}><Ionicons name="menu" size={24} color="white" /></TouchableOpacity>
         </View>
         <View style={s.summaryRow}>
@@ -456,11 +540,11 @@ export default function StatsScreen() {
         <View style={s.tabContainer}>
           {[
             { k: 'repartition', l: t('distribution') || 'Répartition', icon: 'pie-chart' },
-            { k: 'weekly', l: t('week') || 'Semaine', icon: 'calendar' },
-            { k: 'monthly', l: t('month') || 'Mois', icon: 'calendar-outline' }
+            { k: 'monthly', l: t('month') || 'Mois', icon: 'calendar-outline' },
+            { k: 'yearly', l: 'Année', icon: 'calendar-number' }
           ].map(tab => (
             <TouchableOpacity key={tab.k} style={[s.tab, viewMode === tab.k && { backgroundColor: activeTheme.primary }]} onPress={() => setViewMode(tab.k as ViewMode)}>
-              <Ionicons name={tab.icon as any} size={16} color={viewMode === tab.k ? '#fff' : (isDarkMode ? '#94A3B8' : '#64748B')} />
+              <Ionicons name={tab.icon as any} size={16} color={getTabIconColor(viewMode === tab.k)} />
               <Text style={[s.tabText, viewMode === tab.k && { color: '#fff', fontWeight: 'bold' }]}>{tab.l}</Text>
             </TouchableOpacity>
           ))}
@@ -470,7 +554,22 @@ export default function StatsScreen() {
         {viewMode === 'repartition' && (
           <View style={s.card}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <View><Text style={s.cardTitle}>📊 {t('distribution') || 'Répartition'}</Text><Text style={{ fontSize: 12, color: isDarkMode ? '#94A3B8' : '#9CA3AF', marginTop: 2 }}>{data.length} {t('products') || 'produits'} sélectionnés</Text></View>
+              <View>
+                <Text style={s.cardTitle}>📊 {t('distribution') || 'Répartition'}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                  <Text style={{ fontSize: 12, color: isDarkMode ? '#94A3B8' : '#9CA3AF' }}>
+                    {selectedProducts.length} {t('products') || 'produits'} sélectionnés
+                  </Text>
+                  {/* 🎯 SOLUTION 4 : Badge d'information si limitation active */}
+                  {selectedProducts.length > 7 && (
+                    <View style={{ backgroundColor: activeTheme.primary + '20', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 }}>
+                      <Text style={{ fontSize: 10, color: activeTheme.primary, fontWeight: '700' }}>
+                        Top 7 + Autres
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
               <TouchableOpacity onPress={() => setShowAllProductsModal(true)} style={s.filterBtn}><Ionicons name="options-outline" size={16} color={activeTheme.primary} /><Text style={{ color: activeTheme.primary, fontWeight: '600', fontSize: 13 }}>{t('filter') || 'Filtrer'}</Text></TouchableOpacity>
             </View>
             <Animated.View style={{ transform: [{ scale: scaleChart }, { rotate: spin }] }}>
@@ -491,9 +590,9 @@ export default function StatsScreen() {
         {/* VUE 2 : SEMAINE */}
         {viewMode === 'weekly' && (
           <View style={s.card}>
-            <Text style={s.cardTitle}>📅 {t('last_4_weeks') || 'Les 4 dernières semaines'}</Text>
+            <Text style={s.cardTitle}>{t('last_4_weeks') || 'Les 4 dernières semaines'}</Text>
             <View style={{ marginTop: 15, alignItems: 'center' }}>
-              {weeklyLineData && weeklyLineData.values.some(v => v > 0.01) ? (
+              {weeklyLineData?.values.some(v => v > 0.01) ? (
                 <LineChart data={{ labels: weeklyLineData.labels, datasets: [{ data: weeklyLineData.values }] }} width={SCREEN_WIDTH - 60} height={220} yAxisLabel="" yAxisSuffix="" chartConfig={lineChartConfig} bezier style={s.lineChart} />
               ) : (
                 <View style={s.emptyChart}><Ionicons name="analytics-outline" size={50} color={isDarkMode ? '#334155' : '#E5E7EB'} /><Text style={{ color: isDarkMode ? '#64748B' : '#9CA3AF', marginTop: 10 }}>{t('no_data') || 'Pas de données'}</Text></View>
@@ -506,15 +605,30 @@ export default function StatsScreen() {
         {/* VUE 3 : MOIS */}
         {viewMode === 'monthly' && (
           <View style={s.card}>
-            <Text style={s.cardTitle}>📆 {t('last_3_months') || 'Les 3 derniers mois'}</Text>
+            <Text style={s.cardTitle}>{t('last_3_months') || 'Les 3 derniers mois'}</Text>
             <View style={{ marginTop: 15, alignItems: 'center' }}>
-              {monthlyLineData && monthlyLineData.values.some(v => v > 0.01) ? (
+              {monthlyLineData?.values.some(v => v > 0.01) ? (
                 <LineChart data={{ labels: monthlyLineData.labels, datasets: [{ data: monthlyLineData.values }] }} width={SCREEN_WIDTH - 60} height={220} yAxisLabel="" yAxisSuffix="" chartConfig={lineChartConfig} bezier style={s.lineChart} />
               ) : (
                 <View style={s.emptyChart}><Ionicons name="analytics-outline" size={50} color={isDarkMode ? '#334155' : '#E5E7EB'} /><Text style={{ color: isDarkMode ? '#64748B' : '#9CA3AF', marginTop: 10 }}>{t('no_data') || 'Pas de données'}</Text></View>
               )}
             </View>
             <View style={{ marginTop: 15 }}>{monthlyData.map(item => renderProgressBar(item, maxMonthlyAmount))}</View>
+          </View>
+        )}
+
+        {/* VUE 4 : ANNÉE */}
+        {viewMode === 'yearly' && (
+          <View style={s.card}>
+            <Text style={s.cardTitle}>{t('last_3_years') || 'Les 3 dernières années'}</Text>
+            <View style={{ marginTop: 15, alignItems: 'center' }}>
+              {yearlyLineData?.values.some(v => v > 0.01) ? (
+                <LineChart data={{ labels: yearlyLineData.labels, datasets: [{ data: yearlyLineData.values }] }} width={SCREEN_WIDTH - 60} height={220} yAxisLabel="" yAxisSuffix="" chartConfig={lineChartConfig} bezier style={s.lineChart} />
+              ) : (
+                <View style={s.emptyChart}><Ionicons name="analytics-outline" size={50} color={isDarkMode ? '#334155' : '#E5E7EB'} /><Text style={{ color: isDarkMode ? '#64748B' : '#9CA3AF', marginTop: 10 }}>{t('no_data') || 'Pas de données'}</Text></View>
+              )}
+            </View>
+            <View style={{ marginTop: 15 }}>{yearlyData.map(item => renderProgressBar(item, maxYearlyAmount))}</View>
           </View>
         )}
       </Animated.ScrollView>
@@ -531,7 +645,7 @@ export default function StatsScreen() {
               <View style={s.selectedBadge}><Text style={{ color: activeTheme.primary, fontWeight: '700', fontSize: 14 }}>{selectedProducts.length}/{allProducts.length}</Text></View>
             </View>
             <View style={{ marginTop: 20 }}><Text style={{ fontSize: 20, fontWeight: '800', color: isDarkMode ? '#F1F5F9' : '#1F2937' }}>🎯 {t('manage_display') || 'Gérer l\'affichage'}</Text><Text style={{ fontSize: 13, color: isDarkMode ? '#64748B' : '#9CA3AF', marginTop: 4 }}>Sélectionnez les produits à afficher</Text></View>
-            <TouchableOpacity onPress={toggleAllProducts} style={s.toggleAllBtn}><Ionicons name={selectedProducts.length === allProducts.length ? "checkbox" : "square-outline"} size={24} color={activeTheme.primary} /><Text style={{ color: activeTheme.primary, fontWeight: '600', fontSize: 15 }}>{selectedProducts.length === allProducts.length ? (t('deselect_all') || 'Tout désélectionner') : (t('select_all') || 'Tout sélectionner')}</Text></TouchableOpacity>
+            <TouchableOpacity onPress={toggleAllProducts} style={s.toggleAllBtn}><Ionicons name={selectedProducts.length === allProducts.length ? "checkbox" : "square-outline"} size={24} color={activeTheme.primary} /><Text style={{ color: activeTheme.primary, fontWeight: '600', fontSize: 15 }}>{getSelectAllText()}</Text></TouchableOpacity>
           </View>
           <FlatList data={allProducts} keyExtractor={(_, index) => index.toString()} contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false} renderItem={renderProductItem} ListEmptyComponent={<View style={{ alignItems: 'center', marginTop: 50 }}><Ionicons name="cube-outline" size={60} color={isDarkMode ? '#334155' : '#E5E7EB'} /><Text style={{ color: isDarkMode ? '#64748B' : '#9CA3AF', marginTop: 10 }}>Aucun produit</Text></View>} />
         </View>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, 
-  TextInput, Modal, Switch, Dimensions, Animated, Easing, Alert
+  TextInput, Modal, Switch, Dimensions, Animated, Alert, Easing
 } from 'react-native';
 import { ThemedStatusBar } from '../../src/components/ThemedStatusBar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,18 +11,26 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { LinearGradient } from 'expo-linear-gradient';
 
-
 import { getDb } from '../../src/db/init';
 import { useTheme, THEMES } from '../../src/context/ThemeContext'; 
 import { useSettings } from '../../src/context/SettingsContext'; 
 import * as NotifService from '../../src/services/notificationService';
+
+// ✅ IMPORT DES LOGOS DEPUIS LE COMPOSANT
+import { MiniLogo, HeaderLogo } from '../../src/components/Logo';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const formatMoney = (value: number) => {
   if (!value && value !== 0) return '0';
   const num = Number(value);
-  if (isNaN(num)) return '0';
+  if (Number.isNaN(num)) return '0';
+  if (num >= 1000000) {
+    return (num / 1000000).toFixed(1).replace('.0', '') + 'M';
+  }
+  if (num >= 100000) {
+    return (num / 1000).toFixed(0) + 'k';
+  }
   return num.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 };
 
@@ -99,318 +107,9 @@ const TEXTS = {
 };
 
 // ============================================
-// 🎨 OVERLAPPING AVEC PANIER
-// ============================================
-const AnimatedOverlapping = () => {
-  const floatAnim = useRef(new Animated.Value(0)).current;
-  const rotateAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const cartBounce = useRef(new Animated.Value(0)).current;
-  const sparkle1 = useRef(new Animated.Value(0)).current;
-  const sparkle2 = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(floatAnim, { toValue: 1, duration: 3000, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
-        Animated.timing(floatAnim, { toValue: 0, duration: 3000, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
-      ])
-    ).start();
-
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(rotateAnim, { toValue: 1, duration: 4000, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
-        Animated.timing(rotateAnim, { toValue: 0, duration: 4000, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
-      ])
-    ).start();
-
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(scaleAnim, { toValue: 1.08, duration: 2500, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
-        Animated.timing(scaleAnim, { toValue: 1, duration: 2500, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
-      ])
-    ).start();
-
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(cartBounce, { toValue: 1, duration: 500, useNativeDriver: true, easing: Easing.bounce }),
-        Animated.delay(2000),
-        Animated.timing(cartBounce, { toValue: 0, duration: 300, useNativeDriver: true }),
-        Animated.delay(1500),
-      ])
-    ).start();
-
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(sparkle1, { toValue: 1, duration: 800, useNativeDriver: true }),
-        Animated.timing(sparkle1, { toValue: 0, duration: 800, useNativeDriver: true }),
-        Animated.delay(400),
-      ])
-    ).start();
-
-    Animated.loop(
-      Animated.sequence([
-        Animated.delay(200),
-        Animated.timing(sparkle2, { toValue: 1, duration: 600, useNativeDriver: true }),
-        Animated.timing(sparkle2, { toValue: 0, duration: 600, useNativeDriver: true }),
-        Animated.delay(600),
-      ])
-    ).start();
-  }, []);
-
-  const translateY = floatAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -25] });
-  const rotate = rotateAnim.interpolate({ inputRange: [0, 1], outputRange: ['-8deg', '8deg'] });
-  const cartScale = cartBounce.interpolate({ inputRange: [0, 1], outputRange: [1, 1.15] });
-
-  return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Animated.View 
-        style={{ 
-          position: 'absolute', 
-          top: -100, 
-          right: -100, 
-          width: 300, 
-          height: 300, 
-          borderRadius: 150, 
-          backgroundColor: 'rgba(255,255,255,0.04)',
-          transform: [{ scale: scaleAnim }]
-        }} 
-      />
-      
-      <Animated.View 
-        style={{ 
-          position: 'absolute', 
-          top: -50, 
-          right: -50, 
-          width: 200, 
-          height: 200, 
-          borderRadius: 100, 
-          backgroundColor: 'rgba(255,255,255,0.06)',
-          transform: [{ scale: scaleAnim.interpolate({ inputRange: [1, 1.08], outputRange: [1.08, 1] }) }]
-        }} 
-      />
-      
-      <Animated.View 
-        style={{ 
-          position: 'absolute', 
-          top: 15, 
-          right: -15, 
-          transform: [
-            { translateY }, 
-            { rotate }, 
-            { scale: Animated.multiply(scaleAnim, cartScale) }
-          ] 
-        }}
-      >
-        <Ionicons 
-          name="cart" 
-          size={160} 
-          color="rgba(255,255,255,0.10)" 
-          style={{
-            shadowColor: 'rgba(255,255,255,0.3)',
-            shadowOffset: { width: 0, height: 10 },
-            shadowOpacity: 0.2,
-            shadowRadius: 20,
-          }}
-        />
-      </Animated.View>
-
-      <Animated.View style={{ position: 'absolute', top: 45, right: 95, opacity: sparkle1 }}>
-        <Text style={{ fontSize: 18, color: 'rgba(255,255,255,0.7)' }}>✨</Text>
-      </Animated.View>
-      
-      <Animated.View style={{ position: 'absolute', top: 85, right: 130, opacity: sparkle2 }}>
-        <Text style={{ fontSize: 16, color: 'rgba(255,255,255,0.6)' }}>✨</Text>
-      </Animated.View>
-
-      <Animated.View style={{ position: 'absolute', top: 60, right: 50, opacity: sparkle1.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }) }}>
-        <Text style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)' }}>✨</Text>
-      </Animated.View>
-
-      <Animated.View 
-        style={{ 
-          position: 'absolute', 
-          top: 100, 
-          right: 115, 
-          width: 24, 
-          height: 24, 
-          borderRadius: 12, 
-          backgroundColor: 'rgba(255,255,255,0.08)',
-          transform: [{ translateY: floatAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 18] }) }]
-        }} 
-      />
-      <Animated.View 
-        style={{ 
-          position: 'absolute', 
-          top: 65, 
-          right: 70, 
-          width: 16, 
-          height: 16, 
-          borderRadius: 8, 
-          backgroundColor: 'rgba(255,255,255,0.06)',
-          transform: [{ translateY: floatAnim.interpolate({ inputRange: [0, 1], outputRange: [10, -10] }) }]
-        }} 
-      />
-      
-      <Animated.View 
-        style={{ 
-          position: 'absolute', 
-          top: 125, 
-          right: 35, 
-          width: 12, 
-          height: 12, 
-          borderRadius: 6, 
-          backgroundColor: 'rgba(255,255,255,0.1)',
-          transform: [{ translateY: floatAnim.interpolate({ inputRange: [0, 1], outputRange: [-8, 12] }) }]
-        }} 
-      />
-    </View>
-  );
-};
-
-// ============================================
-// 🎯 LOGO "e-tsena" AVEC PANIER
-// ============================================
-const UniqueLogo = ({ size = 46, activeTheme }: { size?: number; activeTheme: any }) => {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const glowAnim = useRef(new Animated.Value(0)).current;
-  const cartWiggle = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.05, duration: 2000, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 2000, useNativeDriver: true, easing: Easing.inOut(Easing.ease) }),
-      ])
-    ).start();
-
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowAnim, { toValue: 1, duration: 1500, useNativeDriver: true }),
-        Animated.timing(glowAnim, { toValue: 0, duration: 1500, useNativeDriver: true }),
-      ])
-    ).start();
-
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(cartWiggle, { toValue: 1, duration: 300, useNativeDriver: true, easing: Easing.bounce }),
-        Animated.delay(2500),
-        Animated.timing(cartWiggle, { toValue: 0, duration: 300, useNativeDriver: true }),
-        Animated.delay(1500),
-      ])
-    ).start();
-  }, []);
-
-  const wiggleRotate = cartWiggle.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '15deg']
-  });
-
-  return (
-    <Animated.View style={{ transform: [{ scale: pulseAnim }], flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-      <View>
-        <Animated.View 
-          style={{
-            position: 'absolute',
-            width: size + 14,
-            height: size + 14,
-            borderRadius: (size + 14) / 2,
-            backgroundColor: 'transparent',
-            borderWidth: 2,
-            borderColor: glowAnim.interpolate({
-              inputRange: [0, 1],
-              outputRange: ['rgba(255,255,255,0.15)', 'rgba(255,255,255,0.4)']
-            }),
-            top: -7,
-            left: -7,
-          }}
-        />
-        
-        <View style={{
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          backgroundColor: '#fff',
-          justifyContent: 'center',
-          alignItems: 'center',
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.25,
-          shadowRadius: 8,
-          elevation: 8,
-          borderWidth: 2.5,
-          borderColor: 'rgba(255,255,255,0.95)',
-        }}>
-          <LinearGradient
-            colors={[activeTheme.primary, activeTheme.gradient?.[1] || activeTheme.secondary]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={{
-              width: size - 10,
-              height: size - 10,
-              borderRadius: (size - 10) / 2,
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}
-          >
-            <Text style={{
-              fontSize: size * 0.48,
-              fontWeight: '900',
-              color: '#fff',
-              fontStyle: 'italic',
-              textShadowColor: 'rgba(0,0,0,0.25)',
-              textShadowOffset: { width: 1, height: 2 },
-              textShadowRadius: 3,
-              letterSpacing: -1,
-            }}>
-              e
-            </Text>
-          </LinearGradient>
-          
-          <Animated.View style={{
-            position: 'absolute',
-            bottom: -4,
-            right: -4,
-            width: 22,
-            height: 22,
-            borderRadius: 11,
-            backgroundColor: '#10B981',
-            justifyContent: 'center',
-            alignItems: 'center',
-            borderWidth: 2.5,
-            borderColor: '#fff',
-            shadowColor: '#10B981',
-            shadowOffset: { width: 0, height: 3 },
-            shadowOpacity: 0.5,
-            shadowRadius: 5,
-            elevation: 6,
-            transform: [{ rotate: wiggleRotate }]
-          }}>
-            <Ionicons name="cart" size={12} color="#fff" />
-          </Animated.View>
-        </View>
-      </View>
-
-      <Text style={{
-        fontSize: 24,
-        fontWeight: '900',
-        color: '#fff',
-        letterSpacing: -0.5,
-        textShadowColor: 'rgba(0,0,0,0.2)',
-        textShadowOffset: { width: 1, height: 2 },
-        textShadowRadius: 4,
-      }}>
-        -tsena
-      </Text>
-    </Animated.View>
-  );
-};
-
-// ============================================
 // 🔔 MODAL DE CONFIRMATION
 // ============================================
 const BeautifulConfirmModal = ({ visible, title, message, onConfirm, onCancel, confirmText, cancelText, activeTheme, isDarkMode, type = 'danger' }: any) => {
-  if (!visible) return null;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
@@ -423,6 +122,8 @@ const BeautifulConfirmModal = ({ visible, title, message, onConfirm, onCancel, c
     }
   }, [visible]);
 
+  if (!visible) return null;
+
   const isDanger = type === 'danger';
   const mainColor = isDanger ? '#EF4444' : activeTheme.primary;
   const bgColor = isDarkMode ? '#1E293B' : '#fff';
@@ -433,7 +134,15 @@ const BeautifulConfirmModal = ({ visible, title, message, onConfirm, onCancel, c
     <Modal transparent visible={visible} animationType="none" onRequestClose={onCancel}>
       <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' }}>
         <Animated.View style={{ width: '85%', backgroundColor: bgColor, borderRadius: 28, padding: 24, alignItems: 'center', elevation: 15, transform: [{ scale: scaleAnim }], opacity: opacityAnim }}>
-          <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: isDanger ? (isDarkMode ? '#7F1D1D' : '#FEE2E2') : activeTheme.secondary, justifyContent: 'center', alignItems: 'center', marginBottom: 20 }}>
+          <View style={{ 
+            width: 64, 
+            height: 64, 
+            borderRadius: 32, 
+            backgroundColor: isDanger ? (isDarkMode ? '#7F1D1D' : '#FEE2E2') : activeTheme.secondary, 
+            justifyContent: 'center', 
+            alignItems: 'center', 
+            marginBottom: 20 
+          }}>
             <Ionicons name={isDanger ? "trash-outline" : "alert-circle-outline"} size={32} color={mainColor} />
           </View>
           <Text style={{ fontSize: 20, fontWeight: '800', color: textColor, textAlign: 'center', marginBottom: 10 }}>{title}</Text>
@@ -462,7 +171,7 @@ interface Achat {
 }
 
 // ============================================
-// 🎴 CARD PROFESSIONNEL
+// 🎴 CARD AVEC MINI LOGO IMPORTÉ
 // ============================================
 const AchatCard = ({ item, viewMode, activeTheme, currency, onPress, onAction, isDarkMode }: any) => {
   const isDone = item.statut === 1;
@@ -508,6 +217,7 @@ const AchatCard = ({ item, viewMode, activeTheme, currency, onPress, onAction, i
           }}
         >
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            {/* ✅ MINI LOGO IMPORTÉ */}
             <View style={{ 
               width: 44, 
               height: 44, 
@@ -518,7 +228,7 @@ const AchatCard = ({ item, viewMode, activeTheme, currency, onPress, onAction, i
               borderWidth: 1.5,
               borderColor: activeTheme.primary + '30',
             }}>
-              <Ionicons name="cart-outline" size={22} color={activeTheme.primary} />
+              <MiniLogo size={26} color={activeTheme.primary} />
               {isDone && (
                 <View style={{ position: 'absolute', bottom: -4, right: -4, width: 16, height: 16, borderRadius: 8, backgroundColor: activeTheme.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: cardBg }}>
                   <Ionicons name="checkmark" size={9} color="#fff" />
@@ -573,6 +283,7 @@ const AchatCard = ({ item, viewMode, activeTheme, currency, onPress, onAction, i
           marginBottom: 12,
         }}
       >
+        {/* ✅ MINI LOGO IMPORTÉ */}
         <View style={{ 
           width: 52, 
           height: 52, 
@@ -583,7 +294,7 @@ const AchatCard = ({ item, viewMode, activeTheme, currency, onPress, onAction, i
           borderWidth: 2,
           borderColor: activeTheme.primary + '25',
         }}>
-          <Ionicons name="cart-outline" size={24} color={activeTheme.primary} />
+          <MiniLogo size={30} color={activeTheme.primary} />
           {isDone && (
             <View style={{ position: 'absolute', bottom: -3, right: -3, width: 18, height: 18, borderRadius: 9, backgroundColor: activeTheme.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: cardBg }}>
               <Ionicons name="checkmark" size={10} color="#fff" />
@@ -613,7 +324,7 @@ const AchatCard = ({ item, viewMode, activeTheme, currency, onPress, onAction, i
         </View>
 
         <TouchableOpacity onPress={onAction} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Ionicons name="chevron-forward" size={22} color={subColor} />
+          <Ionicons name="ellipsis-horizontal" size={22} color={subColor} />
         </TouchableOpacity>
       </TouchableOpacity>
     </Animated.View>
@@ -665,7 +376,7 @@ const HelpModal = ({ visible, onClose, activeTheme, isDarkMode }: any) => {
               { q: TEXTS.faq_q3, a: TEXTS.faq_a3 },
               { q: TEXTS.faq_q4, a: TEXTS.faq_a4 },
             ].map((item, i) => (
-              <View key={i} style={{ backgroundColor: cardBg, borderRadius: 14, borderWidth: 1, borderColor, padding: 14, marginBottom: 12 }}>
+              <View key={`faq-${i}`} style={{ backgroundColor: cardBg, borderRadius: 14, borderWidth: 1, borderColor, padding: 14, marginBottom: 12 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                   <Ionicons name="help-circle" size={18} color={activeTheme.primary} />
                   <Text style={{ flex: 1, fontSize: 14, fontWeight: '600', color: textColor }}>{item.q}</Text>
@@ -681,7 +392,7 @@ const HelpModal = ({ visible, onClose, activeTheme, isDarkMode }: any) => {
       <View style={{ paddingTop: 15 }}>
         <Text style={{ fontSize: 18, fontWeight: '800', color: textColor, marginBottom: 15 }}>{title}</Text>
         {items.map((text, i) => (
-          <View key={i} style={{ flexDirection: 'row', backgroundColor: cardBg, borderRadius: 14, borderWidth: 1, borderColor, padding: 14, marginBottom: 10, gap: 12 }}>
+          <View key={`item-${activeSection}-${i}`} style={{ flexDirection: 'row', backgroundColor: cardBg, borderRadius: 14, borderWidth: 1, borderColor, padding: 14, marginBottom: 10, gap: 12 }}>
             {activeSection === 'start' && (
               <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: activeTheme.primary, justifyContent: 'center', alignItems: 'center' }}>
                 <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>{i + 1}</Text>
@@ -808,9 +519,6 @@ const SettingsModal = ({ visible, onClose, isDarkMode, toggleDarkMode, currentTh
                 <Ionicons name="information-circle-outline" size={20} color="#D97706" />
               </View>
               <Text style={{ flex: 1, fontSize: 16, fontWeight: '600', color: textColor, marginLeft: 14 }}>{TEXTS.help}</Text>
-              <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: '#F59E0B', justifyContent: 'center', alignItems: 'center', marginRight: 8 }}>
-                <Ionicons name="help" size={12} color="#fff" />
-              </View>
               <Ionicons name="chevron-forward" size={20} color={subColor} />
             </TouchableOpacity>
           </View>
@@ -834,8 +542,9 @@ const ActionsModal = ({ visible, onClose, selectedAchat, handleRename, handleDel
         <View style={{ backgroundColor: bgColor, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 40 }}>
           <View style={{ width: 40, height: 5, backgroundColor: borderColor, borderRadius: 3, alignSelf: 'center', marginBottom: 20 }} />
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 15, marginBottom: 25, paddingBottom: 20, borderBottomWidth: 1, borderColor }}>
+            {/* ✅ MINI LOGO IMPORTÉ */}
             <View style={{ width: 52, height: 52, borderRadius: 16, backgroundColor: activeTheme.secondary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: activeTheme.primary + '30' }}>
-              <Ionicons name="cart-outline" size={24} color={activeTheme.primary} />
+              <MiniLogo size={30} color={activeTheme.primary} />
               {isHistory && (
                 <View style={{ position: 'absolute', bottom: -2, right: -2, width: 18, height: 18, borderRadius: 9, backgroundColor: activeTheme.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: bgColor }}>
                   <Ionicons name="checkmark" size={10} color="#fff" />
@@ -947,9 +656,9 @@ export default function Home() {
 
   const ensureSchema = (db: any) => {
     try {
-      const info = db.getAllSync("PRAGMA table_info(Achat)");
+      const info = db.getAllSync("PRAGMA table_info(ListeAchat)");
       const hasStatut = info.some((col: any) => col.name === 'statut');
-      if (!hasStatut) db.runSync("ALTER TABLE Achat ADD COLUMN statut INTEGER DEFAULT 0");
+      if (!hasStatut) db.runSync("ALTER TABLE ListeAchat ADD COLUMN statut INTEGER DEFAULT 0");
     } catch (e) { console.log("Schema check error", e); }
   };
 
@@ -957,8 +666,8 @@ export default function Home() {
     try {
       const db = getDb();
       ensureSchema(db);
-      db.runSync(`DELETE FROM Achat WHERE (nomListe = 'Nouvelle Liste' OR nomListe = '' OR nomListe IS NULL) AND id NOT IN (SELECT DISTINCT idAchat FROM LigneAchat)`);
-      const result = db.getAllSync(`SELECT a.id, a.nomListe, a.dateAchat, a.statut, COALESCE(SUM(l.prixTotal), 0) as totalDepense, COUNT(l.id) as nombreArticles FROM Achat a LEFT JOIN LigneAchat l ON a.id = l.idAchat GROUP BY a.id ORDER BY a.dateAchat DESC`);
+      db.runSync(`DELETE FROM ListeAchat WHERE (nomListe = 'Nouvelle Liste' OR nomListe = '' OR nomListe IS NULL) AND id NOT IN (SELECT DISTINCT idListeAchat FROM Article)`);
+      const result = db.getAllSync(`SELECT a.id, a.nomListe, a.dateAchat, a.statut, COALESCE(SUM(l.prixTotal), 0) as totalDepense, COUNT(l.id) as nombreArticles FROM ListeAchat a LEFT JOIN Article l ON a.id = l.idListeAchat GROUP BY a.id ORDER BY a.dateAchat DESC`);
       if (NotifService.getUnreadNotificationCount) setUnreadCount(NotifService.getUnreadNotificationCount());
       let sorted = [...(result as Achat[])];
       if (sortMode === 'name') sorted.sort((a, b) => (a.nomListe || '').localeCompare(b.nomListe || ''));
@@ -982,9 +691,13 @@ export default function Home() {
   const handleCreate = () => {
     try {
       const db = getDb();
-      const res = db.runSync('INSERT INTO Achat (nomListe, dateAchat, statut) VALUES (?, ?, 0)', ['', new Date().toISOString()]);
-      router.push(`/achat/${res.lastInsertRowId}`);
-    } catch (e) { console.error(e); }
+      const defaultTitle = `Ma liste ${format(new Date(), 'dd/MM HH:mm')}`;
+      const res = db.runSync('INSERT INTO ListeAchat (nomListe, dateAchat, statut) VALUES (?, ?, 0)', [defaultTitle, new Date().toISOString()]);
+      router.push({ pathname: `/achat/${res.lastInsertRowId}`, params: { isNew: '1' } });
+    } catch (e) { 
+      console.error(e);
+      Alert.alert('Erreur', 'Impossible de créer la liste');
+    }
   };
 
   const handleOpenList = (item: Achat) => {
@@ -996,7 +709,7 @@ export default function Home() {
     Alert.alert(TEXTS.check_prices_title, TEXTS.check_prices_msg, [
       { text: TEXTS.cancel, style: "cancel" },
       { text: TEXTS.confirm, onPress: () => {
-        try { getDb().runSync('UPDATE Achat SET statut = 1 WHERE id = ?', [selectedAchat.id]); setShowActions(false); loadData(); Alert.alert(TEXTS.done, TEXTS.list_archived); } catch (e) { console.error(e); }
+        try { getDb().runSync('UPDATE ListeAchat SET statut = 1 WHERE id = ?', [selectedAchat.id]); setShowActions(false); loadData(); Alert.alert(TEXTS.done, TEXTS.list_archived); } catch (e) { console.error(e); }
       }}
     ]);
   };
@@ -1010,14 +723,14 @@ export default function Home() {
 
   const confirmRename = () => {
     if (!selectedAchat || !newListName.trim()) return;
-    try { getDb().runSync('UPDATE Achat SET nomListe = ? WHERE id = ?', [newListName.trim(), selectedAchat.id]); setRenameModal(false); setNewListName(''); loadData(); } catch (e) { console.error(e); }
+    try { getDb().runSync('UPDATE ListeAchat SET nomListe = ? WHERE id = ?', [newListName.trim(), selectedAchat.id]); setRenameModal(false); setNewListName(''); loadData(); } catch (e) { console.error(e); }
   };
 
   const handleDelete = () => { setShowActions(false); setTimeout(() => setDeleteModal(true), 300); };
 
   const confirmDelete = () => {
     if (!selectedAchat) return;
-    try { getDb().runSync('DELETE FROM LigneAchat WHERE idAchat = ?', [selectedAchat.id]); getDb().runSync('DELETE FROM Achat WHERE id = ?', [selectedAchat.id]); setDeleteModal(false); loadData(); } catch (e) { console.error(e); }
+    try { getDb().runSync('DELETE FROM Article WHERE idListeAchat = ?', [selectedAchat.id]); getDb().runSync('DELETE FROM ListeAchat WHERE id = ?', [selectedAchat.id]); setDeleteModal(false); loadData(); } catch (e) { console.error(e); }
   };
 
   return (
@@ -1025,11 +738,14 @@ export default function Home() {
       <ThemedStatusBar transparent />
       
       {/* Header avec gradient */}
-      <LinearGradient colors={activeTheme?.gradient || ['#7143b5', '#8b5fd4']} style={[s.header, { paddingTop: insets.top + 10 }]}>
-        <AnimatedOverlapping />
-        
+      <LinearGradient 
+        colors={(activeTheme?.gradient && activeTheme.gradient.length >= 2 ? activeTheme.gradient : ['#7143b5', '#8b5fd4']) as [string, string, ...string[]]} 
+        style={[s.header, { paddingTop: insets.top + 10 }]}
+      >
         <View style={s.headerTop}>
-          <UniqueLogo size={46} activeTheme={activeTheme} />
+          {/* ✅ HEADER LOGO IMPORTÉ */}
+          <HeaderLogo size={58} />
+          
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <TouchableOpacity style={s.iconBtn} onPress={() => router.push('/notifications')}>
               <Ionicons name="notifications-outline" size={20} color="#fff" />
@@ -1059,7 +775,7 @@ export default function Home() {
         </View>
       </LinearGradient>
 
-      {/* ✅ CARD SUMMARY RÉDUITE */}
+      {/* CARD SUMMARY */}
       <View style={{ paddingHorizontal: 20, marginTop: -35, marginBottom: 15, zIndex: 20 }}>
         <View style={s.summaryCard}>
           <View style={{ alignItems: 'center', marginBottom: 8 }}>
@@ -1121,7 +837,7 @@ export default function Home() {
       {/* Navbar */}
       <View style={[s.navbar, { paddingBottom: insets.bottom > 0 ? insets.bottom : 10, height: 60 + (insets.bottom > 0 ? insets.bottom : 10) }]}>
         <TouchableOpacity style={s.navItem} onPress={loadData}><Ionicons name="home" size={24} color={activeTheme.primary} /><Text style={[s.navText, { color: activeTheme.primary }]}>{TEXTS.welcome}</Text></TouchableOpacity>
-        <View style={{ top: -25 }}><TouchableOpacity style={[s.fab, { shadowColor: activeTheme.primary }]} onPress={handleCreate} activeOpacity={0.8}><LinearGradient colors={activeTheme?.gradient || ['#7143b5', '#8b5fd4']} style={s.fabGradient}><Ionicons name="add" size={32} color="#fff" /></LinearGradient></TouchableOpacity></View>
+        <View style={{ top: -25 }}><TouchableOpacity style={[s.fab, { shadowColor: activeTheme.primary }]} onPress={handleCreate} activeOpacity={0.8}><LinearGradient colors={(activeTheme?.gradient && activeTheme.gradient.length >= 2 ? activeTheme.gradient : ['#7143b5', '#8b5fd4']) as [string, string, ...string[]]} style={s.fabGradient}><Ionicons name="add" size={32} color="#fff" /></LinearGradient></TouchableOpacity></View>
         <TouchableOpacity style={s.navItem} onPress={() => router.push('/rapports')}><Ionicons name="pie-chart-outline" size={24} color={s.textSec.color} /><Text style={[s.navText, { color: s.textSec.color }]}>{TEXTS.reports}</Text></TouchableOpacity>
       </View>
 
@@ -1167,7 +883,6 @@ const styles = (c: any) => StyleSheet.create({
   tabActive: { backgroundColor: '#fff', elevation: 3 },
   tabText: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.8)' },
   
-  // ✅ SUMMARY CARD RÉDUITE ET OPTIMISÉE
   summaryCard: { 
     backgroundColor: c.card, 
     borderRadius: 18, 

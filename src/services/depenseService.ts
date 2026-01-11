@@ -1,4 +1,4 @@
-import { AchatRepo, Achat } from '../repositories/achatRepo';
+import { AchatRepo, ListeAchat } from '../repositories/achatRepo';
 import { getDb } from '../db/init';
 
 export const DepenseService = {
@@ -7,29 +7,24 @@ export const DepenseService = {
    * @param year 
    */
   async calculerDepensesMensuelles(month: number, year: number): Promise<number> {
-
     const startDate = new Date(year, month, 1).toISOString();
     const endDate = new Date(year, month + 1, 0).toISOString();
     const achats = await AchatRepo.getAchatsByPeriod(startDate, endDate);
-    return (achats as Achat[]).reduce((total, achat) => total + (achat.montantTotal || 0), 0);
+    return (achats as ListeAchat[]).reduce((total, achat) => total + (achat.montantTotal || 0), 0);
   },
   async calculerTotalGlobal(): Promise<number> {
     const achats = await AchatRepo.listAchats();
-    return (achats as Achat[]).reduce((total, achat) => total + (achat.montantTotal || 0), 0);
+    return (achats as ListeAchat[]).reduce((total, achat) => total + (achat.montantTotal || 0), 0);
   },
   async getDepensesParJour(month: number, year: number) {
     const startDate = new Date(year, month, 1).toISOString();
     const endDate = new Date(year, month + 1, 0).toISOString();
-    
     const achats = await AchatRepo.getAchatsByPeriod(startDate, endDate);
-    
     const result: Record<string, number> = {};
-    
-    for (const achat of (achats as Achat[])) {
+    for (const achat of (achats as ListeAchat[])) {
       const day = achat.dateAchat.split('T')[0]; 
       result[day] = (result[day] || 0) + (achat.montantTotal || 0);
     }
-
     return result;
   },
 
@@ -37,9 +32,10 @@ export const DepenseService = {
   async getRepartitionParProduit() {
     const db = getDb();
     const res = db.getAllSync(`
-      SELECT l.libelleProduit as name, SUM(l.prixTotal) as montant
-      FROM LigneAchat l
-      GROUP BY l.libelleProduit ORDER BY montant DESC
+      SELECT p.libelle as name, SUM(a.prixTotal) as montant
+      FROM Article a
+      JOIN Produit p ON p.id = a.idProduit
+      GROUP BY p.libelle ORDER BY montant DESC
     `);
     return res as { name: string; montant: number }[];
   },
@@ -47,9 +43,9 @@ export const DepenseService = {
   async getTotalSurPeriode(startDate: string, endDate: string) {
     const db = getDb();
     const res = db.getAllSync(`
-      SELECT COALESCE(SUM(l.prixTotal), 0) as t 
-      FROM LigneAchat l JOIN Achat a ON a.id = l.idAchat 
-      WHERE DATE(a.dateAchat) BETWEEN ? AND ?
+      SELECT COALESCE(SUM(a.prixTotal), 0) as t 
+      FROM Article a JOIN ListeAchat l ON l.id = a.idListeAchat 
+      WHERE DATE(l.dateAchat) BETWEEN ? AND ?
     `, [startDate, endDate]);
     return (res[0] as any)?.t || 0;
   },
@@ -58,9 +54,9 @@ export const DepenseService = {
   async getStatsComparatives(startDate: string, endDate: string) {
     const db = getDb();
     const res = db.getAllSync(`
-       SELECT COALESCE(SUM(l.prixTotal), 0) as montant, COUNT(DISTINCT a.id) as nb
-       FROM Achat a JOIN LigneAchat l ON a.id = l.idAchat
-       WHERE DATE(a.dateAchat) BETWEEN ? AND ?`, [startDate, endDate]);
+       SELECT COALESCE(SUM(a.prixTotal), 0) as montant, COUNT(DISTINCT l.id) as nb
+       FROM ListeAchat l JOIN Article a ON l.id = a.idListeAchat
+       WHERE DATE(l.dateAchat) BETWEEN ? AND ?`, [startDate, endDate]);
     return {
       montant: (res[0] as any)?.montant || 0,
       nbAchats: (res[0] as any)?.nb || 0
@@ -74,16 +70,17 @@ export const DepenseService = {
     console.log('[SQL] Requête produits période:', startDate, 'à', endDate);
     
     // Debug: Voir toutes les dates d'achat disponibles
-    const allDates = db.getAllSync(`SELECT id, dateAchat FROM Achat ORDER BY dateAchat DESC LIMIT 10`);
+    const allDates = db.getAllSync(`SELECT id, dateAchat FROM ListeAchat ORDER BY dateAchat DESC LIMIT 10`);
     console.log('[SQL] Dates achats disponibles:', allDates);
     
     // Requête principale avec paramètres
     const res = db.getAllSync(`
-      SELECT l.libelleProduit, SUM(l.quantite) as totalQte, SUM(l.prixTotal) as totalPrix
-      FROM LigneAchat l 
-      JOIN Achat a ON a.id = l.idAchat 
-      WHERE DATE(a.dateAchat) BETWEEN ? AND ?
-      GROUP BY l.libelleProduit
+      SELECT p.libelle as libelleProduit, SUM(a.quantite) as totalQte, SUM(a.prixTotal) as totalPrix
+      FROM Article a 
+      JOIN ListeAchat l ON l.id = a.idListeAchat 
+      JOIN Produit p ON p.id = a.idProduit
+      WHERE DATE(l.dateAchat) BETWEEN ? AND ?
+      GROUP BY p.libelle
       ORDER BY totalPrix DESC
     `, [startDate, endDate]);
     

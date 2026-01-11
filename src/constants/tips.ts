@@ -22,7 +22,7 @@ export const TIPS_OF_THE_DAY = [
     id: 4,
     icon: 'stats-chart-outline',
     title: 'Analysez vos habitudes',
-    text: 'Consultez les statistiques pour comprendre vos habitudes de consommation et optimiser vos achats.',
+    text: 'Consultez les graphiques pour comprendre vos habitudes de consommation et optimiser vos achats.',
   },
   {
     id: 5,

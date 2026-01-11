@@ -9,6 +9,14 @@ export const getDb = () => {
   return dbInstance;
 };
 
+const tableExists = (db: SQLite.SQLiteDatabase, table: string): boolean => {
+  try {
+    const result = db.getAllSync(`SELECT name FROM sqlite_master WHERE type='table' AND name='${table}'`);
+    return result.length > 0;
+  } catch {
+    return false;
+  }
+};
 
 const columnExists = (db: SQLite.SQLiteDatabase, table: string, column: string): boolean => {
   try {
@@ -19,118 +27,107 @@ const columnExists = (db: SQLite.SQLiteDatabase, table: string, column: string):
   }
 };
 
-
 const migrateDatabase = (db: SQLite.SQLiteDatabase) => {
   console.log('🔄 Vérification des migrations...');
-  
- 
-  if (!columnExists(db, 'Produit', 'unite')) {
-    console.log('📝 Migration: Ajout de la colonne "unite" à Produit');
-    try {
-      db.execSync(`ALTER TABLE Produit ADD COLUMN unite TEXT DEFAULT 'pcs'`);
-      
-      
-      db.execSync(`
-        UPDATE Produit SET unite = 'kg' WHERE libelle IN ('Riz', 'Poulet', 'Viande');
-        UPDATE Produit SET unite = 'L' WHERE libelle IN ('Huile', 'Lait');
-      `);
-      
-      console.log('✅ Migration réussie: colonne "unite" ajoutée');
-    } catch (e) {
-      console.error('❌ Erreur migration:', e);
-    }
-  } else {
-    console.log('✅ Colonne "unite" déjà présente');
-  }
-  
- 
-  if (!columnExists(db, 'LigneAchat', 'unite')) {
-    console.log('📝 Migration: Ajout de la colonne "unite" à LigneAchat');
-    try {
-      db.execSync(`ALTER TABLE LigneAchat ADD COLUMN unite TEXT DEFAULT 'pcs'`);
-      console.log('✅ Migration réussie: colonne "unite" ajoutée à LigneAchat');
-    } catch (e) {
-      console.error('❌ Erreur migration LigneAchat.unite:', e);
-    }
+
+  // 1. Renommage des tables (Achat -> ListeAchat, Notification -> Rappel, LigneAchat -> Article)
+  if (tableExists(db, 'Achat') && !tableExists(db, 'ListeAchat')) {
+    console.log('📝 Migration: Renommage Achat -> ListeAchat');
+    db.execSync('ALTER TABLE Achat RENAME TO ListeAchat');
   }
 
-  
-  if (!columnExists(db, 'Notification', 'achatId')) {
-    console.log('📝 Migration: Ajout de la colonne "achatId" à Notification');
-    try {
-      db.execSync(`ALTER TABLE Notification ADD COLUMN achatId INTEGER`);
-      console.log('✅ Migration réussie: colonne "achatId" ajoutée à Notification');
-    } catch (e) {
-      console.error('❌ Erreur migration Notification.achatId:', e);
-    }
+  if (tableExists(db, 'Notification') && !tableExists(db, 'Rappel')) {
+    console.log('📝 Migration: Renommage Notification -> Rappel');
+    db.execSync('ALTER TABLE Notification RENAME TO Rappel');
   }
-  
-  
-  if (columnExists(db, 'LigneAchat', 'idProduit') && !columnExists(db, 'LigneAchat', 'libelleProduit')) {
-    console.log('📝 Migration: Restructuration de LigneAchat (ajout libelleProduit)');
-    try {
-      db.execSync('DROP TABLE IF EXISTS LigneAchat_new');
 
-      
-      db.execSync(`
-        CREATE TABLE LigneAchat_new (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          idAchat INTEGER NOT NULL,
-          libelleProduit TEXT NOT NULL,
-          quantite REAL DEFAULT 1,
-          prixUnitaire REAL DEFAULT 0,
-          prixTotal REAL DEFAULT 0,
-          unite TEXT DEFAULT 'pcs',
-          FOREIGN KEY (idAchat) REFERENCES Achat(id) ON DELETE CASCADE
-        );
-      `);
-      
-     
-      const hasUniteColumn = columnExists(db, 'LigneAchat', 'unite');
-      if (hasUniteColumn) {
-        db.execSync(`
-          INSERT INTO LigneAchat_new (id, idAchat, libelleProduit, quantite, prixUnitaire, prixTotal, unite)
-          SELECT 
-            la.id, 
-            la.idAchat, 
-            COALESCE(p.libelle, 'Produit inconnu') as libelleProduit,
-            la.quantite, 
-            la.prixUnitaire, 
-            la.prixTotal,
-            COALESCE(la.unite, p.unite, 'pcs') as unite
-          FROM LigneAchat la
-          LEFT JOIN Produit p ON p.id = la.idProduit;
-        `);
-      } else {
-        db.execSync(`
-          INSERT INTO LigneAchat_new (id, idAchat, libelleProduit, quantite, prixUnitaire, prixTotal, unite)
-          SELECT 
-            la.id, 
-            la.idAchat, 
-            COALESCE(p.libelle, 'Produit inconnu') as libelleProduit,
-            la.quantite, 
-            la.prixUnitaire, 
-            la.prixTotal,
-            COALESCE(p.unite, 'pcs') as unite
-          FROM LigneAchat la
-          LEFT JOIN Produit p ON p.id = la.idProduit;
-        `);
-      }
-      
+  if (tableExists(db, 'LigneAchat') && !tableExists(db, 'Article')) {
+    console.log('📝 Migration: Renommage LigneAchat -> Article');
+    db.execSync('ALTER TABLE LigneAchat RENAME TO Article');
+  }
 
-      db.execSync('DROP TABLE LigneAchat');
-      db.execSync('ALTER TABLE LigneAchat_new RENAME TO LigneAchat');
-      
-      console.log('✅ Migration LigneAchat réussie');
-    } catch (e) {
-      console.error('❌ Erreur migration LigneAchat:', e);
-     
+  // 2. Migration de la structure de Article (idProduit au lieu de libelleProduit)
+  if (tableExists(db, 'Article')) {
+    const hasLibelle = columnExists(db, 'Article', 'libelleProduit');
+    const hasIdProduit = columnExists(db, 'Article', 'idProduit');
+    const hasIdAchat = columnExists(db, 'Article', 'idAchat'); // Ancien nom FK
+
+    if (hasLibelle || !hasIdProduit || hasIdAchat) {
+      console.log('📝 Migration: Restructuration de la table Article (Normalisation)');
       try {
-        db.execSync('DROP TABLE IF EXISTS LigneAchat_new');
-      } catch (cleanupError) {
-        console.warn('⚠️ Impossible de supprimer LigneAchat_new après échec:', cleanupError);
+        // Créer les produits manquants avant la migration
+        if (hasLibelle) {
+            db.execSync(`
+                INSERT INTO Produit (libelle, unite)
+                SELECT DISTINCT libelleProduit, unite FROM Article 
+                WHERE libelleProduit NOT IN (SELECT libelle FROM Produit)
+            `);
+        }
+
+        db.execSync('DROP TABLE IF EXISTS Article_new');
+        db.execSync(`
+          CREATE TABLE Article_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            idListeAchat INTEGER NOT NULL,
+            idProduit INTEGER NOT NULL,
+            quantite REAL DEFAULT 1,
+            prixUnitaire REAL DEFAULT 0,
+            prixTotal REAL DEFAULT 0,
+            unite TEXT DEFAULT 'pcs',
+            estCoche INTEGER DEFAULT 0,
+            FOREIGN KEY (idListeAchat) REFERENCES ListeAchat(id) ON DELETE CASCADE,
+            FOREIGN KEY (idProduit) REFERENCES Produit(id)
+          );
+        `);
+
+        // Copie des données
+        if (hasLibelle) {
+             db.execSync(`
+                INSERT INTO Article_new (id, idListeAchat, idProduit, quantite, prixUnitaire, prixTotal, unite, estCoche)
+                SELECT 
+                    a.id, 
+                    a.idAchat, 
+                    p.id, 
+                    a.quantite, 
+                    a.prixUnitaire, 
+                    a.prixTotal, 
+                    a.unite,
+                    COALESCE(a.estCoche, 0)
+                FROM Article a
+                JOIN Produit p ON p.libelle = a.libelleProduit
+            `);
+        } 
+        else if (hasIdProduit && hasIdAchat) {
+             db.execSync(`
+                INSERT INTO Article_new (id, idListeAchat, idProduit, quantite, prixUnitaire, prixTotal, unite, estCoche)
+                SELECT 
+                    id, idAchat, idProduit, quantite, prixUnitaire, prixTotal, unite, estCoche
+                FROM Article
+            `);
+        }
+
+        db.execSync('DROP TABLE Article');
+        db.execSync('ALTER TABLE Article_new RENAME TO Article');
+        console.log('✅ Migration Article réussie');
+      } catch (e) {
+        console.error('❌ Erreur migration Article:', e);
       }
     }
+  }
+
+  // 3. Migration de la structure de Rappel (achatId -> idListeAchat)
+  if (tableExists(db, 'Rappel')) {
+      if (columnExists(db, 'Rappel', 'achatId') && !columnExists(db, 'Rappel', 'idListeAchat')) {
+          console.log('📝 Migration: Restructuration de Rappel');
+          try {
+              db.execSync('ALTER TABLE Rappel RENAME COLUMN achatId TO idListeAchat');
+          } catch (e) {
+              console.error('❌ Erreur migration Rappel:', e);
+          }
+      }
+      if (columnExists(db, 'Rappel', 'read')) {
+          try { db.execSync('ALTER TABLE Rappel RENAME COLUMN read TO estLu'); } catch {}
+      }
   }
 };
 
@@ -138,63 +135,54 @@ export const initDatabase = () => {
   console.log('🚀 Initialisation de la base de données...');
   const db = getDb();
   
-  
+  db.execSync('PRAGMA journal_mode = WAL;');
+
   db.execSync(`
-    PRAGMA journal_mode = WAL;
     CREATE TABLE IF NOT EXISTS Produit (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       libelle TEXT NOT NULL,
       unite TEXT DEFAULT 'pcs'
     );
-    CREATE TABLE IF NOT EXISTS Achat (
+    CREATE TABLE IF NOT EXISTS ListeAchat (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       nomListe TEXT,
       dateAchat TEXT,
-      montantTotal REAL DEFAULT 0
+      montantTotal REAL DEFAULT 0,
+      notes TEXT,
+      statut INTEGER DEFAULT 0
     );
-    CREATE TABLE IF NOT EXISTS LigneAchat (
+    CREATE TABLE IF NOT EXISTS Article (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      idAchat INTEGER NOT NULL,
-      libelleProduit TEXT NOT NULL,
+      idListeAchat INTEGER NOT NULL,
+      idProduit INTEGER NOT NULL,
       quantite REAL DEFAULT 1,
       prixUnitaire REAL DEFAULT 0,
       prixTotal REAL DEFAULT 0,
       unite TEXT DEFAULT 'pcs',
-      FOREIGN KEY (idAchat) REFERENCES Achat(id) ON DELETE CASCADE
+      estCoche INTEGER DEFAULT 0,
+      FOREIGN KEY (idListeAchat) REFERENCES ListeAchat(id) ON DELETE CASCADE,
+      FOREIGN KEY (idProduit) REFERENCES Produit(id)
     );
-      CREATE TABLE IF NOT EXISTS Notification (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        achatId INTEGER,
-        titre TEXT NOT NULL,
-        message TEXT NOT NULL,
-        dateRappel TEXT NOT NULL,
-        heureRappel TEXT NOT NULL,
-        type TEXT DEFAULT 'rappel',
-        lu INTEGER DEFAULT 0,
-        supprime INTEGER DEFAULT 0,
-        notificationId TEXT,
-        createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (achatId) REFERENCES Achat(id) ON DELETE CASCADE
-      )
-    `);
+    CREATE TABLE IF NOT EXISTS Rappel (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      idListeAchat INTEGER,
+      titre TEXT NOT NULL,
+      message TEXT NOT NULL,
+      dateRappel TEXT NOT NULL,
+      heureRappel TEXT NOT NULL,
+      type TEXT DEFAULT 'rappel',
+      estLu INTEGER DEFAULT 0,
+      supprime INTEGER DEFAULT 0,
+      notificationId TEXT,
+      createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (idListeAchat) REFERENCES ListeAchat(id) ON DELETE CASCADE
+    );
+  `);
   
-  console.log('✅ Tables créées');
+  console.log('✅ Tables créées (ou existantes)');
   
-  // Appliquer les migrations
   migrateDatabase(db);
-
-  // Migration: Renommer 'read' en 'estLu' dans Notification
-  if (columnExists(db, 'Notification', 'read') && !columnExists(db, 'Notification', 'estLu')) {
-    console.log('📝 Migration: Renommage de "read" en "estLu" dans Notification');
-    try {
-      db.execSync(`ALTER TABLE Notification RENAME COLUMN read TO estLu`);
-      console.log('✅ Migration réussie: colonne "read" renommée en "estLu"');
-    } catch (e) {
-      console.error('❌ Erreur migration Notification.estLu:', e);
-    }
-  }
   
-  // Insérer des produits par défaut si la table est vide
   try {
     const count = db.getFirstSync<{ c: number }>('SELECT COUNT(*) as c FROM Produit');
     if (!count || count.c === 0) {
@@ -233,14 +221,6 @@ export const checkDatabase = () => {
     const db = getDb();
     const tables = db.getAllSync('SELECT name FROM sqlite_master WHERE type="table"');
     console.log('✅ Tables:', tables);
-    
-    // Vérifier la structure de la table Produit
-    const produitStructure = db.getAllSync('PRAGMA table_info(Produit)');
-    console.log('📊 Structure Produit:', produitStructure);
-    
-    const produitCount = db.getFirstSync<{ c: number }>('SELECT COUNT(*) as c FROM Produit');
-    console.log('📦 Nombre de produits:', produitCount?.c || 0);
-    
     return true;
   } catch (error) {
     console.error('❌ Erreur vérification DB:', error);
@@ -248,21 +228,19 @@ export const checkDatabase = () => {
   }
 };
 
-// Fonction pour réinitialiser complètement la DB (en cas de problème)
 export const resetDatabase = () => {
   try {
     const db = getDb();
     console.log('🗑️ RESET: Suppression de toutes les tables...');
     
     db.execSync(`
+      DROP TABLE IF EXISTS Article;
       DROP TABLE IF EXISTS LigneAchat;
+      DROP TABLE IF EXISTS ListeAchat;
       DROP TABLE IF EXISTS Achat;
+      DROP TABLE IF EXISTS Rappel;
+      DROP TABLE IF EXISTS Notification;
       DROP TABLE IF EXISTS Produit;
-      DROP TABLE IF EXISTS TypeProduit;
-      DROP TABLE IF EXISTS Rapport;
-      DROP TABLE IF EXISTS DepenseParCategorie;
-      DROP TABLE IF EXISTS DepenseParProduit;
-      DROP TABLE IF EXISTS DepenseParDate;
     `);
     console.log('✅ Tables supprimées');
     console.log('🔄 Réinitialisation...');

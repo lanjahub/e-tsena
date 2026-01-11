@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
   View, Text, TouchableOpacity, StyleSheet, ScrollView, 
   Animated, Dimensions, Modal, ActivityIndicator, Vibration, Alert
@@ -11,12 +11,12 @@ import {
   format, addMonths, subMonths, 
   startOfMonth, endOfMonth, 
   startOfWeek, endOfWeek, eachDayOfInterval, 
-  addWeeks, subWeeks, isSameDay, getDaysInMonth
+  isSameDay, getDaysInMonth
 } from 'date-fns';
 import formatMoney from '../../src/utils/formatMoney';
 import { fr, enUS } from 'date-fns/locale';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import Svg, { Path, Circle, Line, Text as SvgText, Defs, LinearGradient as SvgGradient, Stop, Rect } from 'react-native-svg';
+import Svg, { Path, Circle, Line, Text as SvgText, Defs, LinearGradient as SvgGradient, Stop, Rect, G } from 'react-native-svg';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
@@ -24,8 +24,163 @@ import { getDb } from '../../src/db/init';
 import { useTheme } from '../../src/context/ThemeContext';
 import { ThemedStatusBar } from '../../src/components/ThemedStatusBar';
 import { useSettings } from '../../src/context/SettingsContext';
+import { TrendCard, ProductRanking } from '../../src/components/ReportComponents';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+interface ChartData {
+  name: string;
+  population: number;
+  color: string;
+  legendFontColor: string;
+  legendFontSize: number;
+}
+
+const COLOR_PALETTE = [
+  '#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6',
+  '#EC4899', '#14B8A6', '#F97316', '#6366F1', '#84CC16',
+  '#06B6D4', '#A855F7', '#22C55E', '#0EA5E9', '#E11D48',
+  '#64748B', '#8B5CF6', '#10B981', '#F43F5E', '#8B5CF6'
+];
+
+interface CustomPieChartProps {
+  data: ChartData[];
+  size: number;
+  innerRadius?: number;
+  total: number;
+  isDarkMode: boolean;
+  currency: string;
+}
+
+const CustomPieChart: React.FC<CustomPieChartProps> = ({ 
+  data, size, innerRadius = 0, total, isDarkMode, currency
+}) => {
+  const radius = size / 2 - 10;
+  const center = size / 2;
+  
+  const slices = useMemo(() => {
+    if (total <= 0 || data.length === 0) return [];
+    
+    let currentAngle = -90;
+    const result: Array<{path: string; color: string; name: string; value: number; percent: number; labelX: number; labelY: number;}> = [];
+
+    data.forEach((item) => {
+      if (item.population <= 0) return;
+      const percent = (item.population / total) * 100;
+      const angle = (item.population / total) * 360;
+      
+      const midAngle = currentAngle + angle / 2;
+      const startRad = (currentAngle * Math.PI) / 180;
+      const endRad = ((currentAngle + angle) * Math.PI) / 180;
+      const midRad = (midAngle * Math.PI) / 180;
+      
+      const x1 = center + radius * Math.cos(startRad);
+      const y1 = center + radius * Math.sin(startRad);
+      const x2 = center + radius * Math.cos(endRad);
+      const y2 = center + radius * Math.sin(endRad);
+      const ix1 = center + innerRadius * Math.cos(startRad);
+      const iy1 = center + innerRadius * Math.sin(startRad);
+      const ix2 = center + innerRadius * Math.cos(endRad);
+      const iy2 = center + innerRadius * Math.sin(endRad);
+      
+      const labelRadius = innerRadius > 0 ? (radius + innerRadius) / 2 : radius * 0.7;
+      const labelX = center + labelRadius * Math.cos(midRad);
+      const labelY = center + labelRadius * Math.sin(midRad);
+      
+      const largeArc = angle > 180 ? 1 : 0;
+      
+      let path: string;
+      if (innerRadius > 0) {
+        path = `M ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} L ${ix2} ${iy2} A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${ix1} ${iy1} Z`;
+      } else {
+        path = `M ${center} ${center} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+      }
+      
+      result.push({ path, color: item.color, name: item.name, value: item.population, percent, labelX, labelY });
+      currentAngle += angle;
+    });
+    return result;
+  }, [data, total, center, radius, innerRadius]);
+
+  const truncateName = (name: string, maxLength: number) => name.length <= maxLength ? name : name.substring(0, maxLength - 1) + '.';
+  
+  const getTextColor = (bgColor: string) => { 
+    try { 
+      const hex = bgColor.replace('#', ''); 
+      const r = Number.parseInt(hex.substring(0, 2), 16); 
+      const g = Number.parseInt(hex.substring(2, 4), 16); 
+      const b = Number.parseInt(hex.substring(4, 6), 16); 
+      return ((0.299 * r + 0.587 * g + 0.114 * b) / 255) > 0.6 ? '#1F2937' : '#FFFFFF'; 
+    } catch { return '#FFFFFF'; } 
+  };
+
+  if (slices.length === 0) {
+    return (
+      <View style={{ alignItems: 'center', justifyContent: 'center', height: size }}>
+        <Ionicons name="pie-chart-outline" size={60} color={isDarkMode ? '#334155' : '#E5E7EB'} />
+        <Text style={{ color: isDarkMode ? '#64748B' : '#9CA3AF', marginTop: 10 }}>Aucune donnée</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ alignItems: 'center' }}>
+      <Svg width={size} height={size}>
+        <G>
+          {slices.map((slice, index) => {
+            const isBigSlice = slice.percent > 15;
+            const isSmallSlice = slice.percent > 4; 
+            const showText = isSmallSlice;
+            const textColor = getTextColor(slice.color);
+
+            return (
+              <React.Fragment key={`slice-${slice.name}-${index}`}>
+                <Path d={slice.path} fill={slice.color} stroke={isDarkMode ? '#0F172A' : '#FFFFFF'} strokeWidth={1.5} />
+                {showText && (
+                  <>
+                    <SvgText 
+                      x={slice.labelX} y={slice.labelY - (isBigSlice ? 14 : 10)} 
+                      fontSize={isBigSlice ? 11 : 9} fontWeight="bold" fill={textColor} 
+                      textAnchor="middle" alignmentBaseline="middle"
+                    >
+                      {truncateName(slice.name, isBigSlice ? 12 : 6)}
+                    </SvgText>
+                    <SvgText 
+                      x={slice.labelX} y={slice.labelY} 
+                      fontSize={isBigSlice ? 12 : 9} fontWeight="800" fill={textColor} 
+                      textAnchor="middle" alignmentBaseline="middle"
+                    >
+                      {`${Math.round(slice.value).toLocaleString()} ${currency}`}
+                    </SvgText>
+                    <SvgText 
+                      x={slice.labelX} y={slice.labelY + (isBigSlice ? 14 : 10)} 
+                      fontSize={isBigSlice ? 10 : 8} fontWeight="600" fill={textColor} 
+                      textAnchor="middle" alignmentBaseline="middle" opacity={0.85}
+                    >
+                      {`${Math.round(slice.percent)}%`}
+                    </SvgText>
+                  </>
+                )}
+              </React.Fragment>
+            );
+          })}
+          {innerRadius > 0 && <Circle cx={center} cy={center} r={innerRadius - 5} fill={isDarkMode ? '#1E293B' : '#FFFFFF'} />}
+        </G>
+      </Svg>
+      <View style={{ marginTop: 15, width: '100%' }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
+          {slices.map((slice, index) => (
+            <View key={`legend-${slice.name}-${index}`} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDarkMode ? '#0F172A' : '#F8FAFC', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: slice.color + '40' }}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: slice.color, marginRight: 6 }} />
+              <Text style={{ fontSize: 11, color: isDarkMode ? '#E5E7EB' : '#374151', fontWeight: '500' }}>{slice.name}</Text>
+              <Text style={{ fontSize: 11, color: slice.color, fontWeight: 'bold', marginLeft: 4 }}>{`${Math.round(slice.percent)}%`}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+};
 
 // ============================================
 // 📊 GRAPHIQUE LINECHART AVEC ZOOM
@@ -60,11 +215,18 @@ const ZoomableLineChart: React.FC<ZoomableLineChartProps> = ({
   const baseDayWidth = 35;
   const dayWidth = baseDayWidth * zoomLevel;
   const chartWidth = data.length * dayWidth;
+  
+  // Ajuster le padding pour permettre le défilement jusqu'au bout
   const padding = { top: 50, right: 30, bottom: 50, left: 70 };
   const chartHeight = height - padding.top - padding.bottom;
   
   const maxValue = Math.max(...data.map(d => d.value), 1000);
   const minValue = 0;
+  
+  // Identifier la semaine en cours
+  const today = new Date();
+  const weekStart = startOfWeek(today, { weekStartsOn: 1 });
+  const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
   
   const yGridLines = [0, 0.25, 0.5, 0.75, 1].map(ratio => ({
     y: padding.top + chartHeight * (1 - ratio),
@@ -74,8 +236,22 @@ const ZoomableLineChart: React.FC<ZoomableLineChartProps> = ({
   const points = data.map((d, i) => ({
     x: padding.left + i * dayWidth + dayWidth / 2,
     y: padding.top + chartHeight - (d.value / maxValue) * chartHeight,
-    ...d
+    ...d,
+    isThisWeek: isSameDay(d.date, today) || (d.date >= weekStart && d.date <= weekEnd)
   }));
+
+  const scrollRef = useRef<ScrollView>(null);
+  useEffect(() => {
+     // Scroll automatique vers aujourd'hui ou la fin du mois
+     if(scrollRef.current && points.length > 0) {
+        const todayIndex = points.findIndex(p => isSameDay(p.date, new Date()));
+        if (todayIndex !== -1) {
+           setTimeout(() => {
+             scrollRef.current?.scrollTo({ x: Math.max(0, (todayIndex * dayWidth) - (SCREEN_WIDTH / 2) + padding.left), animated: true });
+           }, 500);
+        }
+     }
+  }, [data]);
 
   const generateSmoothPath = () => {
     if (points.length < 2) return '';
@@ -96,9 +272,9 @@ const ZoomableLineChart: React.FC<ZoomableLineChartProps> = ({
   const generateAreaPath = () => {
     if (points.length < 2) return '';
     const linePath = generateSmoothPath();
-    const lastPoint = points[points.length - 1];
+    const lastPoint = points.at(-1);
     const firstPoint = points[0];
-    return `${linePath} L ${lastPoint.x} ${padding.top + chartHeight} L ${firstPoint.x} ${padding.top + chartHeight} Z`;
+    return `${linePath} L ${lastPoint?.x} ${padding.top + chartHeight} L ${firstPoint.x} ${padding.top + chartHeight} Z`;
   };
 
   const formatYValue = (value: number) => {
@@ -108,6 +284,7 @@ const ZoomableLineChart: React.FC<ZoomableLineChartProps> = ({
 
   return (
     <ScrollView 
+      ref={scrollRef}
       horizontal 
       showsHorizontalScrollIndicator={true}
       contentContainerStyle={{ paddingVertical: 10 }}
@@ -126,8 +303,10 @@ const ZoomableLineChart: React.FC<ZoomableLineChartProps> = ({
           </SvgGradient>
         </Defs>
 
+        {/* Zone de la semaine en cours supprimée suite demande */}
+        
         {yGridLines.map((line, i) => (
-          <React.Fragment key={i}>
+          <React.Fragment key={`gridline-${line.value}-${i}`}>
             <Line
               x1={padding.left}
               y1={line.y}
@@ -165,8 +344,22 @@ const ZoomableLineChart: React.FC<ZoomableLineChartProps> = ({
           const isSelected = selectedDay?.day === point.day;
           const hasValue = point.value > 0;
           
+          // Extraire les ternaires imbriquées pour améliorer la lisibilité
+          const circleRadius = isSelected ? 8 : (hasValue ? 4 : 2);
+          const circleFill = isSelected || hasValue ? activeTheme.primary : 'transparent';
+          
+          // Séparer les conditions pour éviter les ternaires imbriquées
+          let circleStroke: string;
+          if (hasValue) {
+            circleStroke = isDarkMode ? '#0F172A' : '#fff';
+          } else {
+            circleStroke = isDarkMode ? '#475569' : '#CBD5E1';
+          }
+          
+          const strokeWidth = isSelected ? 3 : (hasValue ? 2 : 1);
+          
           return (
-            <React.Fragment key={i}>
+            <React.Fragment key={`point-${point.day}-${i}`}>
               {isSelected && (
                 <Line
                   x1={point.x}
@@ -182,10 +375,10 @@ const ZoomableLineChart: React.FC<ZoomableLineChartProps> = ({
               <Circle
                 cx={point.x}
                 cy={point.y}
-                r={isSelected ? 8 : hasValue ? 4 : 2}
-                fill={isSelected ? activeTheme.primary : hasValue ? activeTheme.primary : 'transparent'}
-                stroke={hasValue ? (isDarkMode ? '#0F172A' : '#fff') : (isDarkMode ? '#475569' : '#CBD5E1')}
-                strokeWidth={isSelected ? 3 : hasValue ? 2 : 1}
+                r={circleRadius}
+                fill={circleFill}
+                stroke={circleStroke}
+                strokeWidth={strokeWidth}
                 onPress={() => {
                   Vibration.vibrate(10);
                   onSelectDay(isSelected ? null : point);
@@ -195,9 +388,13 @@ const ZoomableLineChart: React.FC<ZoomableLineChartProps> = ({
                 x={point.x}
                 y={height - 12}
                 fontSize={zoomLevel >= 1 ? "11" : "9"}
-                fill={isSelected ? activeTheme.primary : (isDarkMode ? '#94A3B8' : '#64748B')}
+                fill={
+                  isSelected || point.isThisWeek 
+                    ? activeTheme.primary 
+                    : (isDarkMode ? '#94A3B8' : '#64748B')
+                }
                 textAnchor="middle"
-                fontWeight={isSelected ? 'bold' : '500'}
+                fontWeight={isSelected || point.isThisWeek ? 'bold' : '500'}
               >
                 {point.day}
               </SvgText>
@@ -221,7 +418,7 @@ const ZoomableLineChart: React.FC<ZoomableLineChartProps> = ({
                     textAnchor="middle"
                     fontWeight="bold"
                   >
-                    {formatMoney(point.value)} {currency}
+                    {`${formatMoney(point.value)} ${currency}`}
                   </SvgText>
                 </>
               )}
@@ -329,17 +526,26 @@ export default function Rapports() {
   const [chartLoading, setChartLoading] = useState(true);
   const [selectedChartDay, setSelectedChartDay] = useState<ChartDataPoint | null>(null);
   const [chartZoom, setChartZoom] = useState(1);
+  
+  // Nouveaux états pour les sections
+  const [timeRange, setTimeRange] = useState<'month' | 'year'>('month');
+  const [topProductsMode, setTopProductsMode] = useState<'spending' | 'quantity' | 'frequency'>('spending');
+  const [topProducts, setTopProducts] = useState<any[]>([]);
+  const [trendData, setTrendData] = useState<any[]>([]);
 
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
-  const [weeklyStats, setWeeklyStats] = useState<{day: Date, total: number, products: any[]}[]>([]);
-  const [weekTotal, setWeekTotal] = useState(0);
-  const [expandedDays, setExpandedDays] = useState<string[]>([]);
 
   const [showDailyJournal, setShowDailyJournal] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showYearPicker, setShowYearPicker] = useState(false);
   const [dailyPurchases, setDailyPurchases] = useState<any[]>([]);
   const [dailyTotal, setDailyTotal] = useState(0);
+
+  // États pour les statistiques hebdomadaires
+  const [weeklyStats, setWeeklyStats] = useState<any[]>([]);
+  const [weekTotal, setWeekTotal] = useState(0);
+  const [expandedDays, setExpandedDays] = useState<string[]>([]);
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -358,6 +564,8 @@ export default function Rapports() {
       loadMonthStats();
       loadWeeklyStats();
       loadChartData();
+      loadTrendData();
+      loadTopProducts();
       
       // Reset et rejouer les animations
       headerTotalAnim.setValue(0);
@@ -391,20 +599,20 @@ export default function Rapports() {
       const start = startOfMonth(currentMonth).toISOString();
       const end = endOfMonth(currentMonth).toISOString();
 
-      const [monthRes] = db.getAllSync(`SELECT SUM(l.prixTotal) as t FROM LigneAchat l JOIN Achat a ON a.id = l.idAchat WHERE a.dateAchat BETWEEN ? AND ?`, [start, end]);
-      const [itemsRes] = db.getAllSync(`SELECT COUNT(l.id) as q FROM LigneAchat l JOIN Achat a ON a.id = l.idAchat WHERE a.dateAchat BETWEEN ? AND ?`, [start, end]);
-      const [topRes] = db.getAllSync(`SELECT l.libelleProduit, SUM(l.quantite) as q FROM LigneAchat l JOIN Achat a ON a.id = l.idAchat WHERE a.dateAchat BETWEEN ? AND ? GROUP BY l.libelleProduit ORDER BY q DESC LIMIT 1`, [start, end]);
+      const [monthRes] = db.getAllSync(`SELECT SUM(l.prixTotal) as t FROM Article l JOIN ListeAchat a ON a.id = l.idListeAchat WHERE a.dateAchat BETWEEN ? AND ?`, [start, end]);
+      const [itemsRes] = db.getAllSync(`SELECT COUNT(l.id) as q FROM Article l JOIN ListeAchat a ON a.id = l.idListeAchat WHERE a.dateAchat BETWEEN ? AND ?`, [start, end]);
+      const [topRes] = db.getAllSync(`SELECT p.libelle as libelleProduit, SUM(l.quantite) as q FROM Article l JOIN ListeAchat a ON a.id = l.idListeAchat JOIN Produit p ON p.id = l.idProduit WHERE a.dateAchat BETWEEN ? AND ? GROUP BY p.libelle ORDER BY q DESC LIMIT 1`, [start, end]);
       
       const [maxDayRes] = db.getAllSync(`
         SELECT strftime('%d', a.dateAchat) as jour, SUM(l.prixTotal) as total 
-        FROM LigneAchat l JOIN Achat a ON a.id = l.idAchat 
+        FROM Article l JOIN ListeAchat a ON a.id = l.idListeAchat 
         WHERE a.dateAchat BETWEEN ? AND ? 
         GROUP BY jour ORDER BY total DESC LIMIT 1
       `, [start, end]);
 
       const prevStart = startOfMonth(subMonths(currentMonth, 1)).toISOString();
       const prevEnd = endOfMonth(subMonths(currentMonth, 1)).toISOString();
-      const [prevRes] = db.getAllSync(`SELECT SUM(l.prixTotal) as t FROM LigneAchat l JOIN Achat a ON a.id = l.idAchat WHERE a.dateAchat BETWEEN ? AND ?`, [prevStart, prevEnd]);
+      const [prevRes] = db.getAllSync(`SELECT SUM(l.prixTotal) as t FROM Article l JOIN ListeAchat a ON a.id = l.idListeAchat WHERE a.dateAchat BETWEEN ? AND ?`, [prevStart, prevEnd]);
 
       setStats({
         monthTotal: (monthRes as any)?.t || 0,
@@ -412,7 +620,7 @@ export default function Rapports() {
         topProduct: (topRes as any)?.libelleProduit || '-',
         topProductQty: (topRes as any)?.q || 0,
         maxDay: { 
-          day: parseInt((maxDayRes as any)?.jour) || 0, 
+          day: Number.parseInt((maxDayRes as any)?.jour) || 0, 
           amount: (maxDayRes as any)?.total || 0 
         },
         prevMonthTotal: (prevRes as any)?.t || 0
@@ -429,7 +637,7 @@ export default function Rapports() {
 
       const result = db.getAllSync(`
         SELECT date(a.dateAchat) as jour, SUM(l.prixTotal) as total
-        FROM LigneAchat l JOIN Achat a ON a.id = l.idAchat 
+        FROM Article l JOIN ListeAchat a ON a.id = l.idListeAchat 
         WHERE a.dateAchat BETWEEN ? AND ?
         GROUP BY jour ORDER BY jour ASC
       `, [start, end]);
@@ -449,6 +657,75 @@ export default function Rapports() {
     finally { setChartLoading(false); }
   }
 
+
+
+  function loadTrendData() {
+    try {
+      const db = getDb();
+      const currentStart = startOfMonth(currentMonth).toISOString();
+      const currentEnd = endOfMonth(currentMonth).toISOString();
+      const prevStart = startOfMonth(subMonths(currentMonth, 1)).toISOString();
+      const prevEnd = endOfMonth(subMonths(currentMonth, 1)).toISOString();
+      
+      // Total dépenses
+      const [currentTotal] = db.getAllSync(`SELECT SUM(l.prixTotal) as total FROM Article l JOIN ListeAchat a ON a.id = l.idListeAchat WHERE a.dateAchat BETWEEN ? AND ?`, [currentStart, currentEnd]);
+      const [prevTotal] = db.getAllSync(`SELECT SUM(l.prixTotal) as total FROM Article l JOIN ListeAchat a ON a.id = l.idListeAchat WHERE a.dateAchat BETWEEN ? AND ?`, [prevStart, prevEnd]);
+      
+      // Nombre d'articles
+      const [currentItems] = db.getAllSync(`SELECT COUNT(l.id) as count FROM Article l JOIN ListeAchat a ON a.id = l.idListeAchat WHERE a.dateAchat BETWEEN ? AND ?`, [currentStart, currentEnd]);
+      const [prevItems] = db.getAllSync(`SELECT COUNT(l.id) as count FROM Article l JOIN ListeAchat a ON a.id = l.idListeAchat WHERE a.dateAchat BETWEEN ? AND ?`, [prevStart, prevEnd]);
+      
+      // Prix moyen par article
+      const currentAvg = (currentItems as any)?.count > 0 ? (currentTotal as any)?.total / (currentItems as any)?.count : 0;
+      const prevAvg = (prevItems as any)?.count > 0 ? (prevTotal as any)?.total / (prevItems as any)?.count : 0;
+      
+      setTrendData([
+        {
+          title: 'Total Dépenses',
+          currentValue: (currentTotal as any)?.total || 0,
+          previousValue: (prevTotal as any)?.total || 0,
+          icon: 'wallet-outline'
+        },
+        {
+          title: 'Nombre d\'Articles',
+          currentValue: (currentItems as any)?.count || 0,
+          previousValue: (prevItems as any)?.count || 0,
+          icon: 'cube-outline'
+        },
+        {
+          title: 'Prix Moyen/Article',
+          currentValue: currentAvg,
+          previousValue: prevAvg,
+          icon: 'trending-up-outline'
+        }
+      ]);
+    } catch (e) { console.error(e); }
+  }
+
+  function loadTopProducts() {
+    try {
+      const db = getDb();
+      const start = startOfMonth(currentMonth).toISOString();
+      const end = endOfMonth(currentMonth).toISOString();
+      
+      const result = db.getAllSync(`
+        SELECT 
+          p.libelle as name,
+          SUM(l.quantite) as quantity,
+          SUM(l.prixTotal) as totalSpent,
+          COUNT(DISTINCT a.id) as frequency
+        FROM Article l 
+        JOIN ListeAchat a ON a.id = l.idListeAchat 
+        JOIN Produit p ON p.id = l.idProduit
+        WHERE a.dateAchat BETWEEN ? AND ?
+        GROUP BY p.libelle
+        ORDER BY totalSpent DESC
+      `, [start, end]);
+      
+      setTopProducts(result as any[]);
+    } catch (e) { console.error(e); }
+  }
+
   function loadWeeklyStats() {
     try {
       const db = getDb();
@@ -456,8 +733,8 @@ export default function Rapports() {
       const end = endOfWeek(currentWeekStart, { weekStartsOn: 1 }).toISOString();
 
       const result = db.getAllSync(`
-        SELECT a.dateAchat, l.prixTotal, l.libelleProduit, l.quantite, l.prixUnitaire, l.unite
-        FROM LigneAchat l JOIN Achat a ON a.id = l.idAchat 
+        SELECT a.dateAchat, l.prixTotal, p.libelle as libelleProduit, l.quantite, l.prixUnitaire, p.unite
+        FROM Article l JOIN ListeAchat a ON a.id = l.idListeAchat JOIN Produit p ON p.id = l.idProduit
         WHERE a.dateAchat BETWEEN ? AND ? ORDER BY a.dateAchat ASC
       `, [start, end]);
 
@@ -500,9 +777,9 @@ export default function Rapports() {
       const dayStart = format(date, 'yyyy-MM-dd') + 'T00:00:00.000Z';
       const dayEnd = format(date, 'yyyy-MM-dd') + 'T23:59:59.999Z';
       const result = db.getAllSync(`
-        SELECT a.nomListe, l.id as ligneId, l.libelleProduit, l.quantite, l.prixUnitaire, l.prixTotal, l.unite
-        FROM LigneAchat l JOIN Achat a ON a.id = l.idAchat 
-        WHERE a.dateAchat BETWEEN ? AND ? ORDER BY a.nomListe ASC, l.libelleProduit ASC
+        SELECT a.nomListe, l.id as ligneId, p.libelle as libelleProduit, l.quantite, l.prixUnitaire, l.prixTotal, p.unite
+        FROM Article l JOIN ListeAchat a ON a.id = l.idListeAchat JOIN Produit p ON p.id = l.idProduit
+        WHERE a.dateAchat BETWEEN ? AND ? ORDER BY a.nomListe ASC, p.libelle ASC
       `, [dayStart, dayEnd]);
       setDailyPurchases(result as any[]);
       setDailyTotal((result as any[]).reduce((sum, p) => sum + (p.prixTotal || 0), 0));
@@ -511,7 +788,7 @@ export default function Rapports() {
 
   const toggleDay = (dateKey: string) => {
     vibrate();
-    setExpandedDays(prev => prev.includes(dateKey) ? prev.filter(d => d !== dateKey) : [...prev, dateKey]);
+    setExpandedDays((prev: string[]) => prev.includes(dateKey) ? prev.filter((d: string) => d !== dateKey) : [...prev, dateKey]);
   };
 
   // ============================================
@@ -632,14 +909,17 @@ export default function Rapports() {
             <Ionicons name="arrow-back-outline" size={22} color="#fff" />
           </TouchableOpacity>
           
-          {/* Sélecteur de mois au centre */}
+          {/* Sélecteur de mois au centre avec année mise en évidence */}
           <View style={s.monthSelector}>
             <TouchableOpacity onPress={() => { vibrate(); setCurrentMonth(subMonths(currentMonth, 1)); }} style={s.monthArrow}>
               <Ionicons name="chevron-back-outline" size={18} color="rgba(255,255,255,0.9)" />
             </TouchableOpacity>
             <View style={s.monthDisplay}>
               <Text style={s.monthText}>
-                {format(currentMonth, 'MMMM yyyy', { locale: language === 'en' ? enUS : fr })}
+                {format(currentMonth, 'MMMM', { locale: language === 'en' ? enUS : fr })}
+              </Text>
+              <Text style={[s.monthText, { fontSize: 18, fontWeight: '800', color: 'rgba(255,255,255,0.95)', marginTop: 2 }]}>
+                {format(currentMonth, 'yyyy')}
               </Text>
             </View>
             <TouchableOpacity onPress={() => { vibrate(); setCurrentMonth(addMonths(currentMonth, 1)); }} style={s.monthArrow}>
@@ -647,8 +927,12 @@ export default function Rapports() {
             </TouchableOpacity>
           </View>
           
-          <TouchableOpacity style={s.backBtn}>
-            <Ionicons name="share-outline" size={22} color="#fff" />
+          {/* Bouton pour navigation rapide par année */}
+          <TouchableOpacity 
+            onPress={() => setShowYearPicker(true)} 
+            style={[s.backBtn, { backgroundColor: 'rgba(255,255,255,0.15)' }]}
+          >
+            <Ionicons name="calendar-outline" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
 
@@ -677,7 +961,7 @@ export default function Rapports() {
                   color={evolution.isUp ? '#FCA5A5' : '#6EE7B7'} 
                 />
                 <Text style={{ color: evolution.isUp ? '#FCA5A5' : '#6EE7B7', fontSize: 12, fontWeight: '700' }}>
-                  {evolution.value}%
+                  {`${evolution.value}%`}
                 </Text>
               </View>
             )}
@@ -727,7 +1011,30 @@ export default function Rapports() {
         {/* ============================================ */}
         <View style={s.section}>
           <View style={s.sectionHeader}>
-            <Text style={s.sectionTitle}>📈 Évolution du mois</Text>
+            <View style={{ flexDirection: 'row', backgroundColor: isDarkMode ? '#1E293B' : '#E2E8F0', padding: 2, borderRadius: 10 }}>
+              {(['month', 'year'] as const).map((range) => (
+                <TouchableOpacity 
+                  key={range}
+                  onPress={() => setTimeRange(range)} 
+                  style={{ 
+                    paddingHorizontal: 12, 
+                    paddingVertical: 5, 
+                    borderRadius: 8, 
+                    backgroundColor: timeRange === range ? activeTheme.primary : 'transparent' 
+                  }}
+                >
+                  <Text style={{ 
+                    color: timeRange === range 
+                      ? '#fff' 
+                      : (isDarkMode ? '#94A3B8' : '#64748B'), 
+                    fontWeight: '600', 
+                    fontSize: 12 
+                  }}>
+                    {range === 'month' ? 'Mois' : 'Année'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
             
             <View style={s.zoomControls}>
               <TouchableOpacity onPress={zoomOut} style={[s.zoomBtn, { opacity: chartZoom <= 0.5 ? 0.4 : 1 }]} disabled={chartZoom <= 0.5}>
@@ -735,7 +1042,7 @@ export default function Rapports() {
               </TouchableOpacity>
               <TouchableOpacity onPress={resetZoom} style={s.zoomResetBtn}>
                 <Text style={[s.zoomResetText, { color: activeTheme.primary }]}>
-                  {Math.round(chartZoom * 100)}%
+                  {`${Math.round(chartZoom * 100)}%`}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={zoomIn} style={[s.zoomBtn, { opacity: chartZoom >= 2 ? 0.4 : 1 }]} disabled={chartZoom >= 2}>
@@ -792,11 +1099,11 @@ export default function Rapports() {
         </View>
 
         {/* ============================================ */}
-        {/* 🔧 BOUTONS D'ACTIONS */}
+        {/* 🔧 BOUTONS D'ACTIONS - Repositionnés après le graphique */}
         {/* ============================================ */}
         <View style={s.actionsRow}>
           <TouchableOpacity 
-            style={s.actionCard}
+            style={[s.actionCard, { flex: 1 }]}
             onPress={() => { vibrate(); router.push('/analyse_produit'); }}
             activeOpacity={0.8}
           >
@@ -811,14 +1118,14 @@ export default function Rapports() {
           </TouchableOpacity>
 
           <TouchableOpacity 
-            style={s.actionCard}
+            style={[s.actionCard, { flex: 1 }]}
             onPress={() => { vibrate(); router.push('/statistiques'); }}
             activeOpacity={0.8}
           >
             <View style={[s.actionIconBg, { backgroundColor: activeTheme.primary + '15' }]}>
               <Ionicons name="pie-chart-outline" size={28} color={activeTheme.primary} />
             </View>
-            <Text style={s.actionTitle}>{t('charts')}</Text>
+            <Text style={s.actionTitle}>Graphiques</Text>
             <Text style={s.actionSub}>{t('detailed_visuals')}</Text>
             <View style={[s.actionArrow, { backgroundColor: activeTheme.primary }]}>
               <Ionicons name="arrow-forward-outline" size={14} color="#fff" />
@@ -826,7 +1133,7 @@ export default function Rapports() {
           </TouchableOpacity>
         </View>
 
-        {/* Bouton Journal */}
+        {/* Bouton Journal des dépenses */}
         <TouchableOpacity 
           style={s.journalButton}
           onPress={() => { 
@@ -856,92 +1163,67 @@ export default function Rapports() {
         </TouchableOpacity>
 
         {/* ============================================ */}
-        {/* 📅 SEMAINE */}
+        {/* � SECTION TENDANCES */}
         {/* ============================================ */}
         <View style={s.section}>
           <View style={s.sectionHeader}>
-            <Text style={s.sectionTitle}>📅 Cette semaine</Text>
-            <View style={s.weekNavRow}>
-              <TouchableOpacity onPress={() => { vibrate(); setCurrentWeekStart(subWeeks(currentWeekStart, 1)); }} style={s.weekNavBtn}>
-                <Ionicons name="chevron-back-outline" size={18} color={activeTheme.primary} />
-              </TouchableOpacity>
-              <Text style={s.weekNavText}>
-                {format(currentWeekStart, 'd', { locale: language === 'en' ? enUS : fr })} - {format(endOfWeek(currentWeekStart, { weekStartsOn: 1 }), 'd MMM', { locale: language === 'en' ? enUS : fr })}
-              </Text>
-              <TouchableOpacity onPress={() => { vibrate(); setCurrentWeekStart(addWeeks(currentWeekStart, 1)); }} style={s.weekNavBtn}>
-                <Ionicons name="chevron-forward-outline" size={18} color={activeTheme.primary} />
-              </TouchableOpacity>
-            </View>
+            <Text style={s.sectionTitle}>📈 Tendances</Text>
           </View>
-
-          <View style={s.weekCard}>
-            {weeklyStats.map((stat, idx) => {
-              const isToday = isSameDay(stat.day, new Date());
-              const hasData = stat.total > 0;
-              const dateKey = format(stat.day, 'yyyy-MM-dd');
-              const isExpanded = expandedDays.includes(dateKey);
-              const barWidth = weekTotal > 0 ? Math.max((stat.total / weekTotal) * 100, 2) : 2;
-
-              return (
-                <TouchableOpacity
-                  key={idx}
-                  style={[s.weekDayRow, isToday && { backgroundColor: activeTheme.primary + '08', borderLeftColor: activeTheme.primary, borderLeftWidth: 3 }]}
-                  onPress={() => hasData && toggleDay(dateKey)}
-                  activeOpacity={hasData ? 0.7 : 1}
-                >
-                  <View style={s.weekDayLeft}>
-                    <Text style={[s.weekDayName, isToday && { color: activeTheme.primary, fontWeight: '700' }]}>
-                      {format(stat.day, 'EEE', { locale: language === 'en' ? enUS : fr })}
-                    </Text>
-                    <Text style={[s.weekDayNum, isToday && { color: activeTheme.primary }]}>{format(stat.day, 'd')}</Text>
-                  </View>
-
-                  <View style={s.weekDayRight}>
-                    <View style={s.weekBarBg}>
-                      <View style={[s.weekBar, { width: `${barWidth}%`, backgroundColor: activeTheme.primary }]} />
-                    </View>
-                    <Text style={[s.weekDayAmount, { color: hasData ? activeTheme.primary : (isDarkMode ? '#475569' : '#CBD5E1') }]}>
-                      {hasData ? `${formatMoney(stat.total)} ${currency}` : '-'}
-                    </Text>
-                    {hasData && <Ionicons name={isExpanded ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color="#94A3B8" />}
-                  </View>
-
-                  {isExpanded && stat.products.length > 0 && (
-                    <View style={s.expandedList}>
-                      {stat.products.map((p, pIdx) => (
-                        <View key={pIdx} style={s.productRow}>
-                          <View style={{ flex: 1 }}>
-                            <Text style={s.productName}>{p.name}</Text>
-                            <Text style={s.productDetails}>
-                              {p.qty} {p.unite || 'pcs'} × {formatMoney(p.unitPrice || 0)} {currency}
-                            </Text>
-                          </View>
-                          <Text style={[s.productTotal, { color: activeTheme.primary }]}>
-                            {formatMoney(p.price)} {currency}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-
-            <View style={[s.weekTotalRow, { backgroundColor: activeTheme.primary + '10' }]}>
-              <Text style={s.weekTotalLabel}>Total semaine</Text>
-              <Text style={[s.weekTotalValue, { color: activeTheme.primary }]}>
-                {formatMoney(weekTotal)} {currency}
-              </Text>
-            </View>
-          </View>
+          {trendData.map((trend, index) => (
+            <TrendCard
+              key={`trend-${trend.title}-${index}`}
+              title={trend.title}
+              currentValue={trend.currentValue}
+              previousValue={trend.previousValue}
+              currency={currency}
+              icon={trend.icon}
+              isDarkMode={isDarkMode}
+              activeTheme={activeTheme}
+            />
+          ))}
         </View>
 
+        {/* ============================================ */}
+        {/* 🏆 SECTION TOP PRODUITS */}
+        {/* ============================================ */}
+        <View style={s.section}>
+          <View style={s.sectionHeader}>
+            <Text style={s.sectionTitle}>🏆 Top Produits</Text>
+            <View style={{ flexDirection: 'row', backgroundColor: isDarkMode ? '#1E293B' : '#E2E8F0', padding: 2, borderRadius: 10 }}>
+              {(['spending', 'quantity', 'frequency'] as const).map((mode) => (
+                <TouchableOpacity 
+                  key={mode}
+                  onPress={() => setTopProductsMode(mode)} 
+                  style={{ 
+                    paddingHorizontal: 8, 
+                    paddingVertical: 4, 
+                    borderRadius: 8, 
+                    backgroundColor: topProductsMode === mode ? activeTheme.primary : 'transparent' 
+                  }}
+                >
+                  <Text style={{ 
+                    color: topProductsMode === mode ? '#fff' : (isDarkMode ? '#94A3B8' : '#64748B'), 
+                    fontWeight: '600', 
+                    fontSize: 11 
+                  }}>
+                    {mode === 'spending' ? 'Dépenses' : mode === 'quantity' ? 'Quantité' : 'Fréquence'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+          
+          <ProductRanking
+            products={topProducts}
+            currency={currency}
+            isDarkMode={isDarkMode}
+            activeTheme={activeTheme}
+            mode={topProductsMode}
+          />
+        </View>
         <View style={{ height: 120 }} />
       </Animated.ScrollView>
 
-      {/* ============================================ */}
-      {/* 📱 MODAL JOURNAL QUOTIDIEN */}
-      {/* ============================================ */}
       <Modal visible={showDailyJournal} animationType="slide" transparent onRequestClose={() => setShowDailyJournal(false)}>
         <View style={s.modalBackdrop}>
           <View style={s.modalContainer}>
@@ -989,7 +1271,7 @@ export default function Rapports() {
                 </View>
                 <View>
                   <Text style={s.modalSummaryLabel}>{t('total_spent')}</Text>
-                  <Text style={[s.modalSummaryValue, { color: activeTheme.primary }]}>{formatMoney(dailyTotal)} {currency}</Text>
+                  <Text style={[s.modalSummaryValue, { color: activeTheme.primary }]}>{`${formatMoney(dailyTotal)} ${currency}`}</Text>
                 </View>
               </View>
               <View style={s.modalSummaryDivider} />
@@ -1024,7 +1306,7 @@ export default function Rapports() {
                 </View>
               ) : (
                 dailyPurchases.map((item, idx) => (
-                  <View key={idx} style={s.tableRow}>
+                  <View key={`purchase-${item.ligneId}-${idx}`} style={s.tableRow}>
                     <View style={{ flex: 2 }}>
                       <Text style={s.tableCellName} numberOfLines={2}>
                         {item.libelleProduit}
@@ -1048,7 +1330,7 @@ export default function Rapports() {
             {dailyPurchases.length > 0 && (
               <View style={s.modalFooter}>
                 <Text style={s.modalFooterLabel}>TOTAL GÉNÉRAL</Text>
-                <Text style={[s.modalFooterValue, { color: activeTheme.primary }]}>{formatMoney(dailyTotal)} {currency}</Text>
+                <Text style={[s.modalFooterValue, { color: activeTheme.primary }]}>{`${formatMoney(dailyTotal)} ${currency}`}</Text>
               </View>
             )}
           </View>
@@ -1070,7 +1352,7 @@ export default function Rapports() {
             onPress={() => { 
               vibrate();
               const db = getDb(); 
-              const res = db.runSync('INSERT INTO Achat (nomListe, dateAchat) VALUES (?, ?)', ['Nouvelle Liste', new Date().toISOString()]); 
+              const res = db.runSync('INSERT INTO ListeAchat (nomListe, dateAchat) VALUES (?, ?)', ['Nouvelle Liste', new Date().toISOString()]); 
               router.push(`/achat/${res.lastInsertRowId}`); 
             }}
           >
@@ -1085,6 +1367,78 @@ export default function Rapports() {
           <Text style={[s.navText, { color: activeTheme.primary }]}>{t('reports')}</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Modal Sélecteur d'Année */}
+      <Modal visible={showYearPicker} transparent animationType="fade" onRequestClose={() => setShowYearPicker(false)}>
+        <TouchableOpacity 
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }} 
+          onPress={() => setShowYearPicker(false)} 
+          activeOpacity={1}
+        >
+          <View style={{ width: '80%', backgroundColor: isDarkMode ? '#1E293B' : '#FFFFFF', borderRadius: 20, padding: 20 }}>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: isDarkMode ? '#F1F5F9' : '#1E293B', textAlign: 'center', marginBottom: 15 }}>
+              Sélectionner l'année
+            </Text>
+            <ScrollView style={{ maxHeight: 300 }} showsVerticalScrollIndicator={false}>
+              {(() => {
+                const currentYear = new Date().getFullYear();
+                const years = [];
+                for (let year = currentYear; year >= currentYear - 5; year--) {
+                  years.push(year);
+                }
+                return years.map((year) => {
+                  const isSelected = year === currentMonth.getFullYear();
+                  return (
+                    <TouchableOpacity
+                      key={year}
+                      onPress={() => {
+                        setCurrentMonth(new Date(year, currentMonth.getMonth(), 1));
+                        setShowYearPicker(false);
+                        vibrate();
+                      }}
+                      style={{
+                        padding: 12,
+                        borderRadius: 12,
+                        backgroundColor: isSelected ? activeTheme.primary + '20' : 'transparent',
+                        marginBottom: 8,
+                        borderWidth: isSelected ? 1 : 0,
+                        borderColor: isSelected ? activeTheme.primary : 'transparent'
+                      }}
+                    >
+                      <Text style={{
+                        fontSize: 16,
+                        fontWeight: isSelected ? '700' : '500',
+                        color: isSelected ? activeTheme.primary : (isDarkMode ? '#F1F5F9' : '#1E293B'),
+                        textAlign: 'center'
+                      }}>
+                        {year}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                });
+              })()}
+            </ScrollView>
+            <TouchableOpacity
+              onPress={() => setShowYearPicker(false)}
+              style={{
+                marginTop: 15,
+                padding: 12,
+                borderRadius: 12,
+                backgroundColor: isDarkMode ? '#334155' : '#E2E8F0'
+              }}
+            >
+              <Text style={{
+                fontSize: 14,
+                fontWeight: '600',
+                color: isDarkMode ? '#94A3B8' : '#64748B',
+                textAlign: 'center'
+              }}>
+                Annuler
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }

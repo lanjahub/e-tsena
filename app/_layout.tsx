@@ -46,7 +46,7 @@ function NotificationChecker() {
       const rappelsAafficher = db.getAllSync(`
         SELECT r.*, a.nomListe
         FROM Rappel r
-        LEFT JOIN Achat a ON r.achatId = a.id
+        LEFT JOIN ListeAchat a ON r.idListeAchat = a.id
         WHERE r.supprime = 0 
           AND r.affiche = 0
           AND (
@@ -80,9 +80,9 @@ function NotificationChecker() {
               text: 'Voir la liste',
               onPress: () => {
                 
-                db.runSync('UPDATE Rappel SET affiche = 1, lu = 1 WHERE id = ?', [rappel.id]);
-                if (rappel.achatId) {
-                  router.push(`/achat/${rappel.achatId}`);
+                db.runSync('UPDATE Rappel SET affiche = 1, estLu = 1 WHERE id = ?', [rappel.id]);
+                if (rappel.idListeAchat) {
+                  router.push(`/achat/${rappel.idListeAchat}`);
                 }
               },
             },

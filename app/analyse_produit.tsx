@@ -230,7 +230,7 @@ export default function AnalyseProduit() {
       }
 
       return (
-        <View key={idx} style={s.transactionItem}>
+        <View key={`transaction-${item.id || item.dateAchat}-${idx}`} style={s.transactionItem}>
           <View style={s.transLeft}>
             <View style={[s.dateBadge, { backgroundColor: isDarkMode ? '#334155' : '#F3F4F6' }]}>
               {isSummary ? (
@@ -310,13 +310,13 @@ export default function AnalyseProduit() {
       // 🟢 Sécurisation : vérifier la présence de StorageAccessFramework
       const saf: any = (FileSystem as any).StorageAccessFramework;
 
-      if (Platform.OS === 'android' && saf && saf.requestDirectoryPermissionsAsync) {
+      if (Platform.OS === 'android' && saf?.requestDirectoryPermissionsAsync) {
         const permissions = await saf.requestDirectoryPermissionsAsync();
         if (permissions.granted) {
           const base64 = await FileSystem.readAsStringAsync(tempUri, {
             encoding: FileSystem.EncodingType.Base64,
           });
-          const fileName = `Rapport_Etsena_${new Date().getTime()}.pdf`;
+          const fileName = `Rapport_Etsena_${Date.now()}.pdf`;
 
           const createdUri = await saf.createFileAsync(
             permissions.directoryUri,
@@ -405,7 +405,11 @@ export default function AnalyseProduit() {
                     activeFilter === f ? { color: '#fff' } : { color: colors.textSec },
                   ]}
                 >
-                  {f === 'current_month' ? 'Ce mois' : f === 'last_month' ? 'Mois dernier' : 'Année'}
+                  {(() => {
+                    if (f === 'current_month') return 'Ce mois';
+                    if (f === 'last_month') return 'Mois dernier';
+                    return 'Année';
+                  })()}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -636,7 +640,7 @@ export default function AnalyseProduit() {
               }}
             >
               <Ionicons name="stats-chart" size={20} color={activeTheme.primary} />
-              <Text style={s.menuText}>Statistiques</Text>
+              <Text style={s.menuText}>Graphiques</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={s.menuItem}

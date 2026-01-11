@@ -5,15 +5,12 @@
     "scheme": "etsena",
     "orientation": "portrait",
     "newArchEnabled": true,
-    
     "userInterfaceStyle": "automatic",
-
     "androidStatusBar": {
       "barStyle": "light-content",
       "backgroundColor": "#1E293B",
       "translucent": false
     },
-
     "plugins": [
       "expo-router",
       "expo-asset",
@@ -24,6 +21,9 @@
     "extra": {
       "router": {
         "origin": "https://app"
+      },
+      "eas": {
+        "projectId": "f7d225ed-1dbd-49e7-a921-48b71d672372"
       }
     }
   }

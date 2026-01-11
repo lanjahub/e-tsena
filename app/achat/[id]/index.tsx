@@ -1,12 +1,12 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { 
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
   TextInput, Modal, KeyboardAvoidingView, Platform, Alert, Animated, Vibration,
-  Dimensions
+  Dimensions, Share
 } from 'react-native';
 import { ThemedStatusBar } from '../../../src/components/ThemedStatusBar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocalSearchParams, router } from 'expo-router';
+import { useLocalSearchParams, router, useNavigation } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { fr, enUS } from 'date-fns/locale';
@@ -338,9 +338,10 @@ export default function AchatDetails() {
   const { activeTheme, getStyles, isDarkMode } = useTheme();
   const { currency, language, t } = useSettings();
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
   const s = getStyles(styles);
   
-  const params = useLocalSearchParams<{ id?: string, readOnly?: string }>();
+  const params = useLocalSearchParams<{ id?: string, readOnly?: string, isNew?: string }>();
   const achatId = Number(params.id);
   const isReadOnly = params.readOnly === '1';
 
@@ -352,6 +353,7 @@ export default function AchatDetails() {
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
   const successAnim = useRef(new Animated.Value(0)).current;
   const shakeAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const [achat, setAchat] = useState<Achat | null>(null);
   const [lignes, setLignes] = useState<any[]>([]);
@@ -365,6 +367,7 @@ export default function AchatDetails() {
   const [filteredSuggestions, setFilteredSuggestions] = useState<SuggestedProduct[]>([]);
   const [recipeSuggestion, setRecipeSuggestion] = useState<{ icon: string; name: string; items: { nom: string; unite: string }[] } | null>(null);
   const [showRecipeSuggestion, setShowRecipeSuggestion] = useState(true);
+  const [isListening, setIsListening] = useState(false);
   
   // Modals
   const [editModal, setEditModal] = useState(false);
@@ -391,6 +394,69 @@ export default function AchatDetails() {
       Animated.spring(scaleAnim, { toValue: 1, friction: 8, tension: 40, useNativeDriver: true }),
     ]).start();
   }, []);
+
+  // Handle auto-cleanup on back navigation
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+       if (isReadOnly) return;
+       
+       // If list is empty (no items), delete it
+       // This handles the user request: "default should not save if we return" (for empty/new lists)
+       if (lignes.length === 0) {
+          try {
+             // We can check if title was modified, but "empty" usually implies "discard" for new lists
+             // If user really wanted an empty list named "My List", they can create it again.
+             // This solves "rectifier tous et le par defaux doit ne enregistrer si on fais retours"
+             const db = getDb();
+             db.runSync('DELETE FROM Article WHERE idListeAchat = ?', [achatId]);
+             db.runSync('DELETE FROM ListeAchat WHERE id = ?', [achatId]);
+          } catch (err) { console.error(err); }
+       } else {
+          // Explicit save of title only if not empty
+          if (title && title.trim()) {
+             try {
+                getDb().runSync('UPDATE ListeAchat SET nomListe = ? WHERE id = ?', [title.trim(), achatId]);
+             } catch(err) { console.error(err); }
+          }
+       }
+    });
+    return unsubscribe;
+  }, [navigation, lignes, title, achatId, isReadOnly]);
+
+  const removeList = () => {
+    Alert.alert(
+      language === 'en' ? 'Delete List' : 'Supprimer la liste',
+      language === 'en' ? 'Are you sure you want to delete this list?' : 'Voulez-vous vraiment supprimer cette liste ?',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { 
+          text: 'Supprimer', 
+          style: 'destructive', 
+          onPress: () => {
+            try {
+                const db = getDb();
+                db.runSync('DELETE FROM Article WHERE idListeAchat = ?', [achatId]);
+                db.runSync('DELETE FROM ListeAchat WHERE id = ?', [achatId]);
+                router.back();
+            } catch(e) { console.error(e); }
+          }
+        }
+      ]
+    );
+  };
+
+  const shareList = async () => {
+    try {
+        const itemsList = lignes.map((l: any) => `- ${l.quantite > 0 ? l.quantite + ' ' + (l.unite || '') + ' ' : ''}${l.libelleProduit}`).join('\n');
+        const message = `${title || 'Liste de courses'}\n\n${itemsList}`;
+        await Share.share({
+            message,
+            title: title || 'Liste de courses'
+        });
+    } catch (error) {
+        console.log(error);
+    }
+  };
 
   useEffect(() => {
     if (!achatId) return;
@@ -438,15 +504,43 @@ export default function AchatDetails() {
     }
   }, [newItem, historySuggestions]);
 
+  // Voice logic
+  useEffect(() => {
+    if (isListening) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.2, duration: 500, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 500, useNativeDriver: true })
+        ])
+      ).start();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [isListening]);
+
+  const toggleListening = () => {
+    if (isListening) {
+      setIsListening(false);
+    } else {
+      setIsListening(true);
+      Vibration.vibrate(50);
+      // Simulation
+      setTimeout(() => {
+        setIsListening(false);
+        Alert.alert("Info", language === 'en' ? "Voice recognition requires native module." : "La reconnaissance vocale nécessite un module natif.");
+      }, 2000);
+    }
+  };
+
   const loadData = () => {
     try {
       const db = getDb();
-      const result = db.getAllSync('SELECT * FROM Achat WHERE id = ?', [achatId]);
+      const result = db.getAllSync('SELECT * FROM ListeAchat WHERE id = ?', [achatId]);
       const a = result[0] as Achat;
       if (!a) return;
       setAchat(a);
       setTitle(a.nomListe);
-      const items = db.getAllSync('SELECT * FROM LigneAchat WHERE idAchat = ? ORDER BY id ASC', [achatId]);
+      const items = db.getAllSync('SELECT a.*, p.libelle as libelleProduit FROM Article a JOIN Produit p ON p.id = a.idProduit WHERE a.idListeAchat = ? ORDER BY a.id ASC', [achatId]);
       setLignes(items.map((l: any) => ({ 
         ...l, 
         checked: l.prixUnitaire > 0,
@@ -459,10 +553,11 @@ export default function AchatDetails() {
     try {
       const db = getDb();
       const result = db.getAllSync(`
-        SELECT libelleProduit as nom, prixUnitaire as lastPrice, unite, COUNT(*) as count 
-        FROM LigneAchat 
-        WHERE prixUnitaire > 0 
-        GROUP BY LOWER(libelleProduit) 
+        SELECT p.libelle as nom, a.prixUnitaire as lastPrice, a.unite, COUNT(*) as count 
+        FROM Article a 
+        JOIN Produit p ON p.id = a.idProduit
+        WHERE a.prixUnitaire > 0 
+        GROUP BY LOWER(p.libelle) 
         ORDER BY count DESC 
         LIMIT 50
       `);
@@ -513,7 +608,7 @@ export default function AchatDetails() {
   const saveTitle = () => {
     if (isReadOnly) return;
     if (!validateTitle() || !achat) return;
-    getDb().runSync('UPDATE Achat SET nomListe = ? WHERE id = ?', [title.trim(), achatId]);
+    getDb().runSync('UPDATE ListeAchat SET nomListe = ? WHERE id = ?', [title.trim(), achatId]);
     setAchat({ ...achat, nomListe: title.trim() });
   };
 
@@ -542,9 +637,18 @@ export default function AchatDetails() {
     triggerHaptic('light');
     try {
       const db = getDb();
+      let productId;
+      const existing = db.getAllSync<{id: number}>('SELECT id FROM Produit WHERE libelle = ?', [nom]);
+      if (existing && existing.length > 0) {
+          productId = existing[0].id;
+      } else {
+          const res = db.runSync('INSERT INTO Produit (libelle, unite) VALUES (?, ?)', [nom, unite || 'pcs']);
+          productId = res.lastInsertRowId;
+      }
+
       const r = db.runSync(
-        'INSERT INTO LigneAchat (idAchat, libelleProduit, quantite, prixUnitaire, prixTotal, unite) VALUES (?, ?, 0, 0, 0, ?)', 
-        [achatId, nom, unite || 'pcs']
+        'INSERT INTO Article (idListeAchat, idProduit, quantite, prixUnitaire, prixTotal, unite) VALUES (?, ?, 0, 0, 0, ?)', 
+        [achatId, productId, unite || 'pcs']
       );
       const newLine = { 
         id: r.lastInsertRowId, 
@@ -577,9 +681,18 @@ export default function AchatDetails() {
       const exists = lignes.some(l => l.libelleProduit.toLowerCase() === item.nom.toLowerCase());
       if (!exists) {
         try {
+          let productId;
+          const existing = db.getAllSync<{id: number}>('SELECT id FROM Produit WHERE libelle = ?', [item.nom]);
+          if (existing && existing.length > 0) {
+              productId = existing[0].id;
+          } else {
+              const res = db.runSync('INSERT INTO Produit (libelle, unite) VALUES (?, ?)', [item.nom, item.unite]);
+              productId = res.lastInsertRowId;
+          }
+
           const r = db.runSync(
-            'INSERT INTO LigneAchat (idAchat, libelleProduit, quantite, prixUnitaire, prixTotal, unite) VALUES (?, ?, 0, 0, 0, ?)', 
-            [achatId, item.nom, item.unite]
+            'INSERT INTO Article (idListeAchat, idProduit, quantite, prixUnitaire, prixTotal, unite) VALUES (?, ?, 0, 0, 0, ?)', 
+            [achatId, productId, item.unite]
           );
           const newLine = { 
             id: r.lastInsertRowId, 
@@ -662,7 +775,7 @@ export default function AchatDetails() {
     if (idx === -1) return;
     triggerHaptic('light');
     const l = lignes[idx];
-    getDb().runSync('UPDATE LigneAchat SET prixUnitaire=0, prixTotal=0 WHERE id=?', [l.id]);
+    getDb().runSync('UPDATE Article SET prixUnitaire=0, prixTotal=0 WHERE id=?', [l.id]);
     const updatedLignes = [...lignes];
     updatedLignes[idx] = { ...l, prixUnitaire: 0, prixTotal: 0, checked: false, hasQtyOnly: l.quantite > 0 };
     setLignes(updatedLignes);
@@ -684,15 +797,30 @@ export default function AchatDetails() {
     
     const total = qty * prix;
     const l = lignes[editIdx];
-    getDb().runSync(
-      'UPDATE LigneAchat SET libelleProduit=?, quantite=?, prixUnitaire=?, prixTotal=?, unite=? WHERE id=?', 
-      [nom, qty, prix, total, unite, l.id]
+    const db = getDb();
+
+    let productId = l.idProduit;
+    
+    if (nom !== l.libelleProduit) {
+        const existing = db.getAllSync<{id: number}>('SELECT id FROM Produit WHERE libelle = ?', [nom]);
+        if (existing && existing.length > 0) {
+            productId = existing[0].id;
+        } else {
+            const res = db.runSync('INSERT INTO Produit (libelle, unite) VALUES (?, ?)', [nom, unite]);
+            productId = res.lastInsertRowId;
+        }
+    }
+
+    db.runSync(
+      'UPDATE Article SET idProduit=?, quantite=?, prixUnitaire=?, prixTotal=?, unite=? WHERE id=?', 
+      [productId, qty, prix, total, unite, l.id]
     );
       
     const updatedLignes = [...lignes];
     updatedLignes[editIdx] = { 
       ...l, 
       libelleProduit: nom, 
+      idProduit: productId,
       quantite: qty, 
       prixUnitaire: prix,
       prixTotal: total,
@@ -721,7 +849,7 @@ export default function AchatDetails() {
     }
     
     getDb().runSync(
-      'UPDATE LigneAchat SET quantite=?, prixUnitaire=?, prixTotal=?, unite=? WHERE id=?', 
+      'UPDATE Article SET quantite=?, prixUnitaire=?, prixTotal=?, unite=? WHERE id=?', 
       [qty, prix, total, unite, l.id]
     );
     const updatedLignes = [...lignes];
@@ -753,7 +881,7 @@ export default function AchatDetails() {
 
   const confirmDelete = () => {
     if (!itemToDelete) return;
-    getDb().runSync('DELETE FROM LigneAchat WHERE id=?', [itemToDelete.id]);
+    getDb().runSync('DELETE FROM Article WHERE id=?', [itemToDelete.id]);
     setLignes(lignes.filter(l => l.id !== itemToDelete.id));
     setDeleteModal(false);
     setItemToDelete(null);
@@ -794,7 +922,7 @@ export default function AchatDetails() {
     setShowPurchaseDatePicker(Platform.OS === 'ios');
     if (selectedDate) {
       const iso = selectedDate.toISOString();
-      getDb().runSync('UPDATE Achat SET dateAchat=? WHERE id=?', [iso, achatId]);
+      getDb().runSync('UPDATE ListeAchat SET dateAchat=? WHERE id=?', [iso, achatId]);
       setAchat({ ...achat, dateAchat: iso });
     }
   };
@@ -857,13 +985,30 @@ export default function AchatDetails() {
                 <Animated.View style={{ transform: [{ translateX: shakeAnim }] }}>
                   <TextInput
                     ref={titleInputRef}
-                    style={[s.titleInput, titleError && s.titleInputError]}
+                    style={[s.titleInput, titleError ? s.titleInputError : undefined]}
                     value={title}
                     onChangeText={handleTitleChange}
                     onBlur={saveTitle}
                     placeholder={language === 'en' ? 'List name *' : 'Nom de la liste *'}
                     placeholderTextColor="rgba(255,255,255,0.5)"
+                    cursorColor="#ffffff"
+                    selectionColor="rgba(255,255,255,0.4)"
                   />
+                  
+                  {/* Action Buttons Row */}
+                  <View style={{ position: 'absolute', right: 0, top: 5, flexDirection: 'row', alignItems: 'center' }}>
+                     {/* Voice Button */}
+                     <TouchableOpacity 
+                      onPress={() => {
+                          triggerHaptic('medium');
+                          Alert.alert('Info', 'La reconnaissance vocale pour le titre sera disponible prochainement via une mise à jour native.');
+                      }}
+                      style={{ padding: 5, marginRight: 5 }}
+                     >
+                       <Ionicons name="mic-outline" size={20} color="rgba(255,255,255,0.8)" />
+                     </TouchableOpacity>
+                   </View>
+
                   {titleError ? (
                     <View style={s.errorContainer}>
                       <Ionicons name="alert-circle" size={12} color="#FECACA" />
@@ -979,9 +1124,15 @@ export default function AchatDetails() {
                     onBlur={() => setTimeout(() => setIsInputFocused(false), 150)}
                     returnKeyType="done"
                   />
-                  {newItem.trim() && (
+                  {newItem.trim() ? (
                     <TouchableOpacity onPress={handleSubmitItem} style={[s.addBtn, { backgroundColor: activeTheme.primary }]}>
                       <Ionicons name="checkmark" size={20} color="#fff" />
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity onPress={toggleListening} style={{ padding: 6 }}>
+                        <Animated.View style={{ transform: [{ scale: isListening ? pulseAnim : 1 }] }}>
+                            <Ionicons name={isListening ? "mic" : "mic-outline"} size={22} color={isListening ? "#EF4444" : activeTheme.primary} />
+                        </Animated.View>
                     </TouchableOpacity>
                   )}
                 </View>

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // 🎨 1. TOUTES VOS COULEURS RESTAURÉES (Plus de suppression !)
@@ -13,6 +13,7 @@ export const THEMES = {
   green: { name: 'Emerald', primary: '#059669', secondary: '#D1FAE5', gradient: ['#059669', '#34D399'] },
  
   jaune: { name: 'Jaune', primary: '#CA8A04', secondary: '#FEF08A', gradient: ['#CA8A04', '#EAB308'] },
+  rouge: { name: 'Rouge', primary: '#EF4444', secondary: '#FEE2E2', gradient: ['#EF4444', '#DC2626'] },
   beige: { name: 'Beige', primary: '#D4A373', secondary: '#FAEDCD', gradient: ['#D4A373', '#E9C46A'] },
   brown: { name: 'Coffee', primary: '#8d5433ff', secondary: '#FEF3C7', gradient: ['#e7a782ff', '#92400E'] },
   indigo: { name: 'Midnight', primary: '#4338CA', secondary: '#E0E7FF', gradient: ['#4338CA', '#6366F1'] },
@@ -110,15 +111,17 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
 
   const safeActiveTheme = THEMES[currentTheme] || THEMES.violet;
 
+  const contextValue = useMemo(() => ({
+    currentTheme,
+    setTheme: changeTheme,
+    activeTheme: safeActiveTheme,
+    isDarkMode,
+    toggleDarkMode,
+    getStyles
+  }), [currentTheme, safeActiveTheme, isDarkMode]);
+
   return (
-    <ThemeContext.Provider value={{
-      currentTheme,
-      setTheme: changeTheme,
-      activeTheme: safeActiveTheme,
-      isDarkMode,
-      toggleDarkMode,
-      getStyles
-    }}>
+    <ThemeContext.Provider value={contextValue}>
       {children}
     </ThemeContext.Provider>
   );
