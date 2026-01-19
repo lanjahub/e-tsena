@@ -34,9 +34,10 @@ export const DepenseService = {
     const res = db.getAllSync(`
       SELECT p.libelle as name, SUM(a.prixTotal) as montant
       FROM Article a
-      JOIN Produit p ON p.id = a.idProduit
+      JOIN Produit p ON p.idProduit = a.idProduit
       GROUP BY p.libelle ORDER BY montant DESC
     `);
+    console.log('[DEPENSE_SERVICE] getRepartitionParProduit - Résultat:', res.length, 'produits', res);
     return res as { name: string; montant: number }[];
   },
 
@@ -44,7 +45,7 @@ export const DepenseService = {
     const db = getDb();
     const res = db.getAllSync(`
       SELECT COALESCE(SUM(a.prixTotal), 0) as t 
-      FROM Article a JOIN ListeAchat l ON l.id = a.idListeAchat 
+      FROM Article a JOIN ListeAchat l ON l.idListe = a.idListeAchat 
       WHERE DATE(l.dateAchat) BETWEEN ? AND ?
     `, [startDate, endDate]);
     return (res[0] as any)?.t || 0;
@@ -54,8 +55,8 @@ export const DepenseService = {
   async getStatsComparatives(startDate: string, endDate: string) {
     const db = getDb();
     const res = db.getAllSync(`
-       SELECT COALESCE(SUM(a.prixTotal), 0) as montant, COUNT(DISTINCT l.id) as nb
-       FROM ListeAchat l JOIN Article a ON l.id = a.idListeAchat
+       SELECT COALESCE(SUM(a.prixTotal), 0) as montant, COUNT(DISTINCT l.idListe) as nb
+       FROM ListeAchat l JOIN Article a ON l.idListe = a.idListeAchat
        WHERE DATE(l.dateAchat) BETWEEN ? AND ?`, [startDate, endDate]);
     return {
       montant: (res[0] as any)?.montant || 0,
@@ -70,15 +71,15 @@ export const DepenseService = {
     console.log('[SQL] Requête produits période:', startDate, 'à', endDate);
     
     // Debug: Voir toutes les dates d'achat disponibles
-    const allDates = db.getAllSync(`SELECT id, dateAchat FROM ListeAchat ORDER BY dateAchat DESC LIMIT 10`);
+    const allDates = db.getAllSync(`SELECT idListe, dateAchat FROM ListeAchat ORDER BY dateAchat DESC LIMIT 10`);
     console.log('[SQL] Dates achats disponibles:', allDates);
     
     // Requête principale avec paramètres
     const res = db.getAllSync(`
       SELECT p.libelle as libelleProduit, SUM(a.quantite) as totalQte, SUM(a.prixTotal) as totalPrix
       FROM Article a 
-      JOIN ListeAchat l ON l.id = a.idListeAchat 
-      JOIN Produit p ON p.id = a.idProduit
+      JOIN ListeAchat l ON l.idListe = a.idListeAchat 
+      JOIN Produit p ON p.idProduit = a.idProduit
       WHERE DATE(l.dateAchat) BETWEEN ? AND ?
       GROUP BY p.libelle
       ORDER BY totalPrix DESC

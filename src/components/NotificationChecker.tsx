@@ -7,7 +7,7 @@ import { getDb } from '../db/init';
 // ============================================================
 
 export interface RappelItem {
-  id: number;
+  idRappel: number;
   achatId: number;
   titre: string;
   message: string;
@@ -209,8 +209,8 @@ export function supprimerRappel(rappelId: number): void {
 
 export async function cancelShoppingReminder(notificationId: string): Promise<void> {
   try {
-    const id = parseInt(notificationId, 10);
-    if (!isNaN(id)) {
+    const id = Number.parseInt(notificationId, 10);
+    if (!Number.isNaN(id)) {
       supprimerRappel(id);
     }
   } catch (error) {

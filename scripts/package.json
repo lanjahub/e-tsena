@@ -1,0 +1,11 @@
+{
+  "name": "asset-generator",
+  "version": "1.0.0",
+  "description": "Generate PNG assets from SVG",
+  "scripts": {
+    "generate": "node convertSvgToPng.js"
+  },
+  "devDependencies": {
+    "sharp": "^0.33.2"
+  }
+}

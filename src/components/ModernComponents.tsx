@@ -64,8 +64,8 @@ export const GradientCard: React.FC<GradientCardProps> = ({
 // ==================== ACTION BUTTON ====================
 interface ActionButtonProps {
   label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  color: 'cyan' | 'coral';
+  icon: string;
+  color: 'secondary' | 'tertiary';
   onPress: () => void;
   style?: ViewStyle;
   small?: boolean;
@@ -79,7 +79,7 @@ export const ActionButton: React.FC<ActionButtonProps> = ({
   style,
   small = false
 }) => {
-  const bgColor = color === 'cyan' ? COLORS.cyan : COLORS.coral;
+  const bgColor = color === 'secondary' ? COLORS.secondary : COLORS.tertiary;
   
   return (
     <TouchableOpacity
@@ -102,7 +102,7 @@ export const ActionButton: React.FC<ActionButtonProps> = ({
 
 // ==================== ICON CARD ====================
 interface IconCardProps {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: string;
   label: string;
   color: string;
   onPress: () => void;
@@ -176,11 +176,11 @@ interface ModernHeaderProps {
   gradient: [string, string];
   avatar?: boolean;
   rightButton?: {
-    icon: keyof typeof Ionicons.glyphMap;
+    icon: string;
     onPress: () => void;
   };
   settingsButton?: {
-    icon: keyof typeof Ionicons.glyphMap;
+    icon: string;
     onPress: () => void;
   };
   breadcrumb?: Array<{ label: string; route?: string }>;
@@ -246,7 +246,7 @@ export const ModernHeader: React.FC<ModernHeaderProps> = ({
 interface StatCardProps {
   label: string;
   value: string | number;
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: string;
   color: string;
   style?: ViewStyle;
 }

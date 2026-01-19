@@ -4,10 +4,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { format } from 'date-fns';
 import formatMoney from '../utils/formatMoney';
-import { COLORS, SECTION_COLORS } from '@constants/colors';
+import { SECTION_COLORS } from '@constants/colors';
 
 interface Achat {
-  id: number;
+  idAchat: number;
   nomListe: string;
   dateAchat: string;
   totalDepense: number;
@@ -24,7 +24,7 @@ export const AchatCard: React.FC<AchatCardProps> = ({ achat, onPress }) => {
     if (onPress) {
       onPress();
     } else {
-      router.push(`/achat/${achat.id}`);
+      router.push(`/achat/${achat.idAchat}`);
     }
   };
 
@@ -33,53 +33,58 @@ export const AchatCard: React.FC<AchatCardProps> = ({ achat, onPress }) => {
 
   return (
     <TouchableOpacity style={styles.card} onPress={handlePress}>
-      <View style={styles.cardHeader}>
-        {/* Badge de date */}
-        <View style={styles.dateContainer}>
-          <View style={styles.dateBadge}>
-            <Text style={styles.dateDay}>
-              {format(new Date(achat.dateAchat), 'dd')}
-            </Text>
-            <Text style={styles.dateMonth}>
-              {format(new Date(achat.dateAchat), 'MMM')}
-            </Text>
+      <View style={styles.cardContent}>
+        
+        {/* En-tête : Date Badge + Infos */}
+        <View style={styles.topRow}>
+             <View style={styles.dateBadge}>
+                <Text style={styles.dateDay}>
+                  {format(new Date(achat.dateAchat), 'dd')}
+                </Text>
+                <Text style={styles.dateMonth}>
+                  {format(new Date(achat.dateAchat), 'MMM')}
+                </Text>
+             </View>
+             
+             <View style={styles.mainInfo}>
+                <View style={styles.titleRow}>
+                  <Text style={styles.cardTitle} numberOfLines={1}>
+                    {achat.nomListe}
+                  </Text>
+                  <Text style={styles.cardTotal}>
+                    {formatMoney(achat.totalDepense)} Ar
+                  </Text>
+                </View>
+
+                <View style={styles.subInfoRow}>
+                   <Text style={styles.cardDate}>
+                     {format(new Date(achat.dateAchat), 'dd MMMM yyyy, HH:mm')}
+                   </Text>
+                </View>
+
+                <View style={styles.metaRow}>
+                   <View style={styles.pill}>
+                      <Ionicons name="bag-handle" size={12} color={SECTION_COLORS.home.primary} />
+                      <Text style={styles.metaText}>
+                        {achat.nombreArticles} article{achat.nombreArticles > 1 ? 's' : ''}
+                      </Text>
+                   </View>
+                </View>
+             </View>
+        </View>
+
+        {/* Barre de progression déplacée en bas proprement */}
+        <View style={styles.progressContainer}>
+          <View style={styles.progressBar}>
+            <View 
+              style={[
+                styles.progressFill, 
+                { width: `${progressPercentage}%`, backgroundColor: SECTION_COLORS.home.primary }
+              ]} 
+            />
           </View>
         </View>
-        
-        {/* Informations principales */}
-        <View style={styles.cardInfo}>
-          <Text style={styles.cardTitle} numberOfLines={1}>
-            {achat.nomListe}
-          </Text>
-          <Text style={styles.cardDate}>
-            {format(new Date(achat.dateAchat), 'dd MMMM yyyy à HH:mm')}
-          </Text>
-          <View style={styles.cardMeta}>
-            <View style={styles.metaItem}>
-              <Ionicons name="basket-outline" size={14} color={SECTION_COLORS.home.primary} />
-              <Text style={styles.metaText}>
-                {achat.nombreArticles} article{achat.nombreArticles > 1 ? 's' : ''}
-              </Text>
-            </View>
-          </View>
-        </View>
-        
-        {/* Prix et flèche */}
-        <View style={styles.cardRight}>
-          <Text style={styles.cardTotal}>
-            {formatMoney(achat.totalDepense)} {""}{' '}{'Ar'}
-          </Text>
-          <Ionicons name="chevron-forward" size={20} color={COLORS.textLight} />
-        </View>
-      </View>
-      
-      {/* Barre de progression */}
-      <View style={styles.cardFooter}>
-        <View style={styles.progressBar}>
-          <View 
-            style={[styles.progressFill, { width: `${progressPercentage}%` }]} 
-          />
-        </View>
+
       </View>
     </TouchableOpacity>
   );
@@ -88,94 +93,106 @@ export const AchatCard: React.FC<AchatCardProps> = ({ achat, onPress }) => {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: 'white',
-    borderRadius: 16,
+    borderRadius: 12,
     marginBottom: 12,
+    marginHorizontal: 4, // Pour éviter que l'ombre soit coupée
+    padding: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  cardHeader: {
+  cardContent: {
+    flexDirection: 'column',
+  },
+  topRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-  },
-  dateContainer: {
-    marginRight: 12,
+    marginBottom: 12,
   },
   dateBadge: {
-    width: 50,
-    height: 50,
-    borderRadius: 12,
-    backgroundColor: SECTION_COLORS.home.light,
+    width: 46,
+    height: 46,
+    borderRadius: 10,
+    backgroundColor: '#F0F9FF', // Light Blue bg
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: SECTION_COLORS.home.primary,
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: '#E0F2FE',
   },
   dateDay: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: SECTION_COLORS.home.primary,
-    lineHeight: 18,
+    color: '#0284C7',
+    lineHeight: 20,
   },
   dateMonth: {
     fontSize: 10,
-    fontWeight: '600',
-    color: SECTION_COLORS.home.text,
     textTransform: 'uppercase',
-    lineHeight: 12,
+    color: '#0284C7',
+    fontWeight: '600',
   },
-  cardInfo: {
+  mainInfo: {
     flex: 1,
+    justifyContent: 'center',
   },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.text,
+  titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 4,
   },
-  cardDate: {
-    fontSize: 13,
-    color: COLORS.textLight,
-    marginBottom: 6,
-  },
-  cardMeta: {
-    flexDirection: 'row',
-  },
-  metaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  metaText: {
-    fontSize: 12,
-    color: SECTION_COLORS.home.primary,
-    fontWeight: '600',
-  },
-  cardRight: {
-    alignItems: 'flex-end',
-    gap: 4,
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1E293B',
+    flex: 1,
+    marginRight: 8,
   },
   cardTotal: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 15,
+    fontWeight: '700',
     color: SECTION_COLORS.home.primary,
   },
-  cardFooter: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
+  subInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  cardDate: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  metaText: {
+    marginLeft: 4,
+    fontSize: 11,
+    color: '#475569',
+    fontWeight: '500',
+  },
+  progressContainer: {
+    marginTop: 0,
   },
   progressBar: {
     height: 4,
-    backgroundColor: COLORS.surfaceVariant,
+    backgroundColor: '#E2E8F0',
     borderRadius: 2,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    backgroundColor: SECTION_COLORS.home.primary,
     borderRadius: 2,
   },
 });

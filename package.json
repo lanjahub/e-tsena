@@ -1,6 +1,6 @@
 {
   "name": "e-tsena",
-  "version": "0.1.0",
+  "version": "1.0.4",
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
@@ -8,10 +8,19 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "generate-icons": "node scripts/generate-app-icons.js",
+    "convert-icons": "node scripts/convert-svg-to-png.js",
+    "prepare-build": "npm run generate-icons && npm run convert-icons",
+    "pre-build-check": "node scripts/pre-build-check.js",
+    "build:dev": "npm run pre-build-check && eas build --profile development --platform android",
+    "build:preview": "npm run pre-build-check && eas build --profile preview --platform android",
+    "build:prod": "npm run pre-build-check && eas build --profile production --platform android",
+    "build:prod-aab": "npm run pre-build-check && eas build --profile production-aab --platform android",
+    "build:local": "npm run pre-build-check && eas build --profile development --platform android --local"
   },
   "dependencies": {
-    "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",
     "@react-native-voice/voice": "^3.2.4",
@@ -20,15 +29,15 @@
     "expo": "~54.0.29",
     "expo-asset": "~12.0.11",
     "expo-blur": "~15.0.8",
-    "expo-constants": "~18.0.12",
+    "expo-constants": "~18.0.13",
     "expo-device": "~8.0.10",
     "expo-font": "~14.0.10",
     "expo-linear-gradient": "~15.0.8",
     "expo-linking": "~8.0.10",
-    "expo-notifications": "~0.32.15",
+    "expo-notifications": "^0.32.16",
     "expo-print": "~15.0.8",
-    "expo-router": "~6.0.17",
     "expo-sharing": "~14.0.8",
+    "expo-speech": "~14.0.8",
     "expo-sqlite": "~16.0.10",
     "expo-status-bar": "~3.0.9",
     "react": "19.1.0",
@@ -41,17 +50,12 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
-    "@types/react": "~18.3.12",
+    "@expo/vector-icons": "^15.0.3",
+    "@types/react": "^19.1.0",
+    "@types/react-native": "^0.72.8",
     "babel-preset-expo": "~12.0.6",
     "eslint": "^9.13.0",
+    "expo-router": "^6.0.21",
     "typescript": "~5.3.3"
-  },
-  "expo": {
-    "name": "E-tsena",
-    "slug": "e-tsena",
-    "scheme": "etsena",
-    "plugins": [
-      "expo-router"
-    ]
   }
 }

@@ -23,12 +23,12 @@ import { useSettings } from '../src/context/SettingsContext';
 const ITEMS_PER_PAGE = 10;
 
 interface Produit {
-  id: number;
+  idProduit: number;
   libelle: string;
 }
 
 interface Transaction {
-  id: number;
+  idTransaction: number;
   dateAchat: string;
   nomListe: string;
   produit: string;
@@ -45,7 +45,7 @@ export default function AnalyseProduit() {
   const { styles: s, colors } = getStyles(activeTheme, isDarkMode);
 
   const [produits, setProduits] = useState<Produit[]>([]);
-  const [selectedProduit, setSelectedProduit] = useState<number | null>(-1);
+  const [selectedProduit, setSelectedProduit] = useState<number>(-1);
   const [dateDebut, setDateDebut] = useState(startOfMonth(new Date()));
   const [dateFin, setDateFin] = useState(new Date());
   
@@ -70,7 +70,7 @@ export default function AnalyseProduit() {
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => { loadProduits(); }, []);
-  useEffect(() => { if (selectedProduit !== null) handleAnalyze(); }, [selectedProduit, dateDebut, dateFin]);
+  useEffect(() => { handleAnalyze(); }, [selectedProduit, dateDebut, dateFin]);
   useEffect(() => { setCurrentPage(1); }, [sortBy, selectedProduit, dateDebut, dateFin]);
 
   const loadProduits = () => {
@@ -78,12 +78,12 @@ export default function AnalyseProduit() {
       const db = getDb();
       const result = db.getAllSync(`
         SELECT DISTINCT libelleProduit as libelle
-        FROM LigneAchat
+        FROM Article
         WHERE libelleProduit IS NOT NULL AND libelleProduit != ''
         ORDER BY libelleProduit ASC
       `);
-      const allOption = { id: -1, libelle: 'Tous les produits' };
-      setProduits([allOption, ...result.map((p: any, i: number) => ({ id: i + 1, libelle: p.libelle }))]);
+      const allOption = { idProduit: -1, libelle: 'Tous les produits' };
+      setProduits([allOption, ...result.map((p: any, i: number) => ({ idProduit: i + 1, libelle: p.libelle }))]);
     } catch (e) {
       console.error(e);
     } finally {
@@ -92,7 +92,6 @@ export default function AnalyseProduit() {
   };
 
   const handleAnalyze = () => {
-    if (selectedProduit === null) return;
     try {
       const db = getDb();
       const startStr = dateDebut.toISOString();
@@ -106,11 +105,15 @@ export default function AnalyseProduit() {
             l.libelleProduit,
             SUM(l.quantite) as totalQte,
             SUM(l.prixTotal) as totalPrix,
-            MAX(l.unite) as unite
-          FROM LigneAchat l
-          JOIN Achat a ON a.id = l.idAchat
+            MAX(l.unite) as unite,
+            COUNT(*) as nbAchats
+          FROM Article l
+          JOIN ListeAchat a ON a.idListe = l.idListeAchat
           WHERE a.dateAchat BETWEEN ? AND ?
+            AND l.libelleProduit IS NOT NULL 
+            AND l.libelleProduit != ''
           GROUP BY l.libelleProduit
+          ORDER BY totalPrix DESC
         `, [startStr, endStr] as any[]);
 
         setPeriodSummary(result);
@@ -123,19 +126,24 @@ export default function AnalyseProduit() {
       } else {
         // Détail : un produit spécifique
         setViewMode('transactions');
-        const nomProduit = produits.find(p => p.id === selectedProduit)?.libelle || '';
+        const nomProduit = produits.find(p => p.idProduit === selectedProduit)?.libelle || '';
         if (!nomProduit) return;
 
         const result = db.getAllSync(`
           SELECT 
-            la.id, a.dateAchat, a.nomListe,
+            la.idArticle as idTransaction,
+            a.dateAchat, 
+            a.nomListe,
             la.libelleProduit as produit,
-            la.quantite, la.prixUnitaire,
-            la.prixTotal, la.unite
-          FROM Achat a
-          JOIN LigneAchat la ON a.id = la.idAchat
+            la.quantite, 
+            la.prixUnitaire,
+            la.prixTotal, 
+            la.unite
+          FROM ListeAchat a
+          JOIN Article la ON a.idListe = la.idListeAchat
           WHERE la.libelleProduit = ?
             AND a.dateAchat BETWEEN ? AND ?
+          ORDER BY a.dateAchat DESC
         `, [nomProduit, startStr, endStr] as any[]);
 
         const trans = result as Transaction[];
@@ -230,7 +238,7 @@ export default function AnalyseProduit() {
       }
 
       return (
-        <View key={`transaction-${item.id || item.dateAchat}-${idx}`} style={s.transactionItem}>
+        <View key={`transaction-${item.idTransaction || item.dateAchat}-${idx}`} style={s.transactionItem}>
           <View style={s.transLeft}>
             <View style={[s.dateBadge, { backgroundColor: isDarkMode ? '#334155' : '#F3F4F6' }]}>
               {isSummary ? (
@@ -314,7 +322,7 @@ export default function AnalyseProduit() {
         const permissions = await saf.requestDirectoryPermissionsAsync();
         if (permissions.granted) {
           const base64 = await FileSystem.readAsStringAsync(tempUri, {
-            encoding: FileSystem.EncodingType.Base64,
+            encoding: (FileSystem as any).EncodingType?.Base64 || 'base64',
           });
           const fileName = `Rapport_Etsena_${Date.now()}.pdf`;
 
@@ -324,7 +332,7 @@ export default function AnalyseProduit() {
             'application/pdf'
           );
           await FileSystem.writeAsStringAsync(createdUri, base64, {
-            encoding: FileSystem.EncodingType.Base64,
+            encoding: (FileSystem as any).EncodingType?.Base64 || 'base64',
           });
 
           Alert.alert('Succès', 'Fichier PDF enregistré dans le dossier choisi.');
@@ -380,10 +388,8 @@ export default function AnalyseProduit() {
         <View style={s.card}>
           <Text style={s.label}>Produit à analyser</Text>
           <TouchableOpacity style={s.selectBox} onPress={() => setShowProduitPicker(true)}>
-            <Text style={[s.selectText, { color: selectedProduit === null ? colors.textSec : colors.text }]}>
-              {selectedProduit !== null && selectedProduit !== undefined
-                ? produits.find(p => p.id === selectedProduit)?.libelle
-                : 'Choisir un produit'}
+            <Text style={[s.selectText, { color: colors.text }]}>
+              {produits.find(p => p.idProduit === selectedProduit)?.libelle || 'Tous les produits'}
             </Text>
             <Ionicons name="chevron-down" size={20} color={activeTheme.primary} />
           </TouchableOpacity>
@@ -441,12 +447,28 @@ export default function AnalyseProduit() {
         {/* Résultats */}
         {showResults && (
           <View style={{ marginTop: 10 }}>
+            {/* Bouton PDF amélioré - Plus visible */}
+            <TouchableOpacity 
+              style={[s.pdfExportCard, { backgroundColor: activeTheme.primary }]}
+              onPress={savePdfFile}
+              activeOpacity={0.8}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View style={[s.pdfIconBg, { backgroundColor: 'rgba(255,255,255,0.2)' }]}>
+                  <Ionicons name="document-text-outline" size={24} color="#fff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.pdfExportTitle}>📄 Exporter en PDF</Text>
+                  <Text style={s.pdfExportSub}>Télécharger le rapport d'analyse</Text>
+                </View>
+                <View style={[s.pdfArrowIcon, { backgroundColor: 'rgba(255,255,255,0.3)' }]}>
+                  <Ionicons name="download-outline" size={18} color="#fff" />
+                </View>
+              </View>
+            </TouchableOpacity>
+
             <View style={s.resultHeader}>
               <Text style={s.resultTitle}>Résultats</Text>
-              <TouchableOpacity style={s.pdfBtn} onPress={savePdfFile}>
-                <Ionicons name="document-text-outline" size={16} color="#fff" />
-                <Text style={s.pdfBtnText}>PDF</Text>
-              </TouchableOpacity>
             </View>
 
             {/* Cartes stats */}
@@ -599,25 +621,25 @@ export default function AnalyseProduit() {
             <ScrollView style={{ maxHeight: 300 }}>
               {produits.map(p => (
                 <TouchableOpacity
-                  key={p.id}
+                  key={p.idProduit}
                   style={[
                     s.modalItem,
-                    selectedProduit === p.id && { backgroundColor: activeTheme.primary + '15' },
+                    selectedProduit === p.idProduit && { backgroundColor: activeTheme.primary + '15' },
                   ]}
                   onPress={() => {
-                    setSelectedProduit(p.id);
+                    setSelectedProduit(p.idProduit);
                     setShowProduitPicker(false);
                   }}
                 >
                   <Text
                     style={[
                       s.itemText,
-                      selectedProduit === p.id && { color: activeTheme.primary, fontWeight: 'bold' },
+                      selectedProduit === p.idProduit && { color: activeTheme.primary, fontWeight: 'bold' },
                     ]}
                   >
                     {p.libelle}
                   </Text>
-                  {selectedProduit === p.id && (
+                  {selectedProduit === p.idProduit && (
                     <Ionicons name="checkmark" size={20} color={activeTheme.primary} />
                   )}
                 </TouchableOpacity>
@@ -697,6 +719,43 @@ const getStyles = (theme: any, dark: boolean) => {
 
     pdfBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#EF4444', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20 },
     pdfBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 11 },
+
+    // Nouveau style pour le bouton PDF amélioré
+    pdfExportCard: {
+      marginBottom: 20,
+      padding: 18,
+      borderRadius: 16,
+      elevation: 4,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.15,
+      shadowRadius: 6,
+    },
+    pdfIconBg: {
+      width: 48,
+      height: 48,
+      borderRadius: 12,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    pdfExportTitle: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: '#fff',
+      marginBottom: 3,
+    },
+    pdfExportSub: {
+      fontSize: 11,
+      color: 'rgba(255,255,255,0.85)',
+      fontWeight: '500',
+    },
+    pdfArrowIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
 
     statsContainer: { flexDirection: 'row', gap: 10, marginBottom: 20 },
     statCard: { flex: 1, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center', elevation: 2 },

@@ -272,7 +272,7 @@ const ZoomableLineChart: React.FC<ZoomableLineChartProps> = ({
   const generateAreaPath = () => {
     if (points.length < 2) return '';
     const linePath = generateSmoothPath();
-    const lastPoint = points.at(-1);
+    const lastPoint = points[points.length - 1];
     const firstPoint = points[0];
     return `${linePath} L ${lastPoint?.x} ${padding.top + chartHeight} L ${firstPoint.x} ${padding.top + chartHeight} Z`;
   };
@@ -599,20 +599,20 @@ export default function Rapports() {
       const start = startOfMonth(currentMonth).toISOString();
       const end = endOfMonth(currentMonth).toISOString();
 
-      const [monthRes] = db.getAllSync(`SELECT SUM(l.prixTotal) as t FROM Article l JOIN ListeAchat a ON a.id = l.idListeAchat WHERE a.dateAchat BETWEEN ? AND ?`, [start, end]);
-      const [itemsRes] = db.getAllSync(`SELECT COUNT(l.id) as q FROM Article l JOIN ListeAchat a ON a.id = l.idListeAchat WHERE a.dateAchat BETWEEN ? AND ?`, [start, end]);
-      const [topRes] = db.getAllSync(`SELECT p.libelle as libelleProduit, SUM(l.quantite) as q FROM Article l JOIN ListeAchat a ON a.id = l.idListeAchat JOIN Produit p ON p.id = l.idProduit WHERE a.dateAchat BETWEEN ? AND ? GROUP BY p.libelle ORDER BY q DESC LIMIT 1`, [start, end]);
+      const [monthRes] = db.getAllSync(`SELECT SUM(l.prixTotal) as t FROM Article l JOIN ListeAchat a ON a.idListe = l.idListeAchat WHERE a.dateAchat BETWEEN ? AND ?`, [start, end]);
+      const [itemsRes] = db.getAllSync(`SELECT COUNT(l.idArticle) as q FROM Article l JOIN ListeAchat a ON a.idListe = l.idListeAchat WHERE a.dateAchat BETWEEN ? AND ?`, [start, end]);
+      const [topRes] = db.getAllSync(`SELECT p.libelle as libelleProduit, SUM(l.quantite) as q FROM Article l JOIN ListeAchat a ON a.idListe = l.idListeAchat JOIN Produit p ON p.idProduit = l.idProduit WHERE a.dateAchat BETWEEN ? AND ? GROUP BY p.libelle ORDER BY q DESC LIMIT 1`, [start, end]);
       
       const [maxDayRes] = db.getAllSync(`
         SELECT strftime('%d', a.dateAchat) as jour, SUM(l.prixTotal) as total 
-        FROM Article l JOIN ListeAchat a ON a.id = l.idListeAchat 
+        FROM Article l JOIN ListeAchat a ON a.idListe = l.idListeAchat 
         WHERE a.dateAchat BETWEEN ? AND ? 
         GROUP BY jour ORDER BY total DESC LIMIT 1
       `, [start, end]);
 
       const prevStart = startOfMonth(subMonths(currentMonth, 1)).toISOString();
       const prevEnd = endOfMonth(subMonths(currentMonth, 1)).toISOString();
-      const [prevRes] = db.getAllSync(`SELECT SUM(l.prixTotal) as t FROM Article l JOIN ListeAchat a ON a.id = l.idListeAchat WHERE a.dateAchat BETWEEN ? AND ?`, [prevStart, prevEnd]);
+      const [prevRes] = db.getAllSync(`SELECT SUM(l.prixTotal) as t FROM Article l JOIN ListeAchat a ON a.idListe = l.idListeAchat WHERE a.dateAchat BETWEEN ? AND ?`, [prevStart, prevEnd]);
 
       setStats({
         monthTotal: (monthRes as any)?.t || 0,
@@ -637,7 +637,7 @@ export default function Rapports() {
 
       const result = db.getAllSync(`
         SELECT date(a.dateAchat) as jour, SUM(l.prixTotal) as total
-        FROM Article l JOIN ListeAchat a ON a.id = l.idListeAchat 
+        FROM Article l JOIN ListeAchat a ON a.idListe = l.idListeAchat 
         WHERE a.dateAchat BETWEEN ? AND ?
         GROUP BY jour ORDER BY jour ASC
       `, [start, end]);
@@ -668,12 +668,12 @@ export default function Rapports() {
       const prevEnd = endOfMonth(subMonths(currentMonth, 1)).toISOString();
       
       // Total dépenses
-      const [currentTotal] = db.getAllSync(`SELECT SUM(l.prixTotal) as total FROM Article l JOIN ListeAchat a ON a.id = l.idListeAchat WHERE a.dateAchat BETWEEN ? AND ?`, [currentStart, currentEnd]);
-      const [prevTotal] = db.getAllSync(`SELECT SUM(l.prixTotal) as total FROM Article l JOIN ListeAchat a ON a.id = l.idListeAchat WHERE a.dateAchat BETWEEN ? AND ?`, [prevStart, prevEnd]);
-      
+const [currentTotal] = db.getAllSync(`SELECT SUM(l.prixTotal) as total FROM Article l JOIN ListeAchat a ON a.idListe = l.idListeAchat WHERE a.dateAchat BETWEEN ? AND ?`, [currentStart, currentEnd]);
+      const [prevTotal] = db.getAllSync(`SELECT SUM(l.prixTotal) as total FROM Article l JOIN ListeAchat a ON a.idListe = l.idListeAchat WHERE a.dateAchat BETWEEN ? AND ?`, [prevStart, prevEnd]);
+
       // Nombre d'articles
-      const [currentItems] = db.getAllSync(`SELECT COUNT(l.id) as count FROM Article l JOIN ListeAchat a ON a.id = l.idListeAchat WHERE a.dateAchat BETWEEN ? AND ?`, [currentStart, currentEnd]);
-      const [prevItems] = db.getAllSync(`SELECT COUNT(l.id) as count FROM Article l JOIN ListeAchat a ON a.id = l.idListeAchat WHERE a.dateAchat BETWEEN ? AND ?`, [prevStart, prevEnd]);
+      const [currentItems] = db.getAllSync(`SELECT COUNT(l.idArticle) as count FROM Article l JOIN ListeAchat a ON a.idListe = l.idListeAchat WHERE a.dateAchat BETWEEN ? AND ?`, [currentStart, currentEnd]);
+      const [prevItems] = db.getAllSync(`SELECT COUNT(l.idArticle) as count FROM Article l JOIN ListeAchat a ON a.idListe = l.idListeAchat WHERE a.dateAchat BETWEEN ? AND ?`, [prevStart, prevEnd]);
       
       // Prix moyen par article
       const currentAvg = (currentItems as any)?.count > 0 ? (currentTotal as any)?.total / (currentItems as any)?.count : 0;
@@ -713,10 +713,10 @@ export default function Rapports() {
           p.libelle as name,
           SUM(l.quantite) as quantity,
           SUM(l.prixTotal) as totalSpent,
-          COUNT(DISTINCT a.id) as frequency
+          COUNT(DISTINCT a.idListe) as frequency
         FROM Article l 
-        JOIN ListeAchat a ON a.id = l.idListeAchat 
-        JOIN Produit p ON p.id = l.idProduit
+        JOIN ListeAchat a ON a.idListe = l.idListeAchat 
+        JOIN Produit p ON p.idProduit = l.idProduit
         WHERE a.dateAchat BETWEEN ? AND ?
         GROUP BY p.libelle
         ORDER BY totalSpent DESC
@@ -734,7 +734,7 @@ export default function Rapports() {
 
       const result = db.getAllSync(`
         SELECT a.dateAchat, l.prixTotal, p.libelle as libelleProduit, l.quantite, l.prixUnitaire, p.unite
-        FROM Article l JOIN ListeAchat a ON a.id = l.idListeAchat JOIN Produit p ON p.id = l.idProduit
+        FROM Article l JOIN ListeAchat a ON a.idListe = l.idListeAchat JOIN Produit p ON p.idProduit = l.idProduit
         WHERE a.dateAchat BETWEEN ? AND ? ORDER BY a.dateAchat ASC
       `, [start, end]);
 
@@ -777,8 +777,8 @@ export default function Rapports() {
       const dayStart = format(date, 'yyyy-MM-dd') + 'T00:00:00.000Z';
       const dayEnd = format(date, 'yyyy-MM-dd') + 'T23:59:59.999Z';
       const result = db.getAllSync(`
-        SELECT a.nomListe, l.id as ligneId, p.libelle as libelleProduit, l.quantite, l.prixUnitaire, l.prixTotal, p.unite
-        FROM Article l JOIN ListeAchat a ON a.id = l.idListeAchat JOIN Produit p ON p.id = l.idProduit
+        SELECT a.nomListe, l.idArticle as ligneId, p.libelle as libelleProduit, l.quantite, l.prixUnitaire, l.prixTotal, p.unite
+        FROM Article l JOIN ListeAchat a ON a.idListe = l.idListeAchat JOIN Produit p ON p.idProduit = l.idProduit
         WHERE a.dateAchat BETWEEN ? AND ? ORDER BY a.nomListe ASC, p.libelle ASC
       `, [dayStart, dayEnd]);
       setDailyPurchases(result as any[]);
@@ -905,8 +905,8 @@ export default function Rapports() {
       >
         {/* Navigation */}
         <View style={s.headerNav}>
-          <TouchableOpacity onPress={() => router.push('/')} style={s.backBtn}>
-            <Ionicons name="arrow-back-outline" size={22} color="#fff" />
+          <TouchableOpacity onPress={() => router.push('/journal')} style={s.backBtn}>
+            <Ionicons name="book-outline" size={22} color="#fff" />
           </TouchableOpacity>
           
           {/* Sélecteur de mois au centre avec année mise en évidence */}
@@ -1011,30 +1011,7 @@ export default function Rapports() {
         {/* ============================================ */}
         <View style={s.section}>
           <View style={s.sectionHeader}>
-            <View style={{ flexDirection: 'row', backgroundColor: isDarkMode ? '#1E293B' : '#E2E8F0', padding: 2, borderRadius: 10 }}>
-              {(['month', 'year'] as const).map((range) => (
-                <TouchableOpacity 
-                  key={range}
-                  onPress={() => setTimeRange(range)} 
-                  style={{ 
-                    paddingHorizontal: 12, 
-                    paddingVertical: 5, 
-                    borderRadius: 8, 
-                    backgroundColor: timeRange === range ? activeTheme.primary : 'transparent' 
-                  }}
-                >
-                  <Text style={{ 
-                    color: timeRange === range 
-                      ? '#fff' 
-                      : (isDarkMode ? '#94A3B8' : '#64748B'), 
-                    fontWeight: '600', 
-                    fontSize: 12 
-                  }}>
-                    {range === 'month' ? 'Mois' : 'Année'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <Text style={s.sectionTitle}>📊 Évolution Mensuelle</Text>
             
             <View style={s.zoomControls}>
               <TouchableOpacity onPress={zoomOut} style={[s.zoomBtn, { opacity: chartZoom <= 0.5 ? 0.4 : 1 }]} disabled={chartZoom <= 0.5}>
@@ -1132,35 +1109,6 @@ export default function Rapports() {
             </View>
           </TouchableOpacity>
         </View>
-
-        {/* Bouton Journal des dépenses */}
-        <TouchableOpacity 
-          style={s.journalButton}
-          onPress={() => { 
-            vibrate(); 
-            setSelectedDate(new Date()); 
-            loadDailyPurchases(new Date()); 
-            setShowDailyJournal(true); 
-          }}
-          activeOpacity={0.9}
-        >
-          <LinearGradient
-            colors={activeTheme.gradient as any}
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-            style={s.journalButtonGradient}
-          >
-            <View style={s.journalIcon}>
-              <Ionicons name="calendar-outline" size={26} color={activeTheme.primary} />
-            </View>
-            <View style={{ flex: 1, marginLeft: 15 }}>
-              <Text style={s.journalTitle}>{t('daily_journal')}</Text>
-              <Text style={s.journalSubtitle}>{t('select_day_view_expenses')}</Text>
-            </View>
-            <View style={s.journalArrowBg}>
-              <Ionicons name="arrow-forward-outline" size={20} color="#fff" />
-            </View>
-          </LinearGradient>
-        </TouchableOpacity>
 
         {/* ============================================ */}
         {/* � SECTION TENDANCES */}
@@ -1858,6 +1806,44 @@ const getStyles = (theme: any, dark: boolean) => {
       borderRadius: 12, 
       justifyContent: 'center', 
       alignItems: 'center' 
+    },
+    
+    // Nouveau style pour le bouton PDF principal
+    pdfExportCard: {
+      marginHorizontal: 20,
+      marginVertical: 15,
+      padding: 20,
+      borderRadius: 20,
+      elevation: 4,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.15,
+      shadowRadius: 8,
+    },
+    pdfIconBg: {
+      width: 56,
+      height: 56,
+      borderRadius: 16,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    pdfExportTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: '#fff',
+      marginBottom: 4,
+    },
+    pdfExportSub: {
+      fontSize: 12,
+      color: 'rgba(255,255,255,0.85)',
+      fontWeight: '500',
+    },
+    pdfArrow: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     
     dateBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },

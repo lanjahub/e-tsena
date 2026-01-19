@@ -92,7 +92,7 @@ export const TrendCard: React.FC<TrendCardProps> = ({
         {/* Valeur précédente */}
         <View style={styles.previousValueRow}>
           <Text style={[styles.previousValueLabel, { color: textSecColor }]}>
-            Mois précédent:
+            Mois précédent :
           </Text>
           <Text style={[styles.previousValue, { color: textColor }]}>
             {formatValue(previousValue)}

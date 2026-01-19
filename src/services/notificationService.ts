@@ -1,35 +1,34 @@
 import { getDb } from '../db/init';
-import { Platform } from 'react-native'; 
+import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
 // Helper to load Notifications module lazily and safely
-function getNotificationsModule() {
-  try {
-    return require('expo-notifications');
-  } catch (e) {
-    console.warn("⚠️ expo-notifications module not found or failed to load");
-    return null;
-  }
-}
+let NotificationsModule: any = null;
+let notificationLoadAttempted = false;
 
-// Initialize handler if possible - safely check for module availability
-// Moved to init function to avoid side effects at import time
-function setupNotificationHandler() {
-  const Notifications = getNotificationsModule();
-  if (Notifications) {
-    try {
-      Notifications.setNotificationHandler({
-        handleNotification: async () => ({
-          shouldShowAlert: true,
-          shouldPlaySound: true,
-          shouldSetBadge: false,
-          shouldShowBanner: true,
-          shouldShowList: true,
-        }),
-      });
-    } catch (e) {
-      console.warn("⚠️ Failed to set notification handler", e);
-    }
+function getNotificationsModule() {
+  if (notificationLoadAttempted) {
+    return NotificationsModule;
   }
+  
+  notificationLoadAttempted = true;
+  
+  // Ne pas charger les notifications push dans Expo Go (SDK 53+)
+  const executionEnvironment = Constants.executionEnvironment;
+  if (executionEnvironment === 'storeClient') {
+    console.log('📱 Mode Expo Go - Rappels locaux actifs');
+    NotificationsModule = undefined;
+    return NotificationsModule;
+  }
+  
+  try {
+    NotificationsModule = require('expo-notifications');
+  } catch (e) {
+    console.warn("⚠️ expo-notifications module not found");
+    NotificationsModule = undefined;
+  }
+  
+  return NotificationsModule;
 }
 
 // ============================================================
@@ -37,7 +36,7 @@ function setupNotificationHandler() {
 // ============================================================
 
 export interface RappelItem {
-  id: number;
+  idRappel: number;
   idListeAchat: number;
   titre: string;
   message: string;
@@ -48,15 +47,15 @@ export interface RappelItem {
   supprime: number;
   affiche: number;
   createdAt: string;
-  // Champs joints
   nomListe?: string;
   nombreArticles?: number;
-  notificationId?: string; // ID pour annuler si besoin
-  // Champs calculés
+  notificationId?: string;
   isToday?: boolean;
   isTomorrow?: boolean;
   isPast?: boolean;
   isUrgent?: boolean;
+  lu?: number; // Alias pour estLu
+  achatId?: number; // Alias pour idListeAchat
 }
 
 // ============================================================
@@ -64,23 +63,130 @@ export interface RappelItem {
 // ============================================================
 
 export function isRunningInExpoGo(): boolean {
-  return true; // Pour Expo Go, toujours true
+  // Vérifie si on tourne dans Expo Go
+  const executionEnvironment = Constants.executionEnvironment;
+  return executionEnvironment === 'storeClient'; // Expo Go
+}
+
+export function isNativeBuild(): boolean {
+  // Vérifie si c'est un build natif
+  const executionEnvironment = Constants.executionEnvironment;
+  return executionEnvironment === 'standalone' || executionEnvironment === 'bare';
+}
+
+// ============================================================
+// 🔔 SETUP NOTIFICATION HANDLER
+// ============================================================
+
+function setupNotificationHandler() {
+  const Notifications = getNotificationsModule();
+  if (!Notifications) return;
+
+  try {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+    console.log('✅ Notification handler configuré');
+  } catch (e) {
+    console.warn("⚠️ Failed to set notification handler", e);
+  }
 }
 
 // ============================================================
 // 🗄️ INITIALISATION
 // ============================================================
 
-export function initNotificationTables(): void {
-  // Déjà géré dans db/init.ts
-  console.log('✅ Table Rappel gérée par init.ts');
+export async function initNotificationService(): Promise<boolean> {
+  console.log('🔔 Initialisation service notifications...');
   
-  // Only setup notifications if not in Expo Go
-  if (!isRunningInExpoGo()) {
+  const Notifications = getNotificationsModule();
+  if (!Notifications) {
+    console.log('❌ Module notifications non disponible');
+    return false;
+  }
+
+  try {
+    // Setup handler
     setupNotificationHandler();
-    registerForPushNotificationsAsync();
-  } else {
-    console.log('📱 Mode Expo Go - Rappels locaux actifs');
+
+    // Configurer le canal Android
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'Rappels E-tsena',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#7C3AED',
+        sound: 'default',
+        enableVibrate: true,
+        enableLights: true,
+      });
+      
+      await Notifications.setNotificationChannelAsync('reminders', {
+        name: 'Rappels de courses',
+        description: 'Notifications pour vos listes de courses',
+        importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#7C3AED',
+        sound: 'default',
+      });
+      
+      console.log('✅ Canaux Android configurés');
+    }
+
+    // Demander les permissions
+    const permissionGranted = await registerForPushNotificationsAsync();
+    
+    console.log('✅ Service notifications initialisé');
+    return permissionGranted;
+  } catch (error) {
+    console.error('❌ Erreur init notifications:', error);
+    return false;
+  }
+}
+
+export function initNotificationTables(): void {
+  console.log('✅ Table Rappel gérée par init.ts');
+  initNotificationService();
+}
+
+// ============================================================
+// 🔔 DEMANDER PERMISSIONS
+// ============================================================
+
+export async function registerForPushNotificationsAsync(): Promise<boolean> {
+  const Notifications = getNotificationsModule();
+  if (!Notifications) {
+    console.log('❌ Notifications non disponibles');
+    return false;
+  }
+
+  try {
+    // Vérifier les permissions actuelles
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+
+    // Si pas déjà accordé, demander
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    if (finalStatus !== 'granted') {
+      console.log('⚠️ Permission notifications refusée');
+      return false;
+    }
+
+    console.log('✅ Permissions notifications accordées');
+    return true;
+  } catch (error) {
+    console.error('❌ Erreur permissions:', error);
+    return false;
   }
 }
 
@@ -99,44 +205,52 @@ export async function creerRappel(
     const db = getDb();
     const dateStr = dateRappel.toISOString().split('T')[0];
     const heureStr = dateRappel.toTimeString().slice(0, 5);
-    
+
     // 1. Planifier la notification système
     let notificationId = '';
     const now = new Date();
     const triggerSeconds = Math.floor((dateRappel.getTime() - now.getTime()) / 1000);
 
-    const N = getNotificationsModule();
-    if (N && triggerSeconds > 0) {
-      notificationId = await N.scheduleNotificationAsync({
-        content: {
-          title: titre,
-          body: message,
-          data: { idListeAchat, type },
-          sound: 'default'
-        },
-        trigger: {
-          seconds: triggerSeconds,
-        } as any,
-      });
-      console.log(`🔔 Notification système planifiée (ID: ${notificationId}) pour dans ${triggerSeconds}s`);
-    } else if (!N) {
-       // Silent fail or log
-    } else {
-      console.warn("⚠️ Date de rappel passée, pas de notification système planifiée.");
+    const Notifications = getNotificationsModule();
+    if (Notifications && triggerSeconds > 0) {
+      try {
+        notificationId = await Notifications.scheduleNotificationAsync({
+          content: {
+            title: `🔔 ${titre}`,
+            body: message,
+            data: { 
+              idListeAchat, 
+              type,
+              action: 'openList',
+              screen: 'achat',
+              timestamp: Date.now()
+            },
+            sound: 'default',
+            priority: 'high',
+            badge: 1,
+          },
+          trigger: {
+            seconds: triggerSeconds,
+            channelId: 'reminders',
+          },
+        });
+        console.log(`🔔 Notification planifiée (ID: ${notificationId}) dans ${Math.round(triggerSeconds / 60)} min`);
+      } catch (notifError) {
+        console.warn('⚠️ Erreur planification notification:', notifError);
+      }
+    } else if (triggerSeconds <= 0) {
+      console.warn("⚠️ Date passée, notification non planifiée");
     }
 
-    // 2. Enregistrer en base de données
-    // Note: On pourrait stocker notificationId dans une nouvelle colonne si on voulait l'annuler plus tard
-    // Pour l'instant on garde le schéma actuel
-    
+    // 2. Enregistrer en base
     const result = db.runSync(
-      `INSERT INTO Rappel (idListeAchat, titre, message, dateRappel, heureRappel, type)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [idListeAchat, titre, message, dateStr, heureStr, type]
+      `INSERT INTO Rappel (idListeAchat, titre, message, dateRappel, heureRappel, type, notificationId)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [idListeAchat, titre, message, dateStr, heureStr, type, notificationId]
     );
-    
-    console.log(`✅ Rappel DB créé: ID ${result.lastInsertRowId}`);
-    return result.lastInsertRowId as number;
+
+    console.log(`✅ Rappel créé: ID ${result.lastInsertRowId}`);
+    return result.lastInsertRowId;
   } catch (error) {
     console.error('❌ Erreur création rappel:', error);
     return null;
@@ -157,11 +271,14 @@ export function getRappels(): RappelItem[] {
 
     const result = db.getAllSync(`
       SELECT 
+        r.idRappel as idRappel,
         r.*,
         l.nomListe,
+        r.idListeAchat as achatId,
+        r.estLu as lu,
         (SELECT COUNT(*) FROM Article WHERE idListeAchat = r.idListeAchat) as nombreArticles
       FROM Rappel r
-      LEFT JOIN ListeAchat l ON r.idListeAchat = l.id
+      LEFT JOIN ListeAchat l ON r.idListeAchat = l.idListe
       WHERE r.supprime = 0
       ORDER BY r.dateRappel ASC, r.heureRappel ASC
     `) as any[];
@@ -186,7 +303,8 @@ export function getRappels(): RappelItem[] {
 export function marquerCommeLu(rappelId: number): void {
   try {
     const db = getDb();
-    db.runSync('UPDATE Rappel SET estLu = 1 WHERE id = ?', [rappelId]);
+    db.runSync('UPDATE Rappel SET estLu = 1 WHERE idRappel = ?', [rappelId]);
+    console.log(`✅ Rappel ${rappelId} marqué comme lu`);
   } catch (error) {
     console.error('❌ Erreur marquage lu:', error);
   }
@@ -200,6 +318,7 @@ export function marquerToutCommeLu(): void {
   try {
     const db = getDb();
     db.runSync('UPDATE Rappel SET estLu = 1 WHERE supprime = 0');
+    console.log('✅ Tous les rappels marqués comme lus');
   } catch (error) {
     console.error('❌ Erreur:', error);
   }
@@ -209,10 +328,31 @@ export function marquerToutCommeLu(): void {
 // 🗑️ SUPPRIMER UN RAPPEL
 // ============================================================
 
-export function supprimerRappel(rappelId: number): void {
+export async function supprimerRappel(rappelId: number): Promise<void> {
   try {
     const db = getDb();
-    db.runSync('UPDATE Rappel SET supprime = 1 WHERE id = ?', [rappelId]);
+    
+    // Récupérer l'ID de notification si existant
+    const rappel = db.getAllSync(
+      'SELECT notificationId FROM Rappel WHERE idRappel = ?',
+      [rappelId]
+    ) as any[];
+    
+    if (rappel[0]?.notificationId) {
+      // Annuler la notification planifiée
+      const Notifications = getNotificationsModule();
+      if (Notifications) {
+        try {
+          await Notifications.cancelScheduledNotificationAsync(rappel[0].notificationId);
+          console.log('🔕 Notification annulée');
+        } catch (e) {
+          console.warn('⚠️ Erreur annulation notification:', e);
+        }
+      }
+    }
+    
+    // Marquer comme supprimé
+    db.runSync('UPDATE Rappel SET supprime = 1 WHERE idRappel = ?', [rappelId]);
     console.log(`✅ Rappel ${rappelId} supprimé`);
   } catch (error) {
     console.error('❌ Erreur suppression:', error);
@@ -247,9 +387,9 @@ export function verifierRappelsAafficher(): RappelItem[] {
     const heureStr = now.toTimeString().slice(0, 5);
 
     const result = db.getAllSync(`
-      SELECT r.*, l.nomListe
+      SELECT r.*, l.nomListe, r.idListeAchat as achatId
       FROM Rappel r
-      LEFT JOIN ListeAchat l ON r.idListeAchat = l.id
+      LEFT JOIN ListeAchat l ON r.idListeAchat = l.idListe
       WHERE r.supprime = 0 
         AND r.affiche = 0
         AND (
@@ -273,7 +413,7 @@ export function verifierRappelsAafficher(): RappelItem[] {
 export function marquerCommeAffiche(rappelId: number): void {
   try {
     const db = getDb();
-    db.runSync('UPDATE Rappel SET affiche = 1 WHERE id = ?', [rappelId]);
+    db.runSync('UPDATE Rappel SET affiche = 1 WHERE idRappel = ?', [rappelId]);
   } catch (error) {
     console.error('❌ Erreur:', error);
   }
@@ -308,52 +448,73 @@ export function getStats(): { total: number; nonLus: number; aujourdhui: number 
 }
 
 // ============================================================
-// 🔄 FONCTIONS LEGACY (pour compatibilité avec l'ancien code)
+// 🔔 ENVOYER UNE NOTIFICATION IMMÉDIATE
 // ============================================================
 
-export async function registerForPushNotificationsAsync(): Promise<boolean> {
-  const N = getNotificationsModule();
-  if (!N) {
-      console.log('❌ Notifications non disponibles');
-      return false;
-  }
+export async function sendImmediateNotification(
+  title: string,
+  body: string,
+  data?: Record<string, any>
+): Promise<string | null> {
+  const Notifications = getNotificationsModule();
+  if (!Notifications) return null;
 
-  // Skip push notification setup in Expo Go
-  if (isRunningInExpoGo()) {
-    console.log('📱 Mode Expo Go - Rappels locaux actifs');
-    return false;
-  }
-
-  if (Platform.OS === 'android') {
-    await N.setNotificationChannelAsync('default', {
-      name: 'default',
-      importance: N.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#FF231F7C',
+  try {
+    const id = await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        data,
+        sound: 'default',
+      },
+      trigger: null, // Immédiat
     });
+    return id;
+  } catch (error) {
+    console.error('❌ Erreur notification immédiate:', error);
+    return null;
   }
-
-  const { status: existingStatus } = await N.getPermissionsAsync();
-  let finalStatus = existingStatus;
-  
-  if (existingStatus !== 'granted') {
-    const { status } = await N.requestPermissionsAsync();
-    finalStatus = status;
-  }
-  
-  if (finalStatus !== 'granted') {
-    console.log('Permission refusée pour les notifications push!');
-    return false;
-  }
-  
-  return true;
 }
+
+// ============================================================
+// 📋 OBTENIR TOUTES LES NOTIFICATIONS PLANIFIÉES
+// ============================================================
+
+export async function getScheduledNotifications(): Promise<any[]> {
+  const Notifications = getNotificationsModule();
+  if (!Notifications) return [];
+
+  try {
+    return await Notifications.getAllScheduledNotificationsAsync();
+  } catch {
+    return [];
+  }
+}
+
+// ============================================================
+// 🗑️ ANNULER TOUTES LES NOTIFICATIONS
+// ============================================================
+
+export async function cancelAllNotifications(): Promise<void> {
+  const Notifications = getNotificationsModule();
+  if (!Notifications) return;
+
+  try {
+    await Notifications.cancelAllScheduledNotificationsAsync();
+    console.log('✅ Toutes les notifications annulées');
+  } catch (error) {
+    console.error('❌ Erreur annulation:', error);
+  }
+}
+
+// ============================================================
+// 🔄 FONCTIONS LEGACY (compatibilité)
+// ============================================================
 
 export function areNotificationsAvailable(): boolean {
-  return true;
+  return getNotificationsModule() !== undefined;
 }
 
-// Alias pour compatibilité avec l'ancien code
 export const getNotifications = getRappels;
 export const supprimerNotification = supprimerRappel;
 export const getUnreadNotificationCount = getUnreadCount;

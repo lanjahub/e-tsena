@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, 
-  TextInput, Modal, Switch, Dimensions, Animated, Alert, Easing
+  TextInput, Modal, Switch, Dimensions, Animated, Alert
 } from 'react-native';
 import { ThemedStatusBar } from '../../src/components/ThemedStatusBar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,8 +15,9 @@ import { getDb } from '../../src/db/init';
 import { useTheme, THEMES } from '../../src/context/ThemeContext'; 
 import { useSettings } from '../../src/context/SettingsContext'; 
 import * as NotifService from '../../src/services/notificationService';
+import * as VoiceService from '../../src/services/voiceService';
 
-// ✅ IMPORT DES LOGOS DEPUIS LE COMPOSANT
+// ✅ IMPORT DES LOGOS
 import { MiniLogo, HeaderLogo } from '../../src/components/Logo';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -37,8 +38,8 @@ const formatMoney = (value: number) => {
 const TEXTS = {
   ongoing: 'En cours',
   history: 'Historique',
-  list_ongoing_title: 'Listes à faire',
-  list_history_title: 'Courses terminées',
+  list_ongoing_title: 'Listes Récentes',
+  list_history_title: 'Historique',
   mark_done: 'Marquer comme terminé',
   rename: 'Renommer',
   delete: 'Supprimer',
@@ -129,6 +130,10 @@ const BeautifulConfirmModal = ({ visible, title, message, onConfirm, onCancel, c
   const bgColor = isDarkMode ? '#1E293B' : '#fff';
   const textColor = isDarkMode ? '#F1F5F9' : '#1E293B';
   const subColor = isDarkMode ? '#94A3B8' : '#64748B';
+  
+  const iconBg = isDanger 
+    ? (isDarkMode ? '#7F1D1D' : '#FEE2E2') 
+    : activeTheme.secondary;
 
   return (
     <Modal transparent visible={visible} animationType="none" onRequestClose={onCancel}>
@@ -138,7 +143,7 @@ const BeautifulConfirmModal = ({ visible, title, message, onConfirm, onCancel, c
             width: 64, 
             height: 64, 
             borderRadius: 32, 
-            backgroundColor: isDanger ? (isDarkMode ? '#7F1D1D' : '#FEE2E2') : activeTheme.secondary, 
+            backgroundColor: iconBg, 
             justifyContent: 'center', 
             alignItems: 'center', 
             marginBottom: 20 
@@ -162,7 +167,7 @@ const BeautifulConfirmModal = ({ visible, title, message, onConfirm, onCancel, c
 };
 
 interface Achat {
-  id: number;
+  idAchat: number;
   nomListe: string;
   dateAchat: string;
   totalDepense: number;
@@ -171,7 +176,7 @@ interface Achat {
 }
 
 // ============================================
-// 🎴 CARD AVEC MINI LOGO IMPORTÉ
+// 🎴 CARD RÉORGANISÉE - Articles à côté de la date
 // ============================================
 const AchatCard = ({ item, viewMode, activeTheme, currency, onPress, onAction, isDarkMode }: any) => {
   const isDone = item.statut === 1;
@@ -186,7 +191,7 @@ const AchatCard = ({ item, viewMode, activeTheme, currency, onPress, onAction, i
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const onPressIn = () => {
-    Animated.spring(scaleAnim, { toValue: 0.97, friction: 8, useNativeDriver: true }).start();
+    Animated.spring(scaleAnim, { toValue: 0.98, friction: 8, useNativeDriver: true }).start();
   };
 
   const onPressOut = () => {
@@ -194,74 +199,79 @@ const AchatCard = ({ item, viewMode, activeTheme, currency, onPress, onAction, i
   };
 
   if (viewMode === 'grid') {
+    // Largeur ajustée pour 2 colonnes avec gap
+    // Screen (100%) - PaddingHorizontal (20*2=40) - Gap (12) = Espace dispo
+    // / 2 pour chaque carte
+    // On enlève quelques pixels supp de sécurité -> 55
+    const cardWidth = (SCREEN_WIDTH - 55) / 2;
+    
     return (
-      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <Animated.View style={{ transform: [{ scale: scaleAnim }], width: cardWidth, marginBottom: 16 }}>
         <TouchableOpacity
           onPress={onPress}
           onPressIn={onPressIn}
           onPressOut={onPressOut}
           activeOpacity={0.9}
           style={{
-            width: (SCREEN_WIDTH - 52) / 2,
-            height: 175,
             backgroundColor: cardBg,
-            borderRadius: 22,
-            padding: 16,
-            borderWidth: 2,
-            borderColor: activeTheme.primary + '25',
-            shadowColor: activeTheme.primary,
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.15,
-            shadowRadius: 12,
-            elevation: 5,
+            borderRadius: 16,
+            padding: 12,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.05,
+            shadowRadius: 4,
+            elevation: 3,
+            minHeight: 160
           }}
         >
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            {/* ✅ MINI LOGO IMPORTÉ */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
             <View style={{ 
-              width: 44, 
-              height: 44, 
-              borderRadius: 14, 
-              backgroundColor: activeTheme.secondary, 
-              justifyContent: 'center', 
-              alignItems: 'center',
-              borderWidth: 1.5,
-              borderColor: activeTheme.primary + '30',
+               width: 40, height: 40, borderRadius: 12, 
+               backgroundColor: activeTheme.secondary, 
+               justifyContent: 'center', alignItems: 'center',
+               shadowColor: activeTheme.primary,
+               shadowOffset: { width: 0, height: 2 },
+               shadowOpacity: 0.25,
+               shadowRadius: 3.84,
+               elevation: 5,
             }}>
-              <MiniLogo size={26} color={activeTheme.primary} />
-              {isDone && (
-                <View style={{ position: 'absolute', bottom: -4, right: -4, width: 16, height: 16, borderRadius: 8, backgroundColor: activeTheme.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: cardBg }}>
-                  <Ionicons name="checkmark" size={9} color="#fff" />
-                </View>
-              )}
+              <MiniLogo size={24} color={activeTheme.primary} />
             </View>
-            <TouchableOpacity onPress={onAction} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Ionicons name="ellipsis-horizontal" size={20} color={subColor} />
+            <TouchableOpacity onPress={onAction} hitSlop={10}>
+                <Ionicons name="ellipsis-vertical" size={16} color={subColor} />
             </TouchableOpacity>
           </View>
 
-          <View style={{ flex: 1, justifyContent: 'center', marginTop: 8 }}>
-            <Text style={{ fontSize: 15, fontWeight: '700', color: textColor }} numberOfLines={2}>
-              {item.nomListe || 'Sans nom'}
-            </Text>
-            <Text style={{ fontSize: 12, color: subColor, marginTop: 4 }}>{shortDate}</Text>
+          <Text style={{ fontSize: 13, fontWeight: '700', color: textColor, marginBottom: 4 }} numberOfLines={2}>
+            {item.nomListe || 'Sans nom'}
+          </Text>
+
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 4, justifyContent: 'space-between', alignItems: 'center' }}>
+             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                <Ionicons name="calendar-outline" size={12} color={subColor} />
+                <Text style={{ fontSize: 10, color: subColor }}>{shortDate}</Text>
+             </View>
+             
+             {/* Total articles added back */}
+             <View style={{ 
+               flexDirection: 'row', alignItems: 'center', gap: 3, 
+               backgroundColor: activeTheme.secondary, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 
+             }}>
+                <Ionicons name="bag-handle" size={10} color={activeTheme.primary} />
+                <Text style={{ fontSize: 10, fontWeight: '700', color: activeTheme.primary }}>{item.nombreArticles}</Text>
+             </View>
           </View>
 
-          <View style={{ borderTopWidth: 1, borderTopColor: borderColor, paddingTop: 10, marginTop: 8 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={{ fontSize: 11, color: subColor }}>{item.nombreArticles} articles</Text>
-              <Text style={{ fontSize: 16, fontWeight: '800', color: activeTheme.primary }}>
-                {formatMoney(item.totalDepense)} {currency}
-              </Text>
-            </View>
-          </View>
+          <Text style={{ fontSize: 17, fontWeight: '800', color: activeTheme.primary, marginTop: 'auto' }}>
+             {formatMoney(item.totalDepense)} <Text style={{ fontSize: 12 }}>{currency}</Text>
+          </Text>
         </TouchableOpacity>
       </Animated.View>
     );
   }
 
   return (
-    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+    <Animated.View style={{ transform: [{ scale: scaleAnim }], marginBottom: 12 }}>
       <TouchableOpacity
         onPress={onPress}
         onPressIn={onPressIn}
@@ -272,59 +282,52 @@ const AchatCard = ({ item, viewMode, activeTheme, currency, onPress, onAction, i
           alignItems: 'center',
           backgroundColor: cardBg,
           padding: 16,
-          borderRadius: 20,
-          borderWidth: 2,
-          borderColor: activeTheme.primary + '20',
-          shadowColor: activeTheme.primary,
-          shadowOffset: { width: 0, height: 3 },
-          shadowOpacity: 0.12,
-          shadowRadius: 10,
-          elevation: 4,
-          marginBottom: 12,
+          borderRadius: 16,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.05,
+          shadowRadius: 6,
+          elevation: 2,
         }}
       >
-        {/* ✅ MINI LOGO IMPORTÉ */}
         <View style={{ 
-          width: 52, 
-          height: 52, 
-          borderRadius: 16, 
+          width: 48, height: 48, borderRadius: 12, 
           backgroundColor: activeTheme.secondary, 
-          justifyContent: 'center', 
-          alignItems: 'center',
-          borderWidth: 2,
-          borderColor: activeTheme.primary + '25',
+          justifyContent: 'center', alignItems: 'center',
+          marginRight: 14
         }}>
-          <MiniLogo size={30} color={activeTheme.primary} />
+          <MiniLogo size={24} color={activeTheme.primary} />
           {isDone && (
-            <View style={{ position: 'absolute', bottom: -3, right: -3, width: 18, height: 18, borderRadius: 9, backgroundColor: activeTheme.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: cardBg }}>
-              <Ionicons name="checkmark" size={10} color="#fff" />
+            <View style={{ position: 'absolute', bottom: -4, right: -4, backgroundColor: '#10B981', borderRadius: 8, padding: 2, borderWidth: 2, borderColor: cardBg }}>
+              <Ionicons name="checkmark" size={10} color="white" />
             </View>
           )}
         </View>
 
-        <View style={{ flex: 1, paddingHorizontal: 14 }}>
-          <Text style={{ fontSize: 16, fontWeight: '700', color: textColor }} numberOfLines={1}>
-            {item.nomListe || 'Sans nom'}
-          </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 8 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDarkMode ? '#334155' : '#F1F5F9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, gap: 4 }}>
-              <Ionicons name="calendar-outline" size={12} color={subColor} />
-              <Text style={{ fontSize: 11, fontWeight: '600', color: subColor }}>{formattedDate}</Text>
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDarkMode ? '#334155' : '#F1F5F9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, gap: 4 }}>
-              <Ionicons name="cube-outline" size={12} color={subColor} />
-              <Text style={{ fontSize: 11, fontWeight: '600', color: subColor }}>{item.nombreArticles}</Text>
-            </View>
-          </View>
-        </View>
+        <View style={{ flex: 1 }}>
+           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: textColor, flex: 1, marginRight: 8 }} numberOfLines={1}>
+                 {item.nomListe || 'Sans nom'}
+              </Text>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: activeTheme.primary }}>
+                 {formatMoney(item.totalDepense)} {currency}
+              </Text>
+           </View>
 
-        <View style={{ alignItems: 'flex-end', marginRight: 8 }}>
-          <Text style={{ fontSize: 17, fontWeight: '800', color: activeTheme.primary }}>{formatMoney(item.totalDepense)}</Text>
-          <Text style={{ fontSize: 11, fontWeight: '600', color: subColor }}>{currency}</Text>
+           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                 <Ionicons name="calendar-outline" size={12} color={subColor} />
+                 <Text style={{ fontSize: 12, color: subColor }}>{formattedDate}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                 <Ionicons name="bag-handle-outline" size={12} color={subColor} />
+                 <Text style={{ fontSize: 12, color: subColor }}>{item.nombreArticles} arts.</Text>
+              </View>
+           </View>
         </View>
-
-        <TouchableOpacity onPress={onAction} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Ionicons name="ellipsis-horizontal" size={22} color={subColor} />
+        
+        <TouchableOpacity onPress={onAction} style={{ padding: 8, marginLeft: 4 }}>
+           <Ionicons name="ellipsis-vertical" size={18} color={subColor} />
         </TouchableOpacity>
       </TouchableOpacity>
     </Animated.View>
@@ -375,8 +378,8 @@ const HelpModal = ({ visible, onClose, activeTheme, isDarkMode }: any) => {
               { q: TEXTS.faq_q2, a: TEXTS.faq_a2 },
               { q: TEXTS.faq_q3, a: TEXTS.faq_a3 },
               { q: TEXTS.faq_q4, a: TEXTS.faq_a4 },
-            ].map((item, i) => (
-              <View key={`faq-${i}`} style={{ backgroundColor: cardBg, borderRadius: 14, borderWidth: 1, borderColor, padding: 14, marginBottom: 12 }}>
+            ].map((item) => (
+              <View key={item.q} style={{ backgroundColor: cardBg, borderRadius: 14, borderWidth: 1, borderColor, padding: 14, marginBottom: 12 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                   <Ionicons name="help-circle" size={18} color={activeTheme.primary} />
                   <Text style={{ flex: 1, fontSize: 14, fontWeight: '600', color: textColor }}>{item.q}</Text>
@@ -500,11 +503,30 @@ const SettingsModal = ({ visible, onClose, isDarkMode, toggleDarkMode, currentTh
                   const th = THEMES[key];
                   const isActive = currentTheme === key;
                   return (
-                    <TouchableOpacity key={key} onPress={() => setTheme(key)} style={{ width: 70, alignItems: 'center', padding: 10, borderRadius: 12, borderWidth: isActive ? 2 : 1, borderColor: isActive ? th.primary : 'transparent' }}>
-                      <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: th.primary, justifyContent: 'center', alignItems: 'center', marginBottom: 6 }}>
-                        {isActive && <Ionicons name="checkmark" size={16} color="#fff" />}
+                    <TouchableOpacity 
+                      key={key} 
+                      onPress={() => setTheme(key)} 
+                      style={{ 
+                        width: '46%', 
+                        flexDirection: 'row',
+                        alignItems: 'center', 
+                        padding: 10, 
+                        borderRadius: 14, 
+                        borderWidth: isActive ? 2 : 1, 
+                        borderColor: isActive ? th.primary : 'transparent',
+                        backgroundColor: isActive ? th.secondary : (isDarkMode ? '#334155' : '#F8FAFC'),
+                        gap: 10,
+                        elevation: isActive ? 2 : 0
+                      }}
+                    >
+                      <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: th.primary, justifyContent: 'center', alignItems: 'center' }}>
+                         <Text style={{ fontSize: 16 }}>{th.emoji}</Text>
                       </View>
-                      <Text style={{ fontSize: 11, fontWeight: '600', color: isActive ? th.primary : subColor, textAlign: 'center' }}>{th.name}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 14, fontWeight: '700', color: isActive ? th.primary : textColor }}>{th.name}</Text>
+                        <View style={{ width: 12, height: 4, borderRadius: 2, backgroundColor: th.primary, marginTop: 4, opacity: 0.6 }} />
+                      </View>
+                      {isActive && <Ionicons name="checkmark-circle" size={18} color={th.primary} />}
                     </TouchableOpacity>
                   );
                 })}
@@ -542,11 +564,10 @@ const ActionsModal = ({ visible, onClose, selectedAchat, handleRename, handleDel
         <View style={{ backgroundColor: bgColor, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 40 }}>
           <View style={{ width: 40, height: 5, backgroundColor: borderColor, borderRadius: 3, alignSelf: 'center', marginBottom: 20 }} />
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 15, marginBottom: 25, paddingBottom: 20, borderBottomWidth: 1, borderColor }}>
-            {/* ✅ MINI LOGO IMPORTÉ */}
-            <View style={{ width: 52, height: 52, borderRadius: 16, backgroundColor: activeTheme.secondary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: activeTheme.primary + '30' }}>
-              <MiniLogo size={30} color={activeTheme.primary} />
+            <View style={{ width: 54, height: 54, borderRadius: 16, backgroundColor: activeTheme.secondary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: activeTheme.primary + '30' }}>
+              <MiniLogo size={32} color={activeTheme.primary} />
               {isHistory && (
-                <View style={{ position: 'absolute', bottom: -2, right: -2, width: 18, height: 18, borderRadius: 9, backgroundColor: activeTheme.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: bgColor }}>
+                <View style={{ position: 'absolute', bottom: -2, right: -2, width: 18, height: 18, borderRadius: 9, backgroundColor: '#10B981', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: bgColor }}>
                   <Ionicons name="checkmark" size={10} color="#fff" />
                 </View>
               )}
@@ -633,6 +654,7 @@ export default function Home() {
   const [achats, setAchats] = useState<Achat[]>([]);
   const [filteredAchats, setFilteredAchats] = useState<Achat[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [sortMode, setSortMode] = useState<'date' | 'name' | 'amount'>('date');
   const [activeTab, setActiveTab] = useState<'ongoing' | 'history'>('ongoing');
@@ -645,7 +667,56 @@ export default function Home() {
   const [renameModal, setRenameModal] = useState(false);
   const [newListName, setNewListName] = useState('');
   const [unreadCount, setUnreadCount] = useState(0);
+  // Voice state
+  const [isListening, setIsListening] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  // Pulse animation for recording
+  useEffect(() => {
+    if (isListening) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.2, duration: 500, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 500, useNativeDriver: true })
+        ])
+      ).start();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [isListening]);
+
+  // Voice listener
+  useEffect(() => {
+      if (VoiceService.isVoiceAvailable()) {
+          VoiceService.addResultListener((results) => {
+               if (results && results.length > 0) {
+                   setNewListName(results[0]);
+                   setIsListening(false);
+                   VoiceService.stopListening();
+               }
+          });
+          return () => {
+              VoiceService.stopListening();
+          }
+      }
+  }, []);
+
+  const toggleListening = async () => {
+      try {
+          if (isListening) {
+              await VoiceService.stopListening();
+              setIsListening(false);
+          } else {
+              const started = await VoiceService.startListening();
+              if (started) setIsListening(true);
+              else Alert.alert("Erreur", "Impossible de démarrer la reconnaissance vocale");
+          }
+      } catch (e) {
+          console.error(e);
+          setIsListening(false);
+      }
+  };
 
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
@@ -666,8 +737,8 @@ export default function Home() {
     try {
       const db = getDb();
       ensureSchema(db);
-      db.runSync(`DELETE FROM ListeAchat WHERE (nomListe = 'Nouvelle Liste' OR nomListe = '' OR nomListe IS NULL) AND id NOT IN (SELECT DISTINCT idListeAchat FROM Article)`);
-      const result = db.getAllSync(`SELECT a.id, a.nomListe, a.dateAchat, a.statut, COALESCE(SUM(l.prixTotal), 0) as totalDepense, COUNT(l.id) as nombreArticles FROM ListeAchat a LEFT JOIN Article l ON a.id = l.idListeAchat GROUP BY a.id ORDER BY a.dateAchat DESC`);
+      db.runSync(`DELETE FROM ListeAchat WHERE (nomListe = 'Nouvelle Liste' OR nomListe = '' OR nomListe IS NULL) AND idListe NOT IN (SELECT DISTINCT idListeAchat FROM Article)`);
+      const result = db.getAllSync(`SELECT a.idListe as idAchat, a.nomListe, a.dateAchat, a.statut, COALESCE(SUM(l.prixTotal), 0) as totalDepense, COUNT(l.idArticle) as nombreArticles FROM ListeAchat a LEFT JOIN Article l ON a.idListe = l.idListeAchat GROUP BY a.idListe ORDER BY a.dateAchat DESC`);
       if (NotifService.getUnreadNotificationCount) setUnreadCount(NotifService.getUnreadNotificationCount());
       let sorted = [...(result as Achat[])];
       if (sortMode === 'name') sorted.sort((a, b) => (a.nomListe || '').localeCompare(b.nomListe || ''));
@@ -677,6 +748,11 @@ export default function Home() {
       Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
     } catch (e) { console.error(e); }
   }, [sortMode]);
+
+  // Init Notifications
+  useEffect(() => {
+     NotifService.initNotificationService();
+  }, []);
 
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
@@ -691,7 +767,7 @@ export default function Home() {
   const handleCreate = () => {
     try {
       const db = getDb();
-      const defaultTitle = `Ma liste ${format(new Date(), 'dd/MM HH:mm')}`;
+      const defaultTitle = `Nouvelle Liste`;
       const res = db.runSync('INSERT INTO ListeAchat (nomListe, dateAchat, statut) VALUES (?, ?, 0)', [defaultTitle, new Date().toISOString()]);
       router.push({ pathname: `/achat/${res.lastInsertRowId}`, params: { isNew: '1' } });
     } catch (e) { 
@@ -700,8 +776,8 @@ export default function Home() {
     }
   };
 
-  const handleOpenList = (item: Achat) => {
-    router.push({ pathname: `/achat/${item.id}`, params: { readOnly: item.statut === 1 ? '1' : '0' } });
+  const handleOpenList = (item: any) => {
+    router.push({ pathname: `/achat/${item.id || item.idAchat}`, params: { readOnly: item.statut === 1 ? '1' : '0' } });
   };
 
   const toggleStatus = () => {
@@ -709,7 +785,7 @@ export default function Home() {
     Alert.alert(TEXTS.check_prices_title, TEXTS.check_prices_msg, [
       { text: TEXTS.cancel, style: "cancel" },
       { text: TEXTS.confirm, onPress: () => {
-        try { getDb().runSync('UPDATE ListeAchat SET statut = 1 WHERE id = ?', [selectedAchat.id]); setShowActions(false); loadData(); Alert.alert(TEXTS.done, TEXTS.list_archived); } catch (e) { console.error(e); }
+        try { getDb().runSync('UPDATE ListeAchat SET statut = 1 WHERE idListe = ?', [selectedAchat.idAchat]); setShowActions(false); loadData(); Alert.alert(TEXTS.done, TEXTS.list_archived); } catch (e) { console.error(e); }
       }}
     ]);
   };
@@ -723,14 +799,14 @@ export default function Home() {
 
   const confirmRename = () => {
     if (!selectedAchat || !newListName.trim()) return;
-    try { getDb().runSync('UPDATE ListeAchat SET nomListe = ? WHERE id = ?', [newListName.trim(), selectedAchat.id]); setRenameModal(false); setNewListName(''); loadData(); } catch (e) { console.error(e); }
+    try { getDb().runSync('UPDATE ListeAchat SET nomListe = ? WHERE idListe = ?', [newListName.trim(), selectedAchat.idAchat]); setRenameModal(false); setNewListName(''); loadData(); } catch (e) { console.error(e); }
   };
 
   const handleDelete = () => { setShowActions(false); setTimeout(() => setDeleteModal(true), 300); };
 
   const confirmDelete = () => {
     if (!selectedAchat) return;
-    try { getDb().runSync('DELETE FROM Article WHERE idListeAchat = ?', [selectedAchat.id]); getDb().runSync('DELETE FROM ListeAchat WHERE id = ?', [selectedAchat.id]); setDeleteModal(false); loadData(); } catch (e) { console.error(e); }
+    try { getDb().runSync('DELETE FROM Article WHERE idListeAchat = ?', [selectedAchat.idAchat]); getDb().runSync('DELETE FROM ListeAchat WHERE idListe = ?', [selectedAchat.idAchat]); setDeleteModal(false); loadData(); } catch (e) { console.error(e); }
   };
 
   return (
@@ -739,12 +815,12 @@ export default function Home() {
       
       {/* Header avec gradient */}
       <LinearGradient 
-        colors={(activeTheme?.gradient && activeTheme.gradient.length >= 2 ? activeTheme.gradient : ['#7143b5', '#8b5fd4']) as [string, string, ...string[]]} 
+        colors={(activeTheme?.gradient && activeTheme.gradient.length >= 2 ? activeTheme.gradient : ['#7C3AED', '#A855F7']) as [string, string, ...string[]]} 
         style={[s.header, { paddingTop: insets.top + 10 }]}
       >
         <View style={s.headerTop}>
-          {/* ✅ HEADER LOGO IMPORTÉ */}
-          <HeaderLogo size={58} />
+          {/* ✅ HEADER LOGO PROFESSIONNEL */}
+          <HeaderLogo size={52} />
           
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <TouchableOpacity style={s.iconBtn} onPress={() => router.push('/notifications')}>
@@ -759,8 +835,27 @@ export default function Home() {
 
         <View style={s.searchBar}>
           <Ionicons name="search-outline" size={20} color="rgba(255,255,255,0.7)" />
-          <TextInput style={s.searchInput} placeholder={TEXTS.search} placeholderTextColor="rgba(255,255,255,0.6)" value={searchQuery} onChangeText={setSearchQuery} />
-          {searchQuery.length > 0 && <TouchableOpacity onPress={() => setSearchQuery('')}><Ionicons name="close-circle" size={20} color="rgba(255,255,255,0.7)" /></TouchableOpacity>}
+          <TextInput 
+            style={s.searchInput} 
+            placeholder={TEXTS.search} 
+            placeholderTextColor="rgba(255,255,255,0.6)" 
+            value={searchQuery} 
+            onChangeText={setSearchQuery}
+            onFocus={() => setIsSearchFocused(true)}
+            onBlur={() => {
+              if (!searchQuery.trim()) {
+                setIsSearchFocused(false);
+              }
+            }}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => {
+              setSearchQuery('');
+              setIsSearchFocused(false);
+            }}>
+              <Ionicons name="close-circle" size={20} color="rgba(255,255,255,0.7)" />
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={s.tabContainer}>
@@ -819,7 +914,7 @@ export default function Home() {
           {filteredAchats.length > 0 ? (
             <View style={viewMode === 'grid' ? s.grid : s.list}>
               {filteredAchats.map((item) => (
-                <AchatCard key={item.id} item={item} viewMode={viewMode} activeTheme={activeTheme} currency={currency} isDarkMode={isDarkMode} onPress={() => handleOpenList(item)} onAction={() => { setSelectedAchat(item); setShowActions(true); }} />
+                <AchatCard key={item.idAchat} item={item} viewMode={viewMode} activeTheme={activeTheme} currency={currency} isDarkMode={isDarkMode} onPress={() => handleOpenList(item)} onAction={() => { setSelectedAchat(item); setShowActions(true); }} />
               ))}
             </View>
           ) : (
@@ -834,26 +929,48 @@ export default function Home() {
         </Animated.ScrollView>
       </View>
 
-      {/* Navbar */}
-      <View style={[s.navbar, { paddingBottom: insets.bottom > 0 ? insets.bottom : 10, height: 60 + (insets.bottom > 0 ? insets.bottom : 10) }]}>
-        <TouchableOpacity style={s.navItem} onPress={loadData}><Ionicons name="home" size={24} color={activeTheme.primary} /><Text style={[s.navText, { color: activeTheme.primary }]}>{TEXTS.welcome}</Text></TouchableOpacity>
-        <View style={{ top: -25 }}><TouchableOpacity style={[s.fab, { shadowColor: activeTheme.primary }]} onPress={handleCreate} activeOpacity={0.8}><LinearGradient colors={(activeTheme?.gradient && activeTheme.gradient.length >= 2 ? activeTheme.gradient : ['#7143b5', '#8b5fd4']) as [string, string, ...string[]]} style={s.fabGradient}><Ionicons name="add" size={32} color="#fff" /></LinearGradient></TouchableOpacity></View>
-        <TouchableOpacity style={s.navItem} onPress={() => router.push('/rapports')}><Ionicons name="pie-chart-outline" size={24} color={s.textSec.color} /><Text style={[s.navText, { color: s.textSec.color }]}>{TEXTS.reports}</Text></TouchableOpacity>
-      </View>
+      {/* Navbar - Cachée pendant la recherche */}
+      {!isSearchFocused && (
+        <View style={[s.navbar, { paddingBottom: insets.bottom > 0 ? insets.bottom : 10, height: 60 + (insets.bottom > 0 ? insets.bottom : 10) }]}>
+          <TouchableOpacity style={s.navItem} onPress={loadData}><Ionicons name="home" size={24} color={activeTheme.primary} /><Text style={[s.navText, { color: activeTheme.primary }]}>{TEXTS.welcome}</Text></TouchableOpacity>
+          <View style={{ top: -25 }}><TouchableOpacity style={[s.fab, { shadowColor: activeTheme.primary }]} onPress={handleCreate} activeOpacity={0.8}><LinearGradient colors={(activeTheme?.gradient && activeTheme.gradient.length >= 2 ? activeTheme.gradient : ['#7C3AED', '#A855F7']) as [string, string, ...string[]]} style={s.fabGradient}><Ionicons name="add" size={32} color="#fff" /></LinearGradient></TouchableOpacity></View>
+          <TouchableOpacity style={s.navItem} onPress={() => router.push('/rapports')}><Ionicons name="pie-chart-outline" size={24} color={s.textSec.color} /><Text style={[s.navText, { color: s.textSec.color }]}>{TEXTS.reports}</Text></TouchableOpacity>
+        </View>
+      )}
 
       {/* Modals */}
-      <SettingsModal visible={showSettings} onClose={() => setShowSettings(false)} isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} currentTheme={currentTheme} setTheme={setTheme} setShowHelp={setShowHelp} activeTheme={activeTheme} />
-      <HelpModal visible={showHelp} onClose={() => setShowHelp(false)} activeTheme={activeTheme} isDarkMode={isDarkMode} />
-      <SortModal visible={showSort} onClose={() => setShowSort(false)} setSortMode={setSortMode} sortMode={sortMode} activeTheme={activeTheme} isDarkMode={isDarkMode} />
-      <ActionsModal visible={showActions} onClose={() => setShowActions(false)} selectedAchat={selectedAchat} handleRename={handleRename} handleDelete={handleDelete} toggleStatus={toggleStatus} activeTheme={activeTheme} isDarkMode={isDarkMode} />
-      <BeautifulConfirmModal visible={deleteModal} title={TEXTS.delete_title} message={`${TEXTS.delete_msg} "${selectedAchat?.nomListe || 'cette liste'}"`} onConfirm={confirmDelete} onCancel={() => setDeleteModal(false)} confirmText={TEXTS.delete} cancelText={TEXTS.cancel} activeTheme={activeTheme} isDarkMode={isDarkMode} type="danger" />
+      <>
+        <SettingsModal visible={showSettings} onClose={() => setShowSettings(false)} isDarkMode={isDarkMode} toggleDarkMode={toggleDarkMode} currentTheme={currentTheme} setTheme={setTheme} setShowHelp={setShowHelp} activeTheme={activeTheme} />
+        <HelpModal visible={showHelp} onClose={() => setShowHelp(false)} activeTheme={activeTheme} isDarkMode={isDarkMode} />
+        <SortModal visible={showSort} onClose={() => setShowSort(false)} setSortMode={setSortMode} sortMode={sortMode} activeTheme={activeTheme} isDarkMode={isDarkMode} />
+        <ActionsModal visible={showActions} onClose={() => setShowActions(false)} selectedAchat={selectedAchat} handleRename={handleRename} handleDelete={handleDelete} toggleStatus={toggleStatus} activeTheme={activeTheme} isDarkMode={isDarkMode} />
+        <BeautifulConfirmModal visible={deleteModal} title={TEXTS.delete_title} message={`${TEXTS.delete_msg} "${selectedAchat?.nomListe || 'cette liste'}"`} onConfirm={confirmDelete} onCancel={() => setDeleteModal(false)} confirmText={TEXTS.delete} cancelText={TEXTS.cancel} activeTheme={activeTheme} isDarkMode={isDarkMode} type="danger" />
 
-      {/* Rename Modal */}
-      <Modal visible={renameModal} transparent animationType="fade" onRequestClose={() => setRenameModal(false)}>
+        {/* Rename Modal */}
+        <Modal visible={renameModal} transparent animationType="fade" onRequestClose={() => setRenameModal(false)}>
         <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }} onPress={() => setRenameModal(false)} activeOpacity={1}>
           <View style={[s.modalCard, { backgroundColor: isDarkMode ? '#1E293B' : '#FFFFFF' }]}>
             <Text style={[s.modalTitle, { color: isDarkMode ? '#F1F5F9' : '#1E293B' }]}>{TEXTS.rename}</Text>
-            <TextInput style={[s.simpleInput, { backgroundColor: isDarkMode ? '#0F172A' : '#F8FAFC', color: isDarkMode ? '#F1F5F9' : '#1E293B', borderColor: isDarkMode ? '#334155' : '#E2E8F0' }]} value={newListName} onChangeText={setNewListName} autoFocus placeholderTextColor={isDarkMode ? '#64748B' : '#94A3B8'} placeholder="Nom de la liste" />
+            
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <TextInput style={[s.simpleInput, { flex: 1, backgroundColor: isDarkMode ? '#0F172A' : '#F8FAFC', color: isDarkMode ? '#F1F5F9' : '#1E293B', borderColor: isDarkMode ? '#334155' : '#E2E8F0' }]} value={newListName} onChangeText={setNewListName} autoFocus placeholderTextColor={isDarkMode ? '#64748B' : '#94A3B8'} placeholder="Nom de la liste" />
+              <TouchableOpacity
+                onPress={toggleListening}
+                style={{
+                  width: 50, height: 50, borderRadius: 14,
+                  backgroundColor: isListening ? '#FEE2E2' : (isDarkMode ? '#334155' : '#F1F5F9'),
+                  justifyContent: 'center', alignItems: 'center',
+                  marginTop: 0,
+                  borderWidth: 1,
+                  borderColor: isListening ? '#EF4444' : (isDarkMode ? '#475569' : '#E2E8F0')
+                }}
+              >
+                  <Animated.View style={{ transform: [{ scale: isListening ? pulseAnim : 1 }] }}>
+                    <Ionicons name={isListening ? "mic" : "mic-outline"} size={24} color={isListening ? "#EF4444" : activeTheme.primary} />
+                  </Animated.View>
+              </TouchableOpacity>
+            </View>
+
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 15 }}>
               <TouchableOpacity onPress={() => setRenameModal(false)} style={[s.btnCancel, { borderColor: isDarkMode ? '#334155' : '#E2E8F0' }]}><Text style={[s.btnCancelText, { color: isDarkMode ? '#94A3B8' : '#64748B' }]}>{TEXTS.cancel}</Text></TouchableOpacity>
               <TouchableOpacity onPress={confirmRename} style={[s.btnConfirm, { backgroundColor: activeTheme.primary }]}><Text style={s.btnConfirmText}>{TEXTS.save}</Text></TouchableOpacity>
@@ -861,6 +978,7 @@ export default function Home() {
           </View>
         </TouchableOpacity>
       </Modal>
+      </>
     </View>
   );
 }

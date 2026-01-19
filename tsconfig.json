@@ -1,10 +1,21 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "jsx": "react-jsx",
-    "strict": true,
-    "ignoreDeprecations": "6.0",
+    "jsx": "react-native",
+    "strict": false,
+    "lib": [
+      "es2020"
+    ],
+    "target": "es2020",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
     "skipLibCheck": true,
+    "ignoreDeprecations": "6.0",
+    "noEmit": true,
+    "baseUrl": ".",
     "paths": {
       "@db/*": [
         "./src/db/*"
@@ -24,10 +35,14 @@
     }
   },
   "include": [
+    "global.d.ts",
     "**/*.ts",
     "**/*.tsx"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "**/node_modules/**",
+    "node_modules/expo-file-system/**",
+    "node_modules/expo-linear-gradient/**"
   ]
 }

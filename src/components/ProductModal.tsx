@@ -14,7 +14,7 @@ import { COLORS, SECTION_COLORS } from '@constants/colors';
 import formatMoney from '../utils/formatMoney';
 
 interface Produit {
-  id: number;
+  idProduit: number;
   libelle: string;
 }
 
@@ -25,7 +25,7 @@ interface ProductModalProps {
   title: string;
   produits: Produit[];
   selectedProduitId: number | null;
-  onSelectProduit: (id: number) => void;
+  onSelectProduit: (idProduit: number) => void;
   quantite: string;
   onQuantiteChange: (text: string) => void;
   prixUnitaire: string;
@@ -57,17 +57,17 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     <TouchableOpacity
       style={[
         styles.produitItem,
-        selectedProduitId === item.id && styles.produitItemSelected
+        selectedProduitId === item.idProduit && styles.produitItemSelected
       ]}
-      onPress={() => onSelectProduit(item.id)}
+      onPress={() => onSelectProduit(item.idProduit)}
     >
       <Text style={[
         styles.produitText,
-        selectedProduitId === item.id && styles.produitTextSelected
+        selectedProduitId === item.idProduit && styles.produitTextSelected
       ]}>
         {item.libelle}
       </Text>
-      {selectedProduitId === item.id && (
+      {selectedProduitId === item.idProduit && (
         <Ionicons name="checkmark-circle" size={20} color={SECTION_COLORS.home.primary} />
       )}
     </TouchableOpacity>

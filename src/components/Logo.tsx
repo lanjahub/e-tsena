@@ -1,6 +1,13 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, Animated, Easing } from 'react-native';
-import Svg, { Path, Defs, LinearGradient, Stop, Circle, G, Text as SvgText, Mask, Rect } from 'react-native-svg';
+import { View, Text, Animated, Easing, StyleSheet } from 'react-native';
+import Svg, {
+  Path,
+  Defs,
+  LinearGradient,
+  Stop,
+  Circle,
+  G,
+} from 'react-native-svg';
 
 interface LogoProps {
   size?: number;
@@ -10,338 +17,311 @@ interface LogoProps {
   showBackground?: boolean;
 }
 
-export const Logo = ({ 
-  size = 44, 
-  colors = ['#7C3AED', '#A855F7'], 
+export const Logo = ({
+  size = 60,
+  colors = ['#7143b5', '#2D9596'],
   animated = false,
   variant = 'full',
-  showBackground = false
+  showBackground = false,
 }: LogoProps) => {
-  const c1 = colors[0] || '#7C3AED';
-  const c2 = colors[1] || '#A855F7';
+  const primary = colors[0] || '#7143b5';
+  const secondary = colors[1] || '#2D9596';
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
-  const bounceAnim = useRef(new Animated.Value(0)).current;
+  const glowAnim = useRef(new Animated.Value(0.6)).current;
 
   useEffect(() => {
     if (animated) {
       Animated.loop(
         Animated.sequence([
           Animated.timing(scaleAnim, {
-            toValue: 1.05,
-            duration: 2000,
+            toValue: 1.08,
+            duration: 3000,
             easing: Easing.inOut(Easing.ease),
             useNativeDriver: true,
           }),
           Animated.timing(scaleAnim, {
             toValue: 1,
-            duration: 2000,
+            duration: 3000,
             easing: Easing.inOut(Easing.ease),
             useNativeDriver: true,
           }),
-        ])
+        ]),
       ).start();
 
       Animated.loop(
-        Animated.sequence([
-          Animated.timing(bounceAnim, {
-            toValue: -3,
-            duration: 1500,
-            easing: Easing.inOut(Easing.sin),
-            useNativeDriver: true,
-          }),
-          Animated.timing(bounceAnim, {
-            toValue: 0,
-            duration: 1500,
-            easing: Easing.inOut(Easing.sin),
-            useNativeDriver: true,
-          }),
-        ])
+        Animated.timing(glowAnim, {
+          toValue: 1,
+          duration: 2500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: false,
+        }),
       ).start();
     }
-  }, [animated]);
+  }, [animated, glowAnim, scaleAnim]);
 
   const AnimatedView = Animated.createAnimatedComponent(View);
 
-  // Variante ICON - Logo moderne professionnel
+  // ========================================
+  // 🎯 LOGO ICON - Panier professionnel premium
+  // ========================================
   if (variant === 'icon') {
     return (
-      <AnimatedView 
-        style={{ 
-          width: size, 
-          height: size, 
-          transform: [{ scale: scaleAnim }, { translateY: bounceAnim }] 
+      <AnimatedView
+        style={{
+          width: size,
+          height: size,
+          transform: [{ scale: scaleAnim }],
+          opacity: glowAnim.interpolate({
+            inputRange: [0.6, 1],
+            outputRange: [0.8, 1],
+          }),
         }}
       >
-        <Svg width="100%" height="100%" viewBox="0 0 80 80" fill="none">
+        <Svg width="100%" height="100%" viewBox="0 0 100 100" fill="none">
           <Defs>
-            <LinearGradient id="circleGrad" x1="0" y1="0" x2="1" y2="1">
-              <Stop offset="0" stopColor={c1} />
-              <Stop offset="1" stopColor={c2} />
-            </LinearGradient>
-            <LinearGradient id="cartGrad" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor="#FFFFFF" stopOpacity="1" />
-              <Stop offset="1" stopColor="#FFFFFF" stopOpacity="0.9" />
-            </LinearGradient>
-          </Defs>
-          
-          {/* Cercle principal avec gradient */}
-          <Circle cx="40" cy="40" r="38" fill="url(#circleGrad)" />
-          <Circle cx="40" cy="40" r="38" fill="none" stroke="#FFFFFF" strokeWidth="2" opacity="0.3" />
-          
-          {/* Panier professionnel moderne */}
-          <G transform="translate(20, 18)">
-            {/* Corps du panier */}
-            <Path 
-              d="M6 16 L34 16 L31 38 Q30.5 40 28 40 L12 40 Q9.5 40 9 38 Z" 
-              fill="url(#cartGrad)"
-              stroke="url(#cartGrad)"
-              strokeWidth="0.5"
-            />
-            
-            {/* Poign\u00e9e du panier */}
-            <Path 
-              d="M10 16 Q10 8 20 8 Q30 8 30 16" 
-              fill="none" 
-              stroke="url(#cartGrad)" 
-              strokeWidth="2.5" 
-              strokeLinecap="round"
-            />
-            
-            {/* D\u00e9tails du panier - lignes verticales */}
-            <Path d="M14 18 L13 36" stroke="url(#cartGrad)" strokeWidth="1" opacity="0.4" />
-            <Path d="M20 18 L19 37" stroke="url(#cartGrad)" strokeWidth="1" opacity="0.4" />
-            <Path d="M26 18 L25 36" stroke="url(#cartGrad)" strokeWidth="1" opacity="0.4" />
-          </G>
-          
-          {/* Texte "e-tsena" moderne */}
-          <G transform="translate(40, 56)">
-            <SvgText
-              x="0"
-              y="0"
-              fontSize="10"
-              fontWeight="700"
-              fill="#FFFFFF"
-              textAnchor="middle"
-              fontFamily="system-ui, -apple-system"
+            <LinearGradient
+              id="logoGradIcon"
+              x1="0%"
+              y1="0%"
+              x2="100%"
+              y2="100%"
             >
-              e-tsena
-            </SvgText>
-          </G>
-          
-          {/* Point d'accent sur le "e" */}
-          <Circle cx="27" cy="53" r="1.5" fill="#FFFFFF" opacity="0.9" />
-        </Svg>
-      </AnimatedView>
-    );
-  }
-
-  // Variante COMPACT - Logo moderne avec cercle
-  if (variant === 'compact') {
-    return (
-      <AnimatedView 
-        style={{ 
-          width: size, 
-          height: size, 
-          transform: [{ scale: scaleAnim }, { translateY: bounceAnim }] 
-        }}
-      >
-        <Svg width="100%" height="100%" viewBox="0 0 80 80" fill="none">
-          <Defs>
-            <LinearGradient id="circleGradCompact" x1="0" y1="0" x2="1" y2="1">
-              <Stop offset="0" stopColor={c1} />
-              <Stop offset="1" stopColor={c2} />
+              <Stop offset="0%" stopColor={primary} />
+              <Stop offset="50%" stopColor={secondary} />
+              <Stop offset="100%" stopColor={primary} />
             </LinearGradient>
-            <LinearGradient id="cartGradCompact" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor="#FFFFFF" stopOpacity="1" />
-              <Stop offset="1" stopColor="#FFFFFF" stopOpacity="0.9" />
+            <LinearGradient
+              id="shineGrad"
+              x1="0%"
+              y1="0%"
+              x2="100%"
+              y2="0%"
+            >
+              <Stop offset="0%" stopColor="#FFFFFF" stopOpacity="0" />
+              <Stop offset="50%" stopColor="#FFFFFF" stopOpacity="0.8" />
+              <Stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
             </LinearGradient>
           </Defs>
-          
+
+          {/* Cercle de fond élégant */}
           {showBackground && (
-            <>
-              <Circle cx="40" cy="40" r="37" fill={c1} fillOpacity="0.1" />
-              <Circle cx="40" cy="40" r="37" fill="none" stroke={c1} strokeWidth="1" opacity="0.2" />
-            </>
+            <Circle cx="50" cy="50" r="46" fill="url(#logoGradIcon)" opacity="0.1" />
           )}
-          
-          {/* Cercle principal */}
-          <Circle cx="40" cy="40" r="34" fill="url(#circleGradCompact)" />
-          <Circle cx="40" cy="40" r="34" fill="none" stroke="#FFFFFF" strokeWidth="2" opacity="0.3" />
-          
-          {/* Panier */}
-          <G transform="translate(20, 16)">
-            <Path 
-              d="M6 16 L34 16 L31 38 Q30.5 40 28 40 L12 40 Q9.5 40 9 38 Z" 
-              fill="url(#cartGradCompact)"
-            />
-            <Path 
-              d="M10 16 Q10 8 20 8 Q30 8 30 16" 
-              fill="none" 
-              stroke="url(#cartGradCompact)" 
-              strokeWidth="2.5" 
-              strokeLinecap="round"
-            />
-            <Path d="M14 18 L13 36" stroke="url(#cartGradCompact)" strokeWidth="1" opacity="0.4" />
-            <Path d="M20 18 L19 37" stroke="url(#cartGradCompact)" strokeWidth="1" opacity="0.4" />
-            <Path d="M26 18 L25 36" stroke="url(#cartGradCompact)" strokeWidth="1" opacity="0.4" />
-          </G>
-          
-          {/* Texte */}
-          <G transform="translate(40, 56)">
-            <SvgText
-              x="0"
-              y="0"
-              fontSize="9"
-              fontWeight="700"
-              fill="#FFFFFF"
-              textAnchor="middle"
-            >
-              e-tsena
-            </SvgText>
-          </G>
-          
-          <Circle cx="27" cy="53" r="1.5" fill="#FFFFFF" opacity="0.9" />
-        </Svg>
-      </AnimatedView>
-    );
-  }
 
-  // Variante FULL - Logo grand format professionnel
-  return (
-    <AnimatedView 
-      style={{ 
-        width: size, 
-        height: size, 
-        transform: [{ scale: scaleAnim }, { translateY: bounceAnim }] 
-      }}
-    >
-      <Svg width="100%" height="100%" viewBox="0 0 100 100" fill="none">
-        <Defs>
-          <LinearGradient id="circleGradFull" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor={c1} />
-            <Stop offset="1" stopColor={c2} />
-          </LinearGradient>
-          <LinearGradient id="cartGradFull" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor="#FFFFFF" stopOpacity="1" />
-            <Stop offset="1" stopColor="#FFFFFF" stopOpacity="0.9" />
-          </LinearGradient>
-          <LinearGradient id="bgGradFull" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor={c1} stopOpacity="0.12" />
-            <Stop offset="1" stopColor={c2} stopOpacity="0.08" />
-          </LinearGradient>
-        </Defs>
-        
-        {showBackground && (
-          <>
-            <Circle cx="50" cy="50" r="48" fill="url(#bgGradFull)" />
-            <Circle cx="50" cy="50" r="46" fill="none" stroke={c1} strokeWidth="1.5" opacity="0.25" />
-          </>
-        )}
-        
-        {/* Cercle principal avec ombre */}
-        <Circle cx="50" cy="52" r="44" fill="#000000" opacity="0.08" />
-        <Circle cx="50" cy="50" r="44" fill="url(#circleGradFull)" />
-        <Circle cx="50" cy="50" r="44" fill="none" stroke="#FFFFFF" strokeWidth="2.5" opacity="0.3" />
-        
-        {/* Panier professionnel */}
-        <G transform="translate(25, 20)">
-          <Path 
-            d="M8 20 L42 20 L38 48 Q37 51 33 51 L17 51 Q13 51 12 48 Z" 
-            fill="url(#cartGradFull)"
-            stroke="url(#cartGradFull)"
-            strokeWidth="0.5"
-          />
-          
-          <Path 
-            d="M12 20 Q12 10 25 10 Q38 10 38 20" 
-            fill="none" 
-            stroke="url(#cartGradFull)" 
-            strokeWidth="3" 
+          {/* Anse du panier - design moderne */}
+          <Path
+            d="M 30 42 Q 30 15 50 15 Q 70 15 70 42"
+            fill="none"
+            stroke="url(#logoGradIcon)"
+            strokeWidth="5"
             strokeLinecap="round"
+            strokeLinejoin="round"
           />
-          
-          {/* D\u00e9tails verticaux */}
-          <Path d="M17 22 L16 45" stroke="url(#cartGradFull)" strokeWidth="1.5" opacity="0.4" />
-          <Path d="M25 22 L24 47" stroke="url(#cartGradFull)" strokeWidth="1.5" opacity="0.4" />
-          <Path d="M33 22 L32 45" stroke="url(#cartGradFull)" strokeWidth="1.5" opacity="0.4" />
-          
-          {/* Reflet */}
-          <Path 
-            d="M10 22 L40 22 Q30 18 20 22 Z" 
-            fill="#FFFFFF" 
+
+          {/* Corps du panier - forme premium */}
+          <Path
+            d="M 22 42 L 78 42 L 75 82 Q 74 90 66 90 L 34 90 Q 26 90 25 82 Z"
+            fill="url(#logoGradIcon)"
+          />
+
+          {/* Effet 3D - ombre interne */}
+          <Path
+            d="M 25 45 L 75 45 Q 74 48 50 46 Q 26 48 25 45"
+            fill="#000000"
             opacity="0.15"
           />
-        </G>
-        
-        {/* Texte "e-tsena" professionnel */}
-        <G transform="translate(50, 72)">
-          <SvgText
-            x="0"
-            y="0"
-            fontSize="13"
-            fontWeight="800"
-            fill="#FFFFFF"
-            textAnchor="middle"
-            fontFamily="system-ui, -apple-system"
-            letterSpacing="0.5"
+
+          {/* Reflet brillant supérieur */}
+          <Path
+            d="M 28 48 L 72 48 L 71 52 L 29 52 Z"
+            fill="url(#shineGrad)"
+            opacity="0.5"
+          />
+
+          {/* Motif moderne - lignes verticales */}
+          <Path
+            d="M 35 58 L 33 78"
+            stroke="#FFFFFF"
+            strokeWidth="2"
+            opacity="0.3"
+            strokeLinecap="round"
+          />
+          <Path
+            d="M 50 58 L 50 80"
+            stroke="#FFFFFF"
+            strokeWidth="2.5"
+            opacity="0.4"
+            strokeLinecap="round"
+          />
+          <Path
+            d="M 65 58 L 67 78"
+            stroke="#FFFFFF"
+            strokeWidth="2"
+            opacity="0.3"
+            strokeLinecap="round"
+          />
+
+          {/* Point lumineux - effet premium */}
+          <Circle cx="58" cy="25" r="3" fill="#FFFFFF" opacity="0.6" />
+          <Circle cx="58" cy="25" r="1.5" fill="#FFFFFF" opacity="0.9" />
+        </Svg>
+      </AnimatedView>
+    );
+  }
+
+  // ========================================
+  // LOGO COMPLET (full / compact)
+  // ========================================
+  return (
+    <AnimatedView
+      style={{
+        width: size,
+        height: size,
+        transform: [{ scale: scaleAnim }],
+        opacity: glowAnim.interpolate({
+          inputRange: [0.6, 1],
+          outputRange: [0.8, 1],
+        }),
+      }}
+    >
+      <Svg width="100%" height="100%" viewBox="0 0 120 120" fill="none">
+        <Defs>
+          <LinearGradient
+            id="logoGradFull"
+            x1="0%"
+            y1="0%"
+            x2="120%"
+            y2="100%"
           >
-            e-tsena
-          </SvgText>
-        </G>
-        
-        {/* Point d'accent */}
-        <Circle cx="33" cy="68" r="2" fill="#FFFFFF" opacity="0.95" />
-        
-        {/* Lueur subtile */}
-        <Circle cx="50" cy="50" r="42" fill="none" stroke="#FFFFFF" strokeWidth="1" opacity="0.15" />
+            <Stop offset="0%" stopColor={primary} />
+            <Stop offset="50%" stopColor={secondary} />
+            <Stop offset="100%" stopColor={primary} />
+          </LinearGradient>
+
+          {/* Filtre ombre douce (web / svg) */}
+          <filter id="dropShadow">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="3" />
+          </filter>
+        </Defs>
+
+        {/* Anse courbe premium */}
+        <Path
+          d="M 32 58 Q 32 18 60 18 Q 88 18 88 58"
+          fill="none"
+          stroke="url(#logoGradFull)"
+          strokeWidth="5.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          filter="url(#dropShadow)"
+        />
+
+        {/* Panier principal - formes arrondies */}
+        <Path
+          d="M 20 58 L 100 58 L 92 110 Q 90 116 82 116 L 38 116 Q 30 116 28 110 Z"
+          fill="url(#logoGradFull)"
+          filter="url(#dropShadow)"
+        />
+
+        {/* Reflet brillant premium */}
+        <Path
+          d="M 28 62 L 92 62 Q 90 66 60 56 Q 30 66 28 62"
+          fill="#FFFFFF"
+          opacity="0.45"
+        />
+
+        {/* Reflet dégradé sur côtés */}
+        <Path
+          d="M 22 65 L 25 110 Q 28 112 32 112 L 32 65"
+          fill="#FFFFFF"
+          opacity="0.12"
+        />
+        <Path
+          d="M 98 65 L 95 110 Q 92 112 88 112 L 98 65"
+          fill="#FFFFFF"
+          opacity="0.12"
+        />
+
+        {/* Ligne séparation interne */}
+        <Path
+          d="M 28 80 Q 60 77 92 80"
+          fill="none"
+          stroke="#FFFFFF"
+          strokeWidth="2"
+          opacity="0.2"
+          strokeLinecap="round"
+        />
+
+        {/* Petite décoration en bas */}
+        <Circle cx="35" cy="112" r="2.5" fill="#FFFFFF" opacity="0.35" />
+        <Circle cx="60" cy="115" r="2" fill="#FFFFFF" opacity="0.3" />
+        <Circle cx="85" cy="112" r="2.5" fill="#FFFFFF" opacity="0.35" />
       </Svg>
     </AnimatedView>
   );
 };
 
 // ============================================
-// 🛒 MINI LOGO POUR LES CARDS
+// 🛒 MINI LOGO - Panier avec "e" élégant
 // ============================================
-export const MiniLogo = ({ size = 24, color = '#7C3AED' }: { size?: number; color?: string }) => {
+export const MiniLogo = ({
+  size = 24,
+  color = '#7C3AED',
+}: {
+  size?: number;
+  color?: string;
+}) => {
   return (
-    <Svg width={size} height={size} viewBox="0 0 40 40">
+    <Svg width={size} height={size} viewBox="0 0 44 44">
       <Defs>
-        <Mask id={`eMaskMini-${size}-${color.replace('#', '')}`}>
-          <Rect x="0" y="0" width="40" height="40" fill="white" />
-          <G transform="translate(11, 16)">
-            <Path 
-              d="M8 5 Q8 1 12 1 Q16 1 16 5 Q16 8 13 8 L5 8"
-              fill="none"
-              stroke="black"
-              strokeWidth="3.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <Path 
-              d="M5 8 Q4 13 9 14 Q13 15 16 11"
-              fill="none"
-              stroke="black"
-              strokeWidth="3.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </G>
-        </Mask>
+        <LinearGradient
+          id={`miniGrad-${color.replace('#', '')}`}
+          x1="0"
+          y1="0"
+          x2="1"
+          y2="1"
+        >
+          <Stop offset="0" stopColor={color} />
+          <Stop offset="1" stopColor={color} stopOpacity="0.85" />
+        </LinearGradient>
       </Defs>
-      
-      <G mask={`url(#eMaskMini-${size}-${color.replace('#', '')})`}>
-        <Path 
-          d="M6 12 L34 12 L31 34 Q30 38 26 38 L14 38 Q10 38 9 34 Z" 
-          fill={color}
-        />
-      </G>
-      
-      <Path 
-        d="M11 12 Q11 3 20 3 Q29 3 29 12" 
-        fill="none" 
-        stroke={color} 
-        strokeWidth="2.5" 
+
+      {/* Anse du panier */}
+      <Path
+        d="M13 14 Q13 4 22 4 Q31 4 31 14"
+        fill="none"
+        stroke={color}
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
+
+      {/* Corps du panier */}
+      <Path
+        d="M7 14 L37 14 L34 38 Q33 42 28 42 L16 42 Q11 42 10 38 Z"
+        fill={color}
+      />
+
+      {/* Reflet */}
+      <Path
+        d="M9 16 L35 16 L34 20 Q22 14 10 20 Z"
+        fill="#fff"
+        opacity="0.35"
+      />
+
+      {/* Papier Plane Design (Replacing the 'e') pour matcher l'image */}
+      <Path
+        d="M14 34 L28 26 L18 24 L20 30 Z"
+        fill="#FFFFFF" 
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      {/* Trailing line of plane */}
+      <Path
+        d="M10 36 Q13 34 15 34"
+        fill="none"
+        stroke="#FFFFFF"
+        strokeWidth="1.2"
         strokeLinecap="round"
       />
     </Svg>
@@ -349,117 +329,48 @@ export const MiniLogo = ({ size = 24, color = '#7C3AED' }: { size?: number; colo
 };
 
 // ============================================
-// 🛒 HEADER LOGO BLANC POUR FOND COLORÉ
+// 🏆 LOGO HEADER E-tsena (Style Photo Ref)
+// Panier blanc plein + Texte E-tsena + Slogan
 // ============================================
-export const HeaderLogo = ({ size = 58 }: { size?: number }) => {
+export const HeaderLogo = ({ size = 52 }: { size?: number }) => {
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-      <View style={{ 
-        width: size, 
-        height: size, 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        marginRight: 6,
-      }}>
-        <Svg width={size} height={size} viewBox="0 0 70 70">
-          <Defs>
-            <Mask id="eMaskHeader">
-              <Rect x="0" y="0" width="70" height="70" fill="white" />
-              <G transform="translate(22, 28)">
-                <Path 
-                  d="M13 8 Q13 2 20 2 Q27 2 27 8 Q27 12 22 12 L8 12"
-                  fill="none"
-                  stroke="black"
-                  strokeWidth="5.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <Path 
-                  d="M8 12 Q6 20 15 22 Q22 23 27 18"
-                  fill="none"
-                  stroke="black"
-                  strokeWidth="5.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </G>
-            </Mask>
-          </Defs>
-          
-          <G transform="translate(3, 3)" opacity="0.15">
-            <Path 
-              d="M12 22 L58 22 L53 58 Q52 63 46 63 L24 63 Q18 63 17 58 Z" 
-              fill="#000"
-            />
-            <Path 
-              d="M19 22 Q19 6 35 6 Q51 6 51 22" 
-              fill="none" 
-              stroke="#000" 
-              strokeWidth="4"
-            />
-          </G>
-          
-          <G mask="url(#eMaskHeader)">
-            <Path 
-              d="M10 20 L60 20 L55 58 Q54 64 47 64 L23 64 Q16 64 15 58 Z" 
-              fill="#FFFFFF"
-            />
-          </G>
-          
-          <Path 
-            d="M18 20 Q18 4 35 4 Q52 4 52 20" 
-            fill="none" 
-            stroke="#FFFFFF" 
-            strokeWidth="4" 
-            strokeLinecap="round"
-          />
-          
-          <Path 
-            d="M10 20 L60 20 L55 58 Q54 64 47 64 L23 64 Q16 64 15 58 Z" 
-            fill="none"
-            stroke="rgba(255,255,255,0.4)"
-            strokeWidth="1.5"
-            strokeLinejoin="round"
-          />
-          
-          <Circle cx="25" cy="42" r="4" fill="rgba(255,255,255,0.2)" />
-          <Circle cx="45" cy="42" r="4" fill="rgba(255,255,255,0.2)" />
-          <Circle cx="35" cy="52" r="3.5" fill="rgba(255,255,255,0.15)" />
-        </Svg>
+    <View style={headerStyles.container}>
+      {/* Icône panier blanc rempli (simple) */}
+      <View style={{ marginRight: 12 }}>
+         <Svg width="36" height="36" viewBox="0 0 24 24" fill="none">
+             <Path 
+               d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" 
+               stroke="#FFFFFF" 
+               strokeWidth="2" 
+               strokeLinecap="round" 
+               strokeLinejoin="round" 
+               fill="#FFFFFF"
+               fillOpacity="0.2"
+             />
+             <Circle cx="9" cy="21" r="1" fill="#FFFFFF" />
+             <Circle cx="20" cy="21" r="1" fill="#FFFFFF" />
+         </Svg>
       </View>
-      
-      <View style={{ marginLeft: 2 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Text style={{ 
-            fontSize: size * 0.48, 
-            fontWeight: '300', 
-            color: '#FFFFFF',
-            opacity: 0.95,
-            marginRight: 4,
-          }}>
-            -
-          </Text>
-          <Text style={{ 
-            fontSize: size * 0.46, 
-            fontWeight: '800', 
-            color: '#FFFFFF',
-            letterSpacing: 1,
-            textShadowColor: 'rgba(0,0,0,0.25)',
-            textShadowOffset: { width: 0, height: 2 },
-            textShadowRadius: 4,
-          }}>
-            tsena
-          </Text>
-        </View>
-        <View style={{
-          height: 2.5,
-          backgroundColor: 'rgba(255,255,255,0.4)',
-          borderRadius: 2,
-          width: '90%',
-          alignSelf: 'flex-end',
-          marginTop: 3,
-        }} />
+
+      {/* Texte E-tsena */}
+      <View>
+        <Text style={headerStyles.brandNameEtsena}>
+          E-tsena
+        </Text>
       </View>
     </View>
   );
 };
+
+const headerStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  brandNameEtsena: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+});

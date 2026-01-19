@@ -2,21 +2,71 @@
   "expo": {
     "name": "E-tsena",
     "slug": "e-tsena",
+    "version": "1.0.4",
     "scheme": "etsena",
     "orientation": "portrait",
-    "newArchEnabled": true,
     "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFFFF"
+    },
+    "icon": "./assets/icon.png",
     "androidStatusBar": {
       "barStyle": "light-content",
-      "backgroundColor": "#1E293B",
+      "backgroundColor": "#7C3AED",
       "translucent": false
+    },
+    "android": {
+      "package": "com.etsena.app",
+      "versionCode": 5,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE",
+        "android.permission.SCHEDULE_EXACT_ALARM"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#7C3AED"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.etsena.app",
+      "buildNumber": "1.0.0",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Cette application nécessite l'accès au microphone pour la reconnaissance vocale.",
+        "NSSpeechRecognitionUsageDescription": "Cette application utilise la reconnaissance vocale pour saisir les données.",
+        "UIBackgroundModes": ["audio", "remote-notification"]
+      }
     },
     "plugins": [
       "expo-router",
       "expo-asset",
       "expo-font",
       "expo-sqlite",
-      "@react-native-voice/voice"
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#7C3AED",
+          "sounds": [],
+          "androidMode": "default",
+          "androidCollapsedTitle": "E-tsena"
+        }
+      ],
+      [
+        "@react-native-voice/voice",
+        {
+          "microphonePermission": "Cette application nécessite l'accès au microphone pour la reconnaissance vocale.",
+          "speechRecognitionPermission": "Cette application utilise la reconnaissance vocale."
+        }
+      ],
+      "./plugins/withAndroidXFix.js"
     ],
     "extra": {
       "router": {

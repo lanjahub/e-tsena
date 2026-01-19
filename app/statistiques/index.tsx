@@ -34,7 +34,7 @@ interface ChartData {
 }
 
 interface ComparativeData {
-  id: string;
+  idPeriode: string;
   period: string;
   fullLabel: string;
   montant: number;
@@ -54,7 +54,7 @@ interface ProductItem {
   montant: number;
 }
 
-type ViewMode = 'repartition' | 'weekly' | 'monthly' | 'yearly';
+type ViewMode = 'repartition' | 'weekly' | 'monthly' | 'monthFull' | 'yearly';
 
 const COLOR_PALETTE = [
   '#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6',
@@ -75,7 +75,7 @@ interface CustomPieChartProps {
 
 const CustomPieChart: React.FC<CustomPieChartProps> = ({ 
   data, size, innerRadius = 0, total, isDarkMode, currency
-}) => {
+}: CustomPieChartProps) => {
   const radius = size / 2 - 10;
   const center = size / 2;
   
@@ -85,7 +85,7 @@ const CustomPieChart: React.FC<CustomPieChartProps> = ({
     let currentAngle = -90;
     const result: Array<{path: string; color: string; name: string; value: number; percent: number; labelX: number; labelY: number;}> = [];
 
-    data.forEach((item) => {
+    data.forEach((item: ChartData) => {
       if (item.population <= 0) return;
       const percent = (item.population / total) * 100;
       const angle = (item.population / total) * 360;
@@ -150,7 +150,7 @@ const CustomPieChart: React.FC<CustomPieChartProps> = ({
     <View style={{ alignItems: 'center' }}>
       <Svg width={size} height={size}>
         <G>
-          {slices.map((slice, index) => {
+          {slices.map((slice: any, index: number) => {
             // 🎯 SOLUTION 3 : Seuils optimisés
             const isBigSlice = slice.percent >= 8;    // Portions >= 8% = texte normal
             const isMediumSlice = slice.percent >= 3; // Portions 3-8% = texte réduit
@@ -219,7 +219,7 @@ const CustomPieChart: React.FC<CustomPieChartProps> = ({
           Légende détaillée
         </Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
-          {slices.map((slice, index) => (
+          {slices.map((slice: any, index: number) => (
             <View key={`legend-${slice.name}-${index}`} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isDarkMode ? '#0F172A' : '#F8FAFC', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: slice.color + '40' }}>
               <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: slice.color, marginRight: 6 }} />
               <Text style={{ fontSize: 11, color: isDarkMode ? '#E5E7EB' : '#374151', fontWeight: '500' }}>{slice.name}</Text>
@@ -255,6 +255,7 @@ export default function StatsScreen() {
   const [weeklyData, setWeeklyData] = useState<ComparativeData[]>([]);
   const [monthlyData, setMonthlyData] = useState<ComparativeData[]>([]);
   const [yearlyData, setYearlyData] = useState<ComparativeData[]>([]);
+  const [monthFullData, setMonthFullData] = useState<ComparativeData[]>([]);
 
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<ComparativeData | null>(null);
@@ -271,36 +272,37 @@ export default function StatsScreen() {
   const weeklyLineData = useMemo(() => {
     if (!weeklyData.length) return null;
     const sorted = [...weeklyData].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-    let values: number[] = sorted.map(w => w.montant || 0);
+    let values: number[] = sorted.map((w: ComparativeData) => w.montant || 0);
     if (values.every(v => v === 0)) {
       values = [0.01, ...values.slice(1)];
     }
-    return { labels: sorted.map(w => format(new Date(w.startDate), 'dd/MM')), values };
+    return { labels: sorted.map((w: ComparativeData) => format(new Date(w.startDate), 'dd/MM')), values };
   }, [weeklyData]);
 
   const monthlyLineData = useMemo(() => {
     if (!monthlyData.length) return null;
     const sorted = [...monthlyData].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-    let values: number[] = sorted.map(m => m.montant || 0);
+    let values: number[] = sorted.map((m: ComparativeData) => m.montant || 0);
     if (values.every(v => v === 0)) {
       values = [0.01, ...values.slice(1)];
     }
-    return { labels: sorted.map(m => format(new Date(m.startDate), 'MMM', { locale })), values };
+    return { labels: sorted.map((m: ComparativeData) => format(new Date(m.startDate), 'MMM', { locale })), values };
   }, [monthlyData, locale]);
 
   const yearlyLineData = useMemo(() => {
     if (!yearlyData.length) return null;
     const sorted = [...yearlyData].sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-    let values: number[] = sorted.map(y => y.montant || 0);
+    let values: number[] = sorted.map((y: ComparativeData) => y.montant || 0);
     if (values.every(v => v === 0)) {
       values = [0.01, ...values.slice(1)];
     }
-    return { labels: sorted.map(y => format(new Date(y.startDate), 'yyyy')), values };
+    return { labels: sorted.map((y: ComparativeData) => format(new Date(y.startDate), 'yyyy')), values };
   }, [yearlyData, locale]);
 
-  const maxWeeklyAmount = useMemo(() => Math.max(...weeklyData.map(i => i.montant), 1), [weeklyData]);
-  const maxMonthlyAmount = useMemo(() => Math.max(...monthlyData.map(i => i.montant), 1), [monthlyData]);
-  const maxYearlyAmount = useMemo(() => Math.max(...yearlyData.map(i => i.montant), 1), [yearlyData]);
+  const maxWeeklyAmount = useMemo(() => Math.max(...weeklyData.map((i: ComparativeData) => i.montant), 1), [weeklyData]);
+  const maxMonthlyAmount = useMemo(() => Math.max(...monthlyData.map((i: ComparativeData) => i.montant), 1), [monthlyData]);
+  const maxYearlyAmount = useMemo(() => Math.max(...yearlyData.map((i: ComparativeData) => i.montant), 1), [yearlyData]);
+  const maxMonthFullAmount = useMemo(() => Math.max(...monthFullData.map((i: ComparativeData) => i.montant), 1), [monthFullData]);
 
   useFocusEffect(useCallback(() => { loadAllData(); }, [language]));
 
@@ -333,33 +335,44 @@ export default function StatsScreen() {
       const tMonth = await DepenseService.getTotalSurPeriode(format(startOfMonth(now), 'yyyy-MM-dd'), format(endOfMonth(now), 'yyyy-MM-dd')); setTotalMonth(tMonth || 0);
 
       const products = await DepenseService.getRepartitionParProduit() || [];
+      console.log('[STATS] Produits récupérés:', products.length, products);
       setAllProducts(products);
       if (selectedProducts.length === 0 && products.length > 0) {
         // Par défaut, top 5 pour que ce soit joli
         const topNames = products.slice(0, 5).map(r => r.name);
+        console.log('[STATS] Sélection par défaut (top 5):', topNames);
         setSelectedProducts(topNames); updateChartData(products, topNames);
       } else {
+        console.log('[STATS] Utilisation de la sélection existante:', selectedProducts);
         updateChartData(products, selectedProducts);
       }
 
       await loadComparative();
       await loadYearlyComparative();
+      await loadMonthFullData();
     } catch (e) { 
-      console.error(e); 
+      console.error('[STATS] Erreur lors du chargement:', e); 
       Alert.alert(t('error') || 'Erreur', t('error_loading_stats') || 'Erreur de chargement');
     } finally { setLoading(false); }
   };
 
   const updateChartData = (products: ProductItem[], selection: string[]) => {
+    console.log('[STATS] updateChartData - products:', products.length, 'selection:', selection.length);
     let filteredRows = products.filter(p => selection.includes(p.name));
+    console.log('[STATS] Lignes filtrées:', filteredRows.length, filteredRows);
     
     // 🎯 SOLUTION 1 & 2 : Tri par montant décroissant
     filteredRows.sort((a, b) => (b.montant || 0) - (a.montant || 0));
     
-    const total = filteredRows.reduce((sum, p) => sum + (p.montant || 0), 0);
+    const total = filteredRows.reduce((sum: number, p: ProductItem) => sum + (p.montant || 0), 0);
+    console.log('[STATS] Total calculé:', total);
     setFilteredTotal(total);
     
-    if (filteredRows.length === 0 || total === 0) { setData([]); return; }
+    if (filteredRows.length === 0 || total === 0) { 
+      console.log('[STATS] Aucune donnée à afficher');
+      setData([]); 
+      return; 
+    }
     
     // 🎯 SOLUTION 1 : Limitation intelligente - Top 7 + Autres
     const MAX_DISPLAY = 7;
@@ -371,7 +384,7 @@ export default function StatsScreen() {
       const otherProducts = filteredRows.slice(MAX_DISPLAY);
       
       // Calculer le total des "Autres"
-      const otherTotal = otherProducts.reduce((sum, p) => sum + (p.montant || 0), 0);
+      const otherTotal = otherProducts.reduce((sum: number, p: ProductItem) => sum + (p.montant || 0), 0);
       
       finalData = [
         ...topProducts,
@@ -381,7 +394,7 @@ export default function StatsScreen() {
       finalData = filteredRows;
     }
     
-    setData(finalData.map((r, i) => ({
+    setData(finalData.map((r: ProductItem, i: number) => ({
       name: r.name, 
       population: r.montant || 0, 
       color: COLOR_PALETTE[i % COLOR_PALETTE.length], 
@@ -391,13 +404,13 @@ export default function StatsScreen() {
   };
 
   const toggleProductSelection = (name: string) => {
-    const newSelection = selectedProducts.includes(name) ? selectedProducts.filter(n => n !== name) : [...selectedProducts, name];
+    const newSelection = selectedProducts.includes(name) ? selectedProducts.filter((n: string) => n !== name) : [...selectedProducts, name];
     setSelectedProducts(newSelection); updateChartData(allProducts, newSelection);
   };
 
   const toggleAllProducts = () => {
     if (selectedProducts.length === allProducts.length) { setSelectedProducts([]); updateChartData(allProducts, []); } 
-    else { const allNames = allProducts.map(p => p.name); setSelectedProducts(allNames); updateChartData(allProducts, allNames); }
+    else { const allNames = allProducts.map((p: ProductItem) => p.name); setSelectedProducts(allNames); updateChartData(allProducts, allNames); }
   };
 
   const loadComparative = async () => {
@@ -408,7 +421,7 @@ export default function StatsScreen() {
         const sStr = format(startOfWeek(d, { weekStartsOn: 1 }), 'yyyy-MM-dd');
         const eStr = format(endOfWeek(d, { weekStartsOn: 1 }), 'yyyy-MM-dd');
         const stats = await DepenseService.getStatsComparatives(sStr, eStr);
-        weeks.push({ id: `w-${i}`, period: `Sem. ${format(startOfWeek(d), 'dd/MM')}`, fullLabel: `Semaine du ${format(startOfWeek(d), 'dd MMM', { locale })}`, montant: stats?.montant || 0, nbAchats: stats?.nbAchats || 0, startDate: sStr, endDate: eStr });
+        weeks.push({ idPeriode: `w-${i}`, period: `Sem. ${format(startOfWeek(d), 'dd/MM')}`, fullLabel: `Semaine du ${format(startOfWeek(d), 'dd MMM', { locale })}`, montant: stats?.montant || 0, nbAchats: stats?.nbAchats || 0, startDate: sStr, endDate: eStr });
       }
       setWeeklyData(weeks);
 
@@ -418,7 +431,7 @@ export default function StatsScreen() {
         const sStr = format(startOfMonth(d), 'yyyy-MM-dd');
         const eStr = format(endOfMonth(d), 'yyyy-MM-dd');
         const stats = await DepenseService.getStatsComparatives(sStr, eStr);
-        months.push({ id: `m-${i}`, period: format(startOfMonth(d), 'MMM', { locale }), fullLabel: format(startOfMonth(d), 'MMMM yyyy', { locale }), montant: stats?.montant || 0, nbAchats: stats?.nbAchats || 0, startDate: sStr, endDate: eStr });
+        months.push({ idPeriode: `m-${i}`, period: format(startOfMonth(d), 'MMM', { locale }), fullLabel: format(startOfMonth(d), 'MMMM yyyy', { locale }), montant: stats?.montant || 0, nbAchats: stats?.nbAchats || 0, startDate: sStr, endDate: eStr });
       }
       setMonthlyData(months);
     } catch (e) { console.error(e); }
@@ -433,7 +446,7 @@ export default function StatsScreen() {
         const eStr = `${year}-12-31`;
         const stats = await DepenseService.getStatsComparatives(sStr, eStr);
         years.push({ 
-          id: `y-${i}`, 
+          idPeriode: `y-${i}`, 
           period: `${year}`, 
           fullLabel: `Année ${year}`, 
           montant: stats?.montant || 0, 
@@ -443,6 +456,33 @@ export default function StatsScreen() {
         });
       }
       setYearlyData(years);
+    } catch (e) { console.error(e); }
+  };
+
+  const loadMonthFullData = async () => {
+    try {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      
+      const days: ComparativeData[] = [];
+      for (let day = 1; day <= daysInMonth; day++) {
+        const date = new Date(year, month, day);
+        const sStr = format(date, 'yyyy-MM-dd 00:00:00');
+        const eStr = format(date, 'yyyy-MM-dd 23:59:59');
+        const stats = await DepenseService.getStatsComparatives(sStr, eStr);
+        days.push({
+          idPeriode: `d-${day}`,
+          period: `${day}`,
+          fullLabel: format(date, 'd MMM', { locale }),
+          montant: stats?.montant || 0,
+          nbAchats: stats?.nbAchats || 0,
+          startDate: sStr,
+          endDate: eStr,
+        });
+      }
+      setMonthFullData(days);
     } catch (e) { console.error(e); }
   };
 
@@ -456,7 +496,10 @@ export default function StatsScreen() {
 
   const lineChartConfig = useMemo(() => ({
     backgroundColor: 'transparent', backgroundGradientFrom: isDarkMode ? '#0F172A' : '#F8FAFC', backgroundGradientTo: isDarkMode ? '#0F172A' : '#F8FAFC',
-    decimalPlaces: 0, color: (opacity = 1) => `${activeTheme.primary}${Math.round(opacity * 255).toString(16).padStart(2, '0')}`,
+    decimalPlaces: 0, color: (opacity = 1) => {
+      const hex = Math.round(opacity * 255).toString(16);
+      return `${activeTheme.primary}${hex.length === 1 ? '0' + hex : hex}`;
+    },
     labelColor: () => isDarkMode ? '#E5E7EB' : '#6B7280', propsForDots: { r: '4', strokeWidth: '2', stroke: activeTheme.secondary },
     propsForBackgroundLines: { strokeDasharray: '', stroke: isDarkMode ? '#1F2937' : '#E5E7EB' }
   }), [isDarkMode, activeTheme]);
@@ -478,7 +521,7 @@ export default function StatsScreen() {
   const renderProgressBar = useCallback((item: ComparativeData, max: number) => {
     const percent = max > 0 ? (item.montant / max) * 100 : 0;
     return (
-      <TouchableOpacity key={item.id} onPress={() => openDetailModal(item)} style={s.progressContainer}>
+      <TouchableOpacity key={item.idPeriode} onPress={() => openDetailModal(item)} style={s.progressContainer}>
         <View style={s.progressHeader}>
           <Text style={s.progressLabel}>{item.period}</Text>
           <Text style={s.progressValue}>{formatMoney(item.montant)} {currency}</Text>
@@ -492,9 +535,9 @@ export default function StatsScreen() {
     );
   }, [s, currency, activeTheme, t]);
 
-  const renderProductItem = useCallback(({ item }: { item: ProductItem; index: number }) => {
+  const renderProductItem = useCallback(({ item }: { item: ProductItem }) => {
     const isSelected = selectedProducts.includes(item.name);
-    const totalAll = allProducts.reduce((sum, p) => sum + (p.montant || 0), 0);
+    const totalAll = allProducts.reduce((sum: number, p: ProductItem) => sum + (p.montant || 0), 0);
       const percent = totalAll > 0 ? ((item.montant / totalAll) * 100).toFixed(1) : '0';
     const badgeColor = COLOR_PALETTE[0]; // Utilisé statiquement au lieu d'index
     
@@ -540,8 +583,9 @@ export default function StatsScreen() {
         <View style={s.tabContainer}>
           {[
             { k: 'repartition', l: t('distribution') || 'Répartition', icon: 'pie-chart' },
+            { k: 'weekly', l: t('week') || 'Semaine', icon: 'calendar' },
             { k: 'monthly', l: t('month') || 'Mois', icon: 'calendar-outline' },
-            { k: 'yearly', l: 'Année', icon: 'calendar-number' }
+            { k: 'monthFull', l: t('month_full') || 'Mois complet', icon: 'grid-outline' }
           ].map(tab => (
             <TouchableOpacity key={tab.k} style={[s.tab, viewMode === tab.k && { backgroundColor: activeTheme.primary }]} onPress={() => setViewMode(tab.k as ViewMode)}>
               <Ionicons name={tab.icon as any} size={16} color={getTabIconColor(viewMode === tab.k)} />
@@ -592,7 +636,7 @@ export default function StatsScreen() {
           <View style={s.card}>
             <Text style={s.cardTitle}>{t('last_4_weeks') || 'Les 4 dernières semaines'}</Text>
             <View style={{ marginTop: 15, alignItems: 'center' }}>
-              {weeklyLineData?.values.some(v => v > 0.01) ? (
+              {weeklyLineData?.values.some((v: number) => v > 0.01) ? (
                 <LineChart data={{ labels: weeklyLineData.labels, datasets: [{ data: weeklyLineData.values }] }} width={SCREEN_WIDTH - 60} height={220} yAxisLabel="" yAxisSuffix="" chartConfig={lineChartConfig} bezier style={s.lineChart} />
               ) : (
                 <View style={s.emptyChart}><Ionicons name="analytics-outline" size={50} color={isDarkMode ? '#334155' : '#E5E7EB'} /><Text style={{ color: isDarkMode ? '#64748B' : '#9CA3AF', marginTop: 10 }}>{t('no_data') || 'Pas de données'}</Text></View>
@@ -607,7 +651,7 @@ export default function StatsScreen() {
           <View style={s.card}>
             <Text style={s.cardTitle}>{t('last_3_months') || 'Les 3 derniers mois'}</Text>
             <View style={{ marginTop: 15, alignItems: 'center' }}>
-              {monthlyLineData?.values.some(v => v > 0.01) ? (
+              {monthlyLineData?.values.some((v: number) => v > 0.01) ? (
                 <LineChart data={{ labels: monthlyLineData.labels, datasets: [{ data: monthlyLineData.values }] }} width={SCREEN_WIDTH - 60} height={220} yAxisLabel="" yAxisSuffix="" chartConfig={lineChartConfig} bezier style={s.lineChart} />
               ) : (
                 <View style={s.emptyChart}><Ionicons name="analytics-outline" size={50} color={isDarkMode ? '#334155' : '#E5E7EB'} /><Text style={{ color: isDarkMode ? '#64748B' : '#9CA3AF', marginTop: 10 }}>{t('no_data') || 'Pas de données'}</Text></View>
@@ -617,19 +661,123 @@ export default function StatsScreen() {
           </View>
         )}
 
-        {/* VUE 4 : ANNÉE */}
-        {viewMode === 'yearly' && (
+        {/* VUE 4 : MOIS COMPLET (1-31) */}
+        {viewMode === 'monthFull' && (
           <View style={s.card}>
-            <Text style={s.cardTitle}>{t('last_3_years') || 'Les 3 dernières années'}</Text>
-            <View style={{ marginTop: 15, alignItems: 'center' }}>
-              {yearlyLineData?.values.some(v => v > 0.01) ? (
-                <LineChart data={{ labels: yearlyLineData.labels, datasets: [{ data: yearlyLineData.values }] }} width={SCREEN_WIDTH - 60} height={220} yAxisLabel="" yAxisSuffix="" chartConfig={lineChartConfig} bezier style={s.lineChart} />
-              ) : (
-                <View style={s.emptyChart}><Ionicons name="analytics-outline" size={50} color={isDarkMode ? '#334155' : '#E5E7EB'} /><Text style={{ color: isDarkMode ? '#64748B' : '#9CA3AF', marginTop: 10 }}>{t('no_data') || 'Pas de données'}</Text></View>
-              )}
+            <Text style={s.cardTitle}>📅 {format(new Date(), 'MMMM yyyy', { locale })}</Text>
+            
+            {/* Stats du mois */}
+            <View style={{ marginTop: 15, marginBottom: 20 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginBottom: 15 }}>
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={{ fontSize: 11, color: isDarkMode ? '#94A3B8' : '#64748B', fontWeight: '600', marginBottom: 4 }}>MAX</Text>
+                  <Text style={{ fontSize: 16, fontWeight: '800', color: activeTheme.primary }}>{formatMoney(maxMonthFullAmount)}</Text>
+                </View>
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={{ fontSize: 11, color: isDarkMode ? '#94A3B8' : '#64748B', fontWeight: '600', marginBottom: 4 }}>MIN</Text>
+                  <Text style={{ fontSize: 16, fontWeight: '800', color: '#10B981' }}>
+                    {formatMoney(Math.min(...monthFullData.filter(d => d.montant > 0).map(d => d.montant), maxMonthFullAmount))}
+                  </Text>
+                </View>
+                <View style={{ alignItems: 'center' }}>
+                  <Text style={{ fontSize: 11, color: isDarkMode ? '#94A3B8' : '#64748B', fontWeight: '600', marginBottom: 4 }}>MOY</Text>
+                  <Text style={{ fontSize: 16, fontWeight: '800', color: isDarkMode ? '#F1F5F9' : '#1E293B' }}>
+                    {formatMoney(monthFullData.reduce((sum, d) => sum + d.montant, 0) / monthFullData.length)}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Graphique à barres pour tout le mois */}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: 200, paddingHorizontal: 10 }}>
+                  {monthFullData.map((day, index) => {
+                    const barHeight = maxMonthFullAmount > 0 ? (day.montant / maxMonthFullAmount) * 160 : 0;
+                    const isToday = format(new Date(), 'd') === day.period;
+                    return (
+                      <TouchableOpacity
+                        key={day.idPeriode}
+                        onPress={() => openDetailModal(day)}
+                        style={{ alignItems: 'center', marginHorizontal: 4 }}
+                      >
+                        <Text style={{ fontSize: 10, color: isToday ? activeTheme.secondary : (isDarkMode ? '#94A3B8' : '#64748B'), fontWeight: isToday ? 'bold' : '500', marginBottom: 4 }}>
+                          {formatMoney(day.montant)}
+                        </Text>
+                        <LinearGradient
+                          colors={isToday ? [activeTheme.secondary, activeTheme.secondary + '80'] : [activeTheme.primary, activeTheme.primary + '80']}
+                          style={{ width: 20, height: Math.max(barHeight, 5), borderRadius: 4 }}
+                        />
+                        <Text style={{ fontSize: 11, marginTop: 6, color: isToday ? activeTheme.secondary : (isDarkMode ? '#64748B' : '#9CA3AF'), fontWeight: isToday ? 'bold' : '500' }}>
+                          {day.period}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+
+              {/* Bouton Analyse générale */}
+              <TouchableOpacity
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: isDarkMode ? '#0F172A' : '#F8FAFC',
+                  padding: 14,
+                  borderRadius: 12,
+                  marginTop: 20,
+                  gap: 8,
+                }}
+                onPress={() => router.push('/rapports')}
+              >
+                <Ionicons name="trending-up" size={18} color={activeTheme.primary} />
+                <Text style={{ color: activeTheme.primary, fontWeight: '700', fontSize: 14 }}>
+                  {t('general_analysis') || 'Analyse générale'}
+                </Text>
+              </TouchableOpacity>
             </View>
-            <View style={{ marginTop: 15 }}>{yearlyData.map(item => renderProgressBar(item, maxYearlyAmount))}</View>
           </View>
+        )}
+
+        {/* BOUTON VERS RAPPORTS PDF (visible pour tous les modes) */}
+        {viewMode !== 'monthFull' && (
+          <TouchableOpacity
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: isDarkMode ? '#1E293B' : '#fff',
+              padding: 18,
+              borderRadius: 20,
+              marginBottom: 20,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: isDarkMode ? 0.2 : 0.05,
+              shadowRadius: 8,
+              elevation: 3,
+            }}
+            onPress={() => router.push('/rapports')}
+            activeOpacity={0.7}
+          >
+            <View style={{
+              width: 50,
+              height: 50,
+              borderRadius: 14,
+              backgroundColor: activeTheme.primary + '20',
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginRight: 14,
+            }}>
+              <Ionicons name="document-text" size={24} color={activeTheme.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: isDarkMode ? '#F1F5F9' : '#1E293B', marginBottom: 4 }}>
+                {t('export_detailed_report') || 'Exporter un rapport détaillé'}
+              </Text>
+              <Text style={{ fontSize: 13, color: isDarkMode ? '#94A3B8' : '#64748B' }}>
+                {t('generate_pdf') || 'Générer un PDF complet'}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={24} color={activeTheme.primary} />
+          </TouchableOpacity>
         )}
       </Animated.ScrollView>
 
@@ -647,7 +795,7 @@ export default function StatsScreen() {
             <View style={{ marginTop: 20 }}><Text style={{ fontSize: 20, fontWeight: '800', color: isDarkMode ? '#F1F5F9' : '#1F2937' }}>🎯 {t('manage_display') || 'Gérer l\'affichage'}</Text><Text style={{ fontSize: 13, color: isDarkMode ? '#64748B' : '#9CA3AF', marginTop: 4 }}>Sélectionnez les produits à afficher</Text></View>
             <TouchableOpacity onPress={toggleAllProducts} style={s.toggleAllBtn}><Ionicons name={selectedProducts.length === allProducts.length ? "checkbox" : "square-outline"} size={24} color={activeTheme.primary} /><Text style={{ color: activeTheme.primary, fontWeight: '600', fontSize: 15 }}>{getSelectAllText()}</Text></TouchableOpacity>
           </View>
-          <FlatList data={allProducts} keyExtractor={(_, index) => index.toString()} contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false} renderItem={renderProductItem} ListEmptyComponent={<View style={{ alignItems: 'center', marginTop: 50 }}><Ionicons name="cube-outline" size={60} color={isDarkMode ? '#334155' : '#E5E7EB'} /><Text style={{ color: isDarkMode ? '#64748B' : '#9CA3AF', marginTop: 10 }}>Aucun produit</Text></View>} />
+          <FlatList data={allProducts} keyExtractor={(_: any, index: number) => index.toString()} contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false} renderItem={renderProductItem} ListEmptyComponent={<View style={{ alignItems: 'center', marginTop: 50 }}><Ionicons name="cube-outline" size={60} color={isDarkMode ? '#334155' : '#E5E7EB'} /><Text style={{ color: isDarkMode ? '#64748B' : '#9CA3AF', marginTop: 10 }}>Aucun produit</Text></View>} />
         </View>
       </Modal>
 
@@ -657,7 +805,8 @@ export default function StatsScreen() {
           <View style={s.menuBox}>
             <Text style={[s.menuTitle, { color: activeTheme.primary }]}>🧭 {t('navigation') || 'Navigation'}</Text>
             <TouchableOpacity style={s.menuItem} onPress={() => { setShowMenu(false); router.push('/'); }}><Ionicons name="home-outline" size={22} color={activeTheme.primary} /><Text style={s.menuText}>{t('home') || 'Accueil'}</Text></TouchableOpacity>
-            <TouchableOpacity style={s.menuItem} onPress={() => { setShowMenu(false); router.push('/rapports'); }}><Ionicons name="pie-chart-outline" size={22} color={activeTheme.primary} /><Text style={s.menuText}>{t('reports') || 'Rapports'}</Text></TouchableOpacity>
+            <TouchableOpacity style={s.menuItem} onPress={() => { setShowMenu(false); router.push('/journal'); }}><Ionicons name="book-outline" size={22} color={activeTheme.primary} /><Text style={s.menuText}>{t('journal') || 'Journal'}</Text></TouchableOpacity>
+            <TouchableOpacity style={s.menuItem} onPress={() => { setShowMenu(false); router.push('/rapports'); }}><Ionicons name="document-text-outline" size={22} color={activeTheme.primary} /><Text style={s.menuText}>{t('reports') || 'Rapports'}</Text></TouchableOpacity>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -673,7 +822,7 @@ const getStyles = (theme: any, dark: boolean) => {
     header: { paddingBottom: 80, paddingHorizontal: 20, borderBottomLeftRadius: 30, borderBottomRightRadius: 30 }, headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, headerTitle: { fontSize: 20, fontWeight: 'bold', color: 'white' }, iconBtn: { padding: 8, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 12 },
     summaryRow: { position: 'absolute', bottom: -35, left: 20, right: 20, flexDirection: 'row', backgroundColor: c.card, borderRadius: 20, padding: 20, justifyContent: 'space-around', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: dark ? 0.3 : 0.1, shadowRadius: 8, elevation: 5 }, summaryItem: { alignItems: 'center' }, summaryLabel: { color: c.textSec, fontSize: 11, fontWeight: '600', textTransform: 'uppercase' }, summaryValue: { fontSize: 18, fontWeight: '800', marginTop: 4 }, verticalDivider: { width: 1, backgroundColor: c.border, height: '80%' },
     content: { flex: 1, marginTop: 55, paddingHorizontal: 20 },
-    tabContainer: { flexDirection: 'row', backgroundColor: c.card, borderRadius: 16, padding: 5, marginBottom: 20, elevation: 2 }, tab: { flex: 1, flexDirection: 'row', paddingVertical: 12, alignItems: 'center', justifyContent: 'center', borderRadius: 12, gap: 6 }, tabText: { color: c.textSec, fontWeight: '600', fontSize: 13 },
+    tabContainer: { flexDirection: 'row', backgroundColor: c.card, borderRadius: 16, padding: 5, marginBottom: 20, elevation: 2, flexWrap: 'wrap', gap: 5 }, tab: { flexBasis: '48%', flexDirection: 'row', paddingVertical: 10, alignItems: 'center', justifyContent: 'center', borderRadius: 12, gap: 4 }, tabText: { color: c.textSec, fontWeight: '600', fontSize: 11 },
     card: { backgroundColor: c.card, borderRadius: 24, padding: 20, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: dark ? 0.2 : 0.05, shadowRadius: 8, elevation: 3 }, cardTitle: { fontSize: 18, fontWeight: '800', color: c.text, marginBottom: 5 },
     filterBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.primary + '15', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 },
     totalBox: { marginTop: 20, padding: 16, backgroundColor: dark ? '#0F172A' : '#F0F9FF', borderRadius: 16, borderWidth: 1, borderColor: theme.primary + '30' }, totalIcon: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },

@@ -3,8 +3,9 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { View, ActivityIndicator, Text, AppState, AppStateStatus, Alert, Vibration } from 'react-native';
 import * as Font from 'expo-font';
 import { Ionicons } from '@expo/vector-icons';
+import * as SQLite from 'expo-sqlite';
 
-import { initDatabase, checkDatabase } from '../src/db/init';
+import { initDatabase, checkDatabase, getDb } from '../src/db/init';
 import { ThemedStatusBar } from '../src/components/ThemedStatusBar';
 import { useTheme, ThemeProvider } from '../src/context/ThemeContext';
 import { SettingsProvider } from '../src/context/SettingsContext';
@@ -14,7 +15,6 @@ import {
   initNotificationTables,
   isRunningInExpoGo,
 } from '../src/services/notificationService';
-import { getDb } from '../src/db/init';
 
 function NotificationChecker() {
   const router = useRouter();
@@ -46,7 +46,7 @@ function NotificationChecker() {
       const rappelsAafficher = db.getAllSync(`
         SELECT r.*, a.nomListe
         FROM Rappel r
-        LEFT JOIN ListeAchat a ON r.idListeAchat = a.id
+        LEFT JOIN ListeAchat a ON r.idListeAchat = a.idListe
         WHERE r.supprime = 0 
           AND r.affiche = 0
           AND (
@@ -73,14 +73,14 @@ function NotificationChecker() {
               style: 'cancel',
               onPress: () => {
                 
-                db.runSync('UPDATE Rappel SET affiche = 1 WHERE id = ?', [rappel.id]);
+                db.runSync('UPDATE Rappel SET affiche = 1 WHERE idRappel = ?', [rappel.id]);
               },
             },
             {
               text: 'Voir la liste',
               onPress: () => {
                 
-                db.runSync('UPDATE Rappel SET affiche = 1, estLu = 1 WHERE id = ?', [rappel.id]);
+                db.runSync('UPDATE Rappel SET affiche = 1, estLu = 1 WHERE idRappel = ?', [rappel.id]);
                 if (rappel.idListeAchat) {
                   router.push(`/achat/${rappel.idListeAchat}`);
                 }
@@ -91,10 +91,10 @@ function NotificationChecker() {
         );
 
        
-        db.runSync('UPDATE Rappel SET affiche = 1 WHERE id = ?', [rappel.id]);
+        db.runSync('UPDATE Rappel SET affiche = 1 WHERE idRappel = ?', [rappel.id]);
       }
     } catch (e) {
-      
+      console.error('Erreur vérification rappels:', e);
     } finally {
       isChecking.current = false;
     }
@@ -136,7 +136,6 @@ function NotificationChecker() {
 function RootLayoutNav() {
   const { activeTheme } = useTheme();
   const headerColor = activeTheme?.primary || '#7143b5';
-
   return (
     <>
       <ThemedStatusBar />
@@ -175,17 +174,31 @@ export default function Layout() {
   useEffect(() => {
     async function prepare() {
       try {
+        console.log('🔧 [INIT] Début initialisation...');
         
-        await Font.loadAsync({ ...Ionicons.font });
+        // 🔴 CORRECTION BUG "RIZ" - Décommentez les 3 lignes ci-dessous pour réinitialiser la base
+        // console.log('🗑️ [DEBUG] Suppression de l\'ancienne base de données...');
+        // await SQLite.deleteDatabaseAsync('etsena.db');
+        // console.log('✅ [DEBUG] Base supprimée - Une nouvelle sera créée avec la migration corrigée');
+        
+        console.log('🔧 [INIT] Chargement des polices...');
+        await Font.loadAsync({
+          ...(Ionicons as any).font,
+        });
         setFontsLoaded(true);
+        console.log('✅ [INIT] Polices chargées');
         
-       
+        console.log('🔧 [INIT] Initialisation base de données...');
         initDatabase();
+        console.log('✅ [INIT] DB initialisée');
         
+        console.log('🔧 [INIT] Tables de notifications...');
         initNotificationTables();
+        console.log('✅ [INIT] Notifications configurées');
         
         if (checkDatabase()) {
           setDbReady(true);
+          console.log('✅ [INIT] DB prête');
         }
 
         
@@ -195,9 +208,12 @@ export default function Layout() {
           console.log('🚀 Mode Build - Notifications disponibles');
         }
 
+        console.log('🎉 [INIT] Application prête !');
+
       } catch (e: any) {
-        console.error('Erreur initialisation:', e);
-        setError(e.message);
+        console.error('❌ [INIT] Erreur initialisation:', e);
+        console.error('❌ [INIT] Stack:', e.stack);
+        setError(e.message || 'Erreur inconnue');
       }
     }
     

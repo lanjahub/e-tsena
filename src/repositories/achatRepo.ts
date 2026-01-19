@@ -1,16 +1,18 @@
 import { getDb } from '@db/init';
 
 export type ListeAchat = {
-  id?: number;
+  idListe?: number;
   nomListe: string;
   dateAchat: string; // ISO date
   montantTotal?: number;
   notes?: string;
   statut?: number;
+  // Alias pour compatibilité
+  id?: number;
 };
 
 export type Article = {
-  id?: number;
+  idArticle?: number;
   idListeAchat: number;
   idProduit?: number;
   libelleProduit?: string; // Pour l'affichage ou la création via libellé
@@ -19,6 +21,8 @@ export type Article = {
   prixTotal?: number;
   estCoche?: boolean;
   unite?: string;
+  // Alias pour compatibilité
+  id?: number;
 };
 
 export const AchatRepo = {
@@ -42,13 +46,13 @@ export const AchatRepo = {
 
     // Si pas d'ID produit mais un libellé, on cherche ou crée le produit
     if (!productId && l.libelleProduit) {
-      const existing = db.getAllSync<{id: number}>(
-        'SELECT id FROM Produit WHERE libelle = ?', 
+      const existing = db.getAllSync<{idProduit: number}>(
+        'SELECT idProduit FROM Produit WHERE libelle = ?', 
         [l.libelleProduit]
       );
       
       if (existing && existing.length > 0) {
-        productId = existing[0].id;
+        productId = existing[0].idProduit;
       } else {
         const res = db.runSync(
           'INSERT INTO Produit (libelle, unite) VALUES (?, ?)',
@@ -74,7 +78,7 @@ export const AchatRepo = {
     db.runSync(
       `UPDATE ListeAchat SET montantTotal = (
         SELECT COALESCE(SUM(prixTotal),0) FROM Article WHERE idListeAchat = ?
-      ) WHERE id = ?`,
+      ) WHERE idListe = ?`,
       [l.idListeAchat, l.idListeAchat]
     );
   },
@@ -100,7 +104,7 @@ export const AchatRepo = {
     return db.getAllSync(
       `SELECT a.*, p.libelle as libelleProduit 
        FROM Article a 
-       JOIN Produit p ON p.id = a.idProduit 
+       JOIN Produit p ON p.idProduit = a.idProduit 
        WHERE a.idListeAchat = ?`,
       [idListeAchat]
     );
@@ -115,7 +119,7 @@ export const AchatRepo = {
   async updateAchat(id: number, nomListe: string) {
     const db = getDb();
     db.runSync(
-      `UPDATE ListeAchat SET nomListe = ? WHERE id = ?`,
+      `UPDATE ListeAchat SET nomListe = ? WHERE idListe = ?`,
       [nomListe, id]
     );
   },
@@ -123,12 +127,12 @@ export const AchatRepo = {
   // Supprimer un article
   async deleteArticle(id: number, idListeAchat: number) {
     const db = getDb();
-    db.runSync(`DELETE FROM Article WHERE id = ?`, [id]);
+    db.runSync(`DELETE FROM Article WHERE idArticle = ?`, [id]);
     // Recalculer le total
     db.runSync(
       `UPDATE ListeAchat SET montantTotal = (
         SELECT COALESCE(SUM(prixTotal),0) FROM Article WHERE idListeAchat = ?
-      ) WHERE id = ?`,
+      ) WHERE idListe = ?`,
       [idListeAchat, idListeAchat]
     );
   },
@@ -143,14 +147,14 @@ export const AchatRepo = {
     const db = getDb();
     const prixTotal = quantite * prixUnitaire;
     db.runSync(
-      `UPDATE Article SET quantite = ?, prixUnitaire = ?, prixTotal = ? WHERE id = ?`,
+      `UPDATE Article SET quantite = ?, prixUnitaire = ?, prixTotal = ? WHERE idArticle = ?`,
       [quantite, prixUnitaire, prixTotal, id]
     );
     // Recalculer le total
     db.runSync(
       `UPDATE ListeAchat SET montantTotal = (
         SELECT COALESCE(SUM(prixTotal),0) FROM Article WHERE idListeAchat = ?
-      ) WHERE id = ?`,
+      ) WHERE idListe = ?`,
       [idListeAchat, idListeAchat]
     );
   },
@@ -164,7 +168,7 @@ export const AchatRepo = {
   async deleteAchat(id: number) {
     const db = getDb();
     db.runSync(`DELETE FROM Article WHERE idListeAchat = ?`, [id]);
-    db.runSync(`DELETE FROM ListeAchat WHERE id = ?`, [id]);
+    db.runSync(`DELETE FROM ListeAchat WHERE idListe = ?`, [id]);
   },
 
   // Obtenir les achats par période
@@ -181,7 +185,7 @@ export const AchatRepo = {
   // Obtenir un achat par ID
   async getAchatById(id: number) {
     const db = getDb();
-    const result = db.getAllSync(`SELECT * FROM ListeAchat WHERE id = ?`, [id]);
+    const result = db.getAllSync(`SELECT * FROM ListeAchat WHERE idListe = ?`, [id]);
     return result[0];
   }
 };

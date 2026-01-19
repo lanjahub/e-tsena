@@ -1,4 +1,5 @@
-import { useEffect, useState, useRef } from 'react';
+// app/achat/[id]/index.tsx
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { 
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
   TextInput, Modal, KeyboardAvoidingView, Platform, Alert, Animated, Vibration,
@@ -6,7 +7,7 @@ import {
 } from 'react-native';
 import { ThemedStatusBar } from '../../../src/components/ThemedStatusBar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocalSearchParams, router, useNavigation } from 'expo-router';
+import { useLocalSearchParams, router, useNavigation, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { fr, enUS } from 'date-fns/locale';
@@ -22,7 +23,7 @@ import { ConfirmModal } from '../../../src/components/ConfirmModal';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface Achat {
-  id: number;
+  idListe: number;
   nomListe: string;
   dateAchat: string;
 }
@@ -32,307 +33,373 @@ interface SuggestedProduct {
   lastPrice: number;
   count: number;
   unite: string;
+  source: 'history' | 'popular';
+}
+
+interface ModalData {
+  type: 'add' | 'edit';
+  itemId: number;
+  nom: string;
+  qty: string;
+  prix: string;
+  unite: string;
+  suggestedPrice: number;
 }
 
 // =============================================
-// RECETTES / THÈMES AVEC INGRÉDIENTS
+// PRODUITS MALGACHES COURANTS
+// =============================================
+const MALAGASY_POPULAR_PRODUCTS: { nom: string; unite: string; category: string; keywords: string[] }[] = [
+  // VARY SY MENAKA (Riz et huile)
+  { nom: 'Vary fotsy', unite: 'kg', category: 'base', keywords: ['riz', 'vary', 'ri', 'fotsy'] },
+  { nom: 'Vary gasy', unite: 'kapoaka', category: 'base', keywords: ['riz', 'vary', 'gasy'] },
+  { nom: 'Vary makalioka', unite: 'kg', category: 'base', keywords: ['vary', 'makalioka'] },
+  { nom: 'Menaka', unite: 'L', category: 'base', keywords: ['huile', 'menaka', 'hui'] },
+  { nom: 'Menaka voanio', unite: 'L', category: 'base', keywords: ['coco', 'huile', 'voanio'] },
+  
+  // HENA (Viande)
+  { nom: 'Hena omby', unite: 'kg', category: 'viande', keywords: ['boeuf', 'viande', 'hena', 'omby', 'boe'] },
+  { nom: 'Hena kisoa', unite: 'kg', category: 'viande', keywords: ['porc', 'kisoa', 'por', 'hena'] },
+  { nom: 'Akoho', unite: 'pcs', category: 'viande', keywords: ['poulet', 'akoho', 'poul'] },
+  { nom: 'Akoho gasy', unite: 'pcs', category: 'viande', keywords: ['poulet', 'akoho', 'gasy'] },
+  { nom: 'Hena voay', unite: 'kg', category: 'viande', keywords: ['zebu', 'zébu', 'voay'] },
+  { nom: 'Saosizy', unite: 'pcs', category: 'viande', keywords: ['saucisse', 'sosis', 'saosizy'] },
+  { nom: 'Hena-kisoa voatoto', unite: 'kg', category: 'viande', keywords: ['haché', 'hache', 'voatoto'] },
+  
+  // TRONDRO (Poisson)
+  { nom: 'Trondro vaovao', unite: 'kg', category: 'poisson', keywords: ['poisson', 'trondro', 'pois', 'vaovao'] },
+  { nom: 'Tilapia', unite: 'kg', category: 'poisson', keywords: ['tilapia'] },
+  { nom: 'Makamba', unite: 'kg', category: 'poisson', keywords: ['crevette', 'makamba', 'crev'] },
+  { nom: 'Trondro maina', unite: 'kg', category: 'poisson', keywords: ['séché', 'seche', 'maina'] },
+  { nom: 'Foza', unite: 'kg', category: 'poisson', keywords: ['crabe', 'foza'] },
+  { nom: 'Drakaka', unite: 'kg', category: 'poisson', keywords: ['crabe', 'drakaka'] },
+  { nom: 'Orita', unite: 'kg', category: 'poisson', keywords: ['orita', 'anguille'] },
+  
+  // LEGIOMA (Légumes)
+  { nom: 'Voatabia', unite: 'kg', category: 'legume', keywords: ['tomate', 'voatabia', 'tom'] },
+  { nom: 'Tongolo', unite: 'kg', category: 'legume', keywords: ['oignon', 'tongolo', 'oig'] },
+  { nom: 'Tongolo gasy', unite: 'loha', category: 'legume', keywords: ['ail', 'tongolo gasy'] },
+  { nom: 'Sakamalao', unite: 'g', category: 'legume', keywords: ['gingembre', 'sakamalao'] },
+  { nom: 'Karaoty', unite: 'kg', category: 'legume', keywords: ['carotte', 'karaoty', 'car'] },
+  { nom: 'Tsaramaso maintso', unite: 'kg', category: 'legume', keywords: ['haricot', 'tsaramaso', 'maintso'] },
+  { nom: 'Anana', unite: 'fehiny', category: 'legume', keywords: ['brède', 'brede', 'anana'] },
+  { nom: 'Anamalaho', unite: 'fehiny', category: 'legume', keywords: ['brède', 'anamalaho'] },
+  { nom: 'Anamafana', unite: 'fehiny', category: 'legume', keywords: ['mafana', 'brède', 'anamafana'] },
+  { nom: 'Anamamy', unite: 'fehiny', category: 'legume', keywords: ['morelle', 'anamamy'] },
+  { nom: 'Ovy', unite: 'kg', category: 'legume', keywords: ['pomme', 'terre', 'ovy', 'patate', 'pom'] },
+  { nom: 'Mangahazo', unite: 'kg', category: 'legume', keywords: ['manioc', 'mangahazo', 'man'] },
+  { nom: 'Vomanga', unite: 'kg', category: 'legume', keywords: ['patate', 'douce', 'vomanga'] },
+  { nom: 'Salady', unite: 'pcs', category: 'legume', keywords: ['salade', 'laitue', 'sal', 'salady'] },
+  { nom: 'Laisoa', unite: 'pcs', category: 'legume', keywords: ['chou', 'laisoa'] },
+  { nom: 'Voatavo', unite: 'kg', category: 'legume', keywords: ['citrouille', 'voatavo', 'courge'] },
+  { nom: 'Sakay', unite: 'g', category: 'legume', keywords: ['piment', 'sakay', 'pim'] },
+  { nom: 'Poivron', unite: 'pcs', category: 'legume', keywords: ['poivron', 'poiv'] },
+  { nom: 'Concombre', unite: 'pcs', category: 'legume', keywords: ['concombre', 'conc'] },
+  { nom: 'Courgette', unite: 'kg', category: 'legume', keywords: ['courgette', 'cour'] },
+  
+  // VOANKAZO (Fruits)
+  { nom: 'Akondro', unite: 'takelaka', category: 'fruit', keywords: ['banane', 'akondro', 'ban'] },
+  { nom: 'Manga', unite: 'kg', category: 'fruit', keywords: ['mangue', 'manga', 'mang'] },
+  { nom: 'Voasary', unite: 'kg', category: 'fruit', keywords: ['orange', 'voasary', 'ora'] },
+  { nom: 'Mananasy', unite: 'pcs', category: 'fruit', keywords: ['ananas', 'mananasy'] },
+  { nom: 'Papay', unite: 'pcs', category: 'fruit', keywords: ['papaye', 'papay'] },
+  { nom: 'Letchi', unite: 'kg', category: 'fruit', keywords: ['litchi', 'letchi'] },
+  { nom: 'Paoma', unite: 'kg', category: 'fruit', keywords: ['pomme', 'pom', 'paoma'] },
+  { nom: 'Voasary makirana', unite: 'kg', category: 'fruit', keywords: ['citron', 'voasary makirana'] },
+  { nom: 'Zavoka', unite: 'pcs', category: 'fruit', keywords: ['avocat', 'zavoka', 'avo'] },
+  { nom: 'Voahangy', unite: 'kg', category: 'fruit', keywords: ['raisin', 'voahangy'] },
+  
+  // RONONO SY ATODY (Produits laitiers et œufs)
+  { nom: 'Atody', unite: 'pcs', category: 'laitier', keywords: ['oeuf', 'œuf', 'atody', 'oeu'] },
+  { nom: 'Atody akoho', unite: 'pcs', category: 'laitier', keywords: ['oeuf', 'atody', 'akoho'] },
+  { nom: 'Ronono', unite: 'L', category: 'laitier', keywords: ['lait', 'ronono', 'lai'] },
+  { nom: 'Yaorta', unite: 'pots', category: 'laitier', keywords: ['yaourt', 'yao', 'yaorta'] },
+  { nom: 'Fromazy', unite: 'g', category: 'laitier', keywords: ['fromage', 'from', 'fromazy'] },
+  { nom: 'Dibera', unite: 'g', category: 'laitier', keywords: ['beurre', 'beur', 'dibera'] },
+  
+  // TSARAMASO SY VOANEMBA (Légumineuses)
+  { nom: 'Tsaramaso maina', unite: 'kg', category: 'legumineuse', keywords: ['haricot', 'tsaramaso', 'sec', 'maina'] },
+  { nom: 'Lentilles', unite: 'kg', category: 'legumineuse', keywords: ['lentille', 'lent'] },
+  { nom: 'Kabaro', unite: 'kg', category: 'legumineuse', keywords: ['pois', 'cap', 'kabaro'] },
+  { nom: 'Voanjobory', unite: 'kg', category: 'legumineuse', keywords: ['voanjobory', 'bambara'] },
+  { nom: 'Voanjo', unite: 'kg', category: 'legumineuse', keywords: ['arachide', 'pistache', 'voanjo'] },
+  
+  // LAOKA MALAGASY
+  { nom: 'Ravitoto', unite: 'fehiny', category: 'laoka', keywords: ['ravitoto', 'ravi'] },
+  { nom: 'Ravin-mangahazo', unite: 'fehiny', category: 'laoka', keywords: ['manioc', 'feuille', 'ravin'] },
+  { nom: 'Sauce tomate', unite: 'boîte', category: 'laoka', keywords: ['sauce', 'tomate'] },
+  { nom: 'Lasary', unite: 'pot', category: 'laoka', keywords: ['lasary', 'achards'] },
+  { nom: 'Achards', unite: 'pot', category: 'laoka', keywords: ['achards', 'achard'] },
+  { nom: 'Rougail', unite: 'pot', category: 'laoka', keywords: ['rougail', 'rougay'] },
+  { nom: 'Kitoza', unite: 'kg', category: 'laoka', keywords: ['kitoza', 'viande', 'fumée'] },
+  
+  // MOFO (Pain et pâtisserie)
+  { nom: 'Mofo', unite: 'pcs', category: 'boulangerie', keywords: ['pain', 'mofo', 'pai'] },
+  { nom: 'Mofo gasy', unite: 'pcs', category: 'boulangerie', keywords: ['mofo', 'gasy'] },
+  { nom: 'Mofo baolina', unite: 'pcs', category: 'boulangerie', keywords: ['baolina', 'beignet'] },
+  { nom: 'Mofo menakely', unite: 'pcs', category: 'boulangerie', keywords: ['menakely', 'beignet'] },
+  { nom: 'Mofo akondro', unite: 'pcs', category: 'boulangerie', keywords: ['akondro', 'banane'] },
+  { nom: 'Koba', unite: 'pcs', category: 'boulangerie', keywords: ['koba', 'ravina'] },
+  { nom: 'Koba ravina', unite: 'pcs', category: 'boulangerie', keywords: ['koba', 'ravina'] },
+  { nom: 'Lafarina', unite: 'kg', category: 'boulangerie', keywords: ['farine', 'far', 'lafarina'] },
+  { nom: 'Ramanonaka', unite: 'pcs', category: 'boulangerie', keywords: ['ramanonaka', 'galette'] },
+  
+  // SIRAMAMY SY SIRA
+  { nom: 'Siramamy', unite: 'kg', category: 'epicerie', keywords: ['sucre', 'siramamy', 'suc'] },
+  { nom: 'Sira', unite: 'kg', category: 'epicerie', keywords: ['sel', 'sira'] },
+  { nom: 'Kafe', unite: 'g', category: 'epicerie', keywords: ['café', 'cafe', 'kafe', 'caf'] },
+  { nom: 'Dite', unite: 'boîte', category: 'epicerie', keywords: ['thé', 'the', 'ravin', 'dite'] },
+  { nom: 'Lavanila', unite: 'gousse', category: 'epicerie', keywords: ['vanille', 'lavanila'] },
+  { nom: 'Kanely', unite: 'g', category: 'epicerie', keywords: ['cannelle', 'cann', 'kanely'] },
+  { nom: 'Jirofo', unite: 'g', category: 'epicerie', keywords: ['girofle', 'jirofo'] },
+  
+  // ZAVA-PISOTRO (Boissons)
+  { nom: 'Rano', unite: 'L', category: 'boisson', keywords: ['eau', 'rano', 'minérale'] },
+  { nom: 'Rano mineraly', unite: 'L', category: 'boisson', keywords: ['eau', 'rano', 'mineraly'] },
+  { nom: 'Ranom-boankazo', unite: 'L', category: 'boisson', keywords: ['jus', 'fruit', 'ranom'] },
+  { nom: 'Soda', unite: 'L', category: 'boisson', keywords: ['soda', 'coca', 'sprite'] },
+  { nom: 'Bonbon anglais', unite: 'L', category: 'boisson', keywords: ['bonbon', 'anglais'] },
+  { nom: 'THB', unite: 'bouteille', category: 'boisson', keywords: ['thb', 'bière', 'biere'] },
+  { nom: 'Toaka gasy', unite: 'bouteille', category: 'boisson', keywords: ['rhum', 'toaka', 'gasy'] },
+  { nom: 'Litchel', unite: 'bouteille', category: 'boisson', keywords: ['litchel', 'litchi'] },
+  
+  // SAKAFO (Épicerie)
+  { nom: 'Paty', unite: 'paquet', category: 'epicerie', keywords: ['pâte', 'pate', 'spaghetti', 'paty'] },
+  { nom: 'Sardina', unite: 'boîte', category: 'epicerie', keywords: ['sardine', 'sard', 'sardina'] },
+  { nom: 'Ronono misokatra', unite: 'boîte', category: 'epicerie', keywords: ['concentré', 'lait', 'misokatra'] },
+  { nom: 'Maggi', unite: 'pcs', category: 'epicerie', keywords: ['bouillon', 'cube', 'maggi'] },
+  { nom: 'Vermisely', unite: 'paquet', category: 'epicerie', keywords: ['vermicelle', 'vermisely'] },
+  
+  // FITAOVANA (Produits ménagers)
+  { nom: 'Savony', unite: 'pcs', category: 'menage', keywords: ['savon', 'sav', 'savony'] },
+  { nom: 'Savony lamba', unite: 'kg', category: 'menage', keywords: ['lessive', 'less', 'lamba'] },
+  { nom: 'Arina', unite: 'sac', category: 'menage', keywords: ['charbon', 'arina'] },
+  { nom: 'Afokasoka', unite: 'boîte', category: 'menage', keywords: ['allumette', 'alim', 'afokasoka'] },
+  { nom: 'Labozia', unite: 'pcs', category: 'menage', keywords: ['bougie', 'labozia'] },
+  { nom: 'Taratasy fidiovana', unite: 'rouleaux', category: 'menage', keywords: ['papier', 'toilette', 'pq', 'taratasy'] },
+];
+
+// =============================================
+// VRAIES RECETTES MALGACHES
 // =============================================
 const RECIPE_SUGGESTIONS: { [key: string]: { icon: string; name: string; items: { nom: string; unite: string }[] } } = {
-  'gâteau': {
-    icon: '🎂',
-    name: 'Gâteau',
+  'romazava': {
+    icon: '🥘',
+    name: 'Romazava',
     items: [
-      { nom: 'Farine', unite: 'kg' },
-      { nom: 'Sucre', unite: 'kg' },
-      { nom: 'Œufs', unite: 'pcs' },
-      { nom: 'Beurre', unite: 'g' },
-      { nom: 'Lait', unite: 'L' },
-      { nom: 'Levure chimique', unite: 'sachet' },
-      { nom: 'Vanille', unite: 'sachet' },
+      { nom: 'Hena omby', unite: 'kg' },
+      { nom: 'Anamalaho', unite: 'fehiny' },
+      { nom: 'Anamamy', unite: 'fehiny' },
+      { nom: 'Anamafana', unite: 'fehiny' },
+      { nom: 'Voatabia', unite: 'kg' },
+      { nom: 'Tongolo', unite: 'pcs' },
+      { nom: 'Sakamalao', unite: 'g' },
     ]
   },
-  'gateau': {
-    icon: '🎂',
-    name: 'Gâteau',
+  'ravitoto': {
+    icon: '🥬',
+    name: 'Ravitoto sy Henakisoa',
     items: [
-      { nom: 'Farine', unite: 'kg' },
-      { nom: 'Sucre', unite: 'kg' },
-      { nom: 'Œufs', unite: 'pcs' },
-      { nom: 'Beurre', unite: 'g' },
-      { nom: 'Lait', unite: 'L' },
-      { nom: 'Levure chimique', unite: 'sachet' },
+      { nom: 'Ravitoto', unite: 'fehiny' },
+      { nom: 'Hena kisoa', unite: 'kg' },
+      { nom: 'Tongolo gasy', unite: 'loha' },
+      { nom: 'Sakamalao', unite: 'g' },
+      { nom: 'Menaka', unite: 'L' },
+      { nom: 'Sira', unite: 'g' },
     ]
   },
-  'gâteau chocolat': {
-    icon: '🍫',
-    name: 'Gâteau au chocolat',
+  'henomby': {
+    icon: '🥩',
+    name: 'Hen\'omby ritra',
     items: [
-      { nom: 'Chocolat noir', unite: 'g' },
-      { nom: 'Beurre', unite: 'g' },
-      { nom: 'Sucre', unite: 'g' },
-      { nom: 'Œufs', unite: 'pcs' },
-      { nom: 'Farine', unite: 'g' },
-      { nom: 'Levure chimique', unite: 'sachet' },
+      { nom: 'Hena omby', unite: 'kg' },
+      { nom: 'Tongolo', unite: 'pcs' },
+      { nom: 'Tongolo gasy', unite: 'loha' },
+      { nom: 'Sakamalao', unite: 'g' },
+      { nom: 'Voatabia', unite: 'kg' },
+      { nom: 'Menaka', unite: 'L' },
     ]
   },
-  'crêpes': {
-    icon: '🥞',
-    name: 'Crêpes',
+  'henakisoa': {
+    icon: '🐷',
+    name: 'Henan-kisoa sy Sakamalao',
     items: [
-      { nom: 'Farine', unite: 'g' },
-      { nom: 'Œufs', unite: 'pcs' },
-      { nom: 'Lait', unite: 'mL' },
-      { nom: 'Beurre', unite: 'g' },
-      { nom: 'Sucre', unite: 'g' },
+      { nom: 'Hena kisoa', unite: 'kg' },
+      { nom: 'Sakamalao', unite: 'g' },
+      { nom: 'Tongolo gasy', unite: 'loha' },
+      { nom: 'Voatabia', unite: 'kg' },
+      { nom: 'Tongolo', unite: 'pcs' },
+      { nom: 'Menaka', unite: 'L' },
     ]
   },
-  'riz cantonais': {
-    icon: '🍚',
-    name: 'Riz cantonais',
+  'vary': {
+    icon: '🍲',
+    name: 'Vary amin\'anana',
     items: [
-      { nom: 'Riz', unite: 'g' },
-      { nom: 'Œufs', unite: 'pcs' },
-      { nom: 'Jambon', unite: 'g' },
-      { nom: 'Petits pois', unite: 'g' },
-      { nom: 'Carottes', unite: 'pcs' },
-      { nom: 'Oignon', unite: 'pcs' },
-      { nom: 'Sauce soja', unite: 'mL' },
-      { nom: 'Huile', unite: 'mL' },
+      { nom: 'Vary fotsy', unite: 'kapoaka' },
+      { nom: 'Anana', unite: 'fehiny' },
+      { nom: 'Hena omby', unite: 'g' },
+      { nom: 'Sakamalao', unite: 'g' },
+      { nom: 'Sira', unite: 'g' },
     ]
   },
-  'pizza': {
-    icon: '🍕',
-    name: 'Pizza',
-    items: [
-      { nom: 'Farine', unite: 'g' },
-      { nom: 'Levure', unite: 'sachet' },
-      { nom: 'Sauce tomate', unite: 'boîte' },
-      { nom: 'Mozzarella', unite: 'g' },
-      { nom: 'Jambon', unite: 'g' },
-      { nom: 'Champignons', unite: 'g' },
-      { nom: 'Olives', unite: 'g' },
-    ]
-  },
-  'pâtes carbonara': {
-    icon: '🍝',
-    name: 'Pâtes carbonara',
-    items: [
-      { nom: 'Pâtes spaghetti', unite: 'g' },
-      { nom: 'Lardons', unite: 'g' },
-      { nom: 'Œufs', unite: 'pcs' },
-      { nom: 'Parmesan', unite: 'g' },
-      { nom: 'Crème fraîche', unite: 'mL' },
-    ]
-  },
-  'pâtes bolognaise': {
-    icon: '🍝',
-    name: 'Pâtes bolognaise',
-    items: [
-      { nom: 'Pâtes', unite: 'g' },
-      { nom: 'Viande hachée', unite: 'g' },
-      { nom: 'Sauce tomate', unite: 'boîte' },
-      { nom: 'Oignon', unite: 'pcs' },
-      { nom: 'Ail', unite: 'gousse' },
-      { nom: 'Parmesan', unite: 'g' },
-    ]
-  },
-  'lasagnes': {
-    icon: '🍝',
-    name: 'Lasagnes',
-    items: [
-      { nom: 'Feuilles de lasagne', unite: 'paquet' },
-      { nom: 'Viande hachée', unite: 'g' },
-      { nom: 'Sauce tomate', unite: 'boîte' },
-      { nom: 'Béchamel', unite: 'mL' },
-      { nom: 'Fromage râpé', unite: 'g' },
-    ]
-  },
-  'poulet rôti': {
+  'akoho': {
     icon: '🍗',
-    name: 'Poulet rôti',
+    name: 'Akoho sy Voanio',
     items: [
-      { nom: 'Poulet entier', unite: 'pcs' },
-      { nom: 'Pommes de terre', unite: 'kg' },
-      { nom: 'Oignon', unite: 'pcs' },
-      { nom: 'Ail', unite: 'têtes' },
-      { nom: 'Huile d\'olive', unite: 'mL' },
-      { nom: 'Thym', unite: 'branches' },
+      { nom: 'Akoho gasy', unite: 'pcs' },
+      { nom: 'Voanio', unite: 'pcs' },
+      { nom: 'Voatabia', unite: 'kg' },
+      { nom: 'Tongolo', unite: 'pcs' },
+      { nom: 'Tongolo gasy', unite: 'loha' },
+      { nom: 'Sakamalao', unite: 'g' },
     ]
   },
-  'salade': {
-    icon: '🥗',
-    name: 'Salade',
+  'voanjobory': {
+    icon: '🫘',
+    name: 'Voanjobory sy Henakisoa',
     items: [
-      { nom: 'Laitue', unite: 'pcs' },
-      { nom: 'Tomates', unite: 'pcs' },
-      { nom: 'Concombre', unite: 'pcs' },
-      { nom: 'Huile d\'olive', unite: 'mL' },
-      { nom: 'Vinaigre', unite: 'mL' },
+      { nom: 'Voanjobory', unite: 'kg' },
+      { nom: 'Hena kisoa', unite: 'kg' },
+      { nom: 'Tongolo', unite: 'pcs' },
+      { nom: 'Voatabia', unite: 'kg' },
+      { nom: 'Tongolo gasy', unite: 'loha' },
+      { nom: 'Sira', unite: 'g' },
     ]
   },
-  'soupe': {
-    icon: '🍲',
-    name: 'Soupe de légumes',
+  'lasopy': {
+    icon: '🍜',
+    name: 'Lasopy Malagasy',
     items: [
-      { nom: 'Carottes', unite: 'pcs' },
-      { nom: 'Pommes de terre', unite: 'pcs' },
-      { nom: 'Poireaux', unite: 'pcs' },
-      { nom: 'Oignon', unite: 'pcs' },
-      { nom: 'Bouillon cube', unite: 'pcs' },
+      { nom: 'Hena omby', unite: 'g' },
+      { nom: 'Karaoty', unite: 'pcs' },
+      { nom: 'Ovy', unite: 'kg' },
+      { nom: 'Tsaramaso maintso', unite: 'g' },
+      { nom: 'Vermisely', unite: 'paquet' },
+      { nom: 'Tongolo', unite: 'pcs' },
     ]
   },
-  'barbecue': {
-    icon: '🍖',
-    name: 'Barbecue',
+  'trondro': {
+    icon: '🐟',
+    name: 'Trondro sy Voatabia',
     items: [
-      { nom: 'Saucisses', unite: 'pcs' },
-      { nom: 'Merguez', unite: 'pcs' },
-      { nom: 'Côtes de porc', unite: 'kg' },
-      { nom: 'Charbon de bois', unite: 'sac' },
-      { nom: 'Sauce barbecue', unite: 'bouteille' },
+      { nom: 'Trondro vaovao', unite: 'kg' },
+      { nom: 'Voatabia', unite: 'kg' },
+      { nom: 'Tongolo', unite: 'pcs' },
+      { nom: 'Sakamalao', unite: 'g' },
+      { nom: 'Menaka', unite: 'mL' },
     ]
   },
-  'couscous': {
-    icon: '🍲',
-    name: 'Couscous',
+  'tsaramaso': {
+    icon: '🫛',
+    name: 'Tsaramaso sy Hena',
     items: [
-      { nom: 'Semoule couscous', unite: 'g' },
-      { nom: 'Poulet', unite: 'kg' },
-      { nom: 'Merguez', unite: 'pcs' },
-      { nom: 'Carottes', unite: 'pcs' },
-      { nom: 'Courgettes', unite: 'pcs' },
-      { nom: 'Pois chiches', unite: 'boîte' },
-      { nom: 'Harissa', unite: 'tube' },
+      { nom: 'Tsaramaso maina', unite: 'kg' },
+      { nom: 'Hena kisoa', unite: 'kg' },
+      { nom: 'Tongolo', unite: 'pcs' },
+      { nom: 'Voatabia', unite: 'kg' },
+      { nom: 'Sira', unite: 'g' },
     ]
   },
-  'burger': {
-    icon: '🍔',
-    name: 'Burger maison',
+  'kitoza': {
+    icon: '🥓',
+    name: 'Kitoza',
     items: [
-      { nom: 'Pain burger', unite: 'pcs' },
-      { nom: 'Steak haché', unite: 'pcs' },
-      { nom: 'Cheddar', unite: 'tranches' },
-      { nom: 'Salade', unite: 'feuilles' },
-      { nom: 'Tomate', unite: 'pcs' },
-      { nom: 'Ketchup', unite: 'bouteille' },
+      { nom: 'Hena omby', unite: 'kg' },
+      { nom: 'Sira', unite: 'g' },
+      { nom: 'Tongolo gasy', unite: 'loha' },
+      { nom: 'Sakay', unite: 'g' },
     ]
   },
-  'sushi': {
-    icon: '🍣',
-    name: 'Sushi',
+  'makamba': {
+    icon: '🦐',
+    name: 'Makamba sy Voanio',
     items: [
-      { nom: 'Riz à sushi', unite: 'g' },
-      { nom: 'Saumon frais', unite: 'g' },
-      { nom: 'Algues nori', unite: 'feuilles' },
-      { nom: 'Vinaigre de riz', unite: 'mL' },
-      { nom: 'Sauce soja', unite: 'bouteille' },
-      { nom: 'Wasabi', unite: 'tube' },
+      { nom: 'Makamba', unite: 'kg' },
+      { nom: 'Voanio', unite: 'pcs' },
+      { nom: 'Voatabia', unite: 'kg' },
+      { nom: 'Tongolo', unite: 'pcs' },
+      { nom: 'Sakamalao', unite: 'g' },
+      { nom: 'Sakay', unite: 'g' },
     ]
   },
-  'smoothie': {
-    icon: '🥤',
-    name: 'Smoothie',
+  'foza': {
+    icon: '🦀',
+    name: 'Foza sy Voanio',
     items: [
-      { nom: 'Bananes', unite: 'pcs' },
-      { nom: 'Fraises', unite: 'g' },
-      { nom: 'Yaourt', unite: 'pot' },
-      { nom: 'Lait', unite: 'mL' },
-      { nom: 'Miel', unite: 'cuillère' },
+      { nom: 'Foza', unite: 'kg' },
+      { nom: 'Voanio', unite: 'pcs' },
+      { nom: 'Voatabia', unite: 'kg' },
+      { nom: 'Tongolo', unite: 'pcs' },
+      { nom: 'Tongolo gasy', unite: 'loha' },
     ]
   },
-  'petit-déjeuner': {
+  'mofo gasy': {
+    icon: '🥞',
+    name: 'Mofo Gasy',
+    items: [
+      { nom: 'Vary fotsy', unite: 'kapoaka' },
+      { nom: 'Siramamy', unite: 'g' },
+      { nom: 'Voanio', unite: 'pcs' },
+      { nom: 'Menaka', unite: 'mL' },
+    ]
+  },
+  'koba': {
+    icon: '🍌',
+    name: 'Koba Ravina',
+    items: [
+      { nom: 'Lafarina', unite: 'kg' },
+      { nom: 'Akondro', unite: 'takelaka' },
+      { nom: 'Voanjo', unite: 'kg' },
+      { nom: 'Siramamy', unite: 'kg' },
+    ]
+  },
+  'fety': {
+    icon: '🎊',
+    name: 'Fête Malgache',
+    items: [
+      { nom: 'Vary fotsy', unite: 'kg' },
+      { nom: 'Hena omby', unite: 'kg' },
+      { nom: 'Akoho gasy', unite: 'pcs' },
+      { nom: 'Anana', unite: 'fehiny' },
+      { nom: 'Lasary', unite: 'pot' },
+      { nom: 'THB', unite: 'bouteille' },
+      { nom: 'Toaka gasy', unite: 'bouteille' },
+    ]
+  },
+  'petit-dejeuner': {
     icon: '🍳',
     name: 'Petit-déjeuner',
     items: [
-      { nom: 'Pain', unite: 'pcs' },
-      { nom: 'Beurre', unite: 'g' },
-      { nom: 'Confiture', unite: 'pot' },
-      { nom: 'Œufs', unite: 'pcs' },
-      { nom: 'Lait', unite: 'L' },
-      { nom: 'Jus d\'orange', unite: 'L' },
-      { nom: 'Café', unite: 'paquet' },
-    ]
-  },
-  'brunch': {
-    icon: '🥐',
-    name: 'Brunch',
-    items: [
-      { nom: 'Croissants', unite: 'pcs' },
-      { nom: 'Pain de mie', unite: 'paquet' },
-      { nom: 'Œufs', unite: 'pcs' },
-      { nom: 'Bacon', unite: 'paquet' },
-      { nom: 'Avocat', unite: 'pcs' },
-      { nom: 'Saumon fumé', unite: 'paquet' },
-    ]
-  },
-  'anniversaire': {
-    icon: '🎉',
-    name: 'Anniversaire',
-    items: [
-      { nom: 'Gâteau d\'anniversaire', unite: 'pcs' },
-      { nom: 'Bougies', unite: 'paquet' },
-      { nom: 'Bonbons', unite: 'sachets' },
-      { nom: 'Chips', unite: 'paquets' },
-      { nom: 'Boissons gazeuses', unite: 'L' },
-      { nom: 'Ballons', unite: 'paquet' },
-    ]
-  },
-  'pique-nique': {
-    icon: '🧺',
-    name: 'Pique-nique',
-    items: [
-      { nom: 'Sandwichs', unite: 'pcs' },
-      { nom: 'Fruits', unite: 'kg' },
-      { nom: 'Chips', unite: 'paquet' },
-      { nom: 'Fromage', unite: 'g' },
-      { nom: 'Pain', unite: 'pcs' },
-      { nom: 'Eau', unite: 'L' },
-    ]
-  },
-  'apéro': {
-    icon: '🥂',
-    name: 'Apéritif',
-    items: [
-      { nom: 'Chips', unite: 'paquets' },
-      { nom: 'Cacahuètes', unite: 'sachet' },
-      { nom: 'Olives', unite: 'pot' },
-      { nom: 'Saucisson', unite: 'pcs' },
-      { nom: 'Fromage', unite: 'g' },
-      { nom: 'Vin', unite: 'bouteilles' },
-    ]
-  },
-  'goûter': {
-    icon: '🍪',
-    name: 'Goûter',
-    items: [
-      { nom: 'Biscuits', unite: 'paquet' },
-      { nom: 'Chocolat', unite: 'tablette' },
-      { nom: 'Compotes', unite: 'pcs' },
-      { nom: 'Jus de fruits', unite: 'L' },
-    ]
-  },
-  'gouter': {
-    icon: '🍪',
-    name: 'Goûter',
-    items: [
-      { nom: 'Biscuits', unite: 'paquet' },
-      { nom: 'Chocolat', unite: 'tablette' },
-      { nom: 'Compotes', unite: 'pcs' },
-      { nom: 'Jus de fruits', unite: 'L' },
+      { nom: 'Mofo', unite: 'pcs' },
+      { nom: 'Mofo gasy', unite: 'pcs' },
+      { nom: 'Atody', unite: 'pcs' },
+      { nom: 'Kafe', unite: 'g' },
+      { nom: 'Ronono', unite: 'L' },
+      { nom: 'Dibera', unite: 'g' },
+      { nom: 'Siramamy', unite: 'g' },
     ]
   },
 };
 
+// Produits rapides malgaches
 const QUICK_PRODUCTS = [
-  { nom: 'Riz', icon: '🍚', unite: 'kg' },
-  { nom: 'Pain', icon: '🍞', unite: 'pcs' },
-  { nom: 'Lait', icon: '🥛', unite: 'L' },
-  { nom: 'Œufs', icon: '🥚', unite: 'pcs' },
-  { nom: 'Huile', icon: '🫒', unite: 'L' },
-  { nom: 'Sucre', icon: '🍬', unite: 'kg' },
-  { nom: 'Légumes', icon: '🥬', unite: 'kg' },
-  { nom: 'Viande', icon: '🥩', unite: 'kg' },
+  { nom: 'Vary fotsy', icon: '🍚', unite: 'kg' },
+  { nom: 'Mofo', icon: '🍞', unite: 'pcs' },
+  { nom: 'Menaka', icon: '🫒', unite: 'L' },
+  { nom: 'Atody', icon: '🥚', unite: 'pcs' },
+  { nom: 'Hena omby', icon: '🥩', unite: 'kg' },
+  { nom: 'Akoho', icon: '🍗', unite: 'pcs' },
+  { nom: 'Voatabia', icon: '🍅', unite: 'kg' },
+  { nom: 'Tongolo', icon: '🧅', unite: 'kg' },
 ];
+
+// Nom par défaut pour les listes
+const getDefaultListName = (language: string) => {
+  const now = new Date();
+  const dateStr = format(now, 'dd/MM/yyyy', { locale: language === 'en' ? enUS : fr });
+  return language === 'en' ? `Shopping ${dateStr}` : `Courses ${dateStr}`;
+};
 
 export default function AchatDetails() {
   const { activeTheme, getStyles, isDarkMode } = useTheme();
@@ -344,6 +411,7 @@ export default function AchatDetails() {
   const params = useLocalSearchParams<{ id?: string, readOnly?: string, isNew?: string }>();
   const achatId = Number(params.id);
   const isReadOnly = params.readOnly === '1';
+  const isNewList = params.isNew === '1';
 
   const scrollViewRef = useRef<ScrollView>(null);
   const titleInputRef = useRef<TextInput>(null);
@@ -363,20 +431,21 @@ export default function AchatDetails() {
   const [titleError, setTitleError] = useState('');
   const [newItem, setNewItem] = useState('');
   const [isInputFocused, setIsInputFocused] = useState(false);
-  const [historySuggestions, setHistorySuggestions] = useState<SuggestedProduct[]>([]);
+  const [isTitleVoiceActive, setIsTitleVoiceActive] = useState(false);
+  
+  // Suggestions
+  const [allSuggestions, setAllSuggestions] = useState<SuggestedProduct[]>([]);
   const [filteredSuggestions, setFilteredSuggestions] = useState<SuggestedProduct[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  
   const [recipeSuggestion, setRecipeSuggestion] = useState<{ icon: string; name: string; items: { nom: string; unite: string }[] } | null>(null);
   const [showRecipeSuggestion, setShowRecipeSuggestion] = useState(true);
   const [isListening, setIsListening] = useState(false);
   
-  // Modals
-  const [editModal, setEditModal] = useState(false);
-  const [editIdx, setEditIdx] = useState(-1);
-  const [editData, setEditData] = useState({ nom: '', qty: '', prix: '', unite: 'pcs' });
-  
-  const [buyModal, setBuyModal] = useState(false);
-  const [buyIdx, setBuyIdx] = useState(-1);
-  const [buyData, setBuyData] = useState({ nom: '', qty: '1', prix: '', unite: 'pcs', suggestedPrice: 0 });
+  // Modal unifié
+  const [detailModal, setDetailModal] = useState(false);
+  const [modalKey, setModalKey] = useState(0);
+  const [modalData, setModalData] = useState<ModalData | null>(null);
 
   const [deleteModal, setDeleteModal] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<any>(null);
@@ -395,48 +464,68 @@ export default function AchatDetails() {
     ]).start();
   }, []);
 
-  // Handle auto-cleanup on back navigation
+  // Reset suggestions quand on quitte/revient
+  useFocusEffect(
+    useCallback(() => {
+      setShowSuggestions(false);
+      setFilteredSuggestions([]);
+      setRecipeSuggestion(null);
+      setShowRecipeSuggestion(true);
+      
+      return () => {
+        setShowSuggestions(false);
+        setFilteredSuggestions([]);
+        setRecipeSuggestion(null);
+      };
+    }, [])
+  );
+
+  // Focus automatique sur le titre pour nouvelle liste
+  useEffect(() => {
+    if (!loading && isNewList && !isReadOnly && titleInputRef.current) {
+      setTimeout(() => {
+        titleInputRef.current?.focus();
+      }, 500);
+    }
+  }, [loading, isNewList, isReadOnly]);
+
+  // Sauvegarde auto du nom par défaut si vide
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', (e) => {
        if (isReadOnly) return;
        
-       // If list is empty (no items), delete it
-       // This handles the user request: "default should not save if we return" (for empty/new lists)
-       if (lignes.length === 0) {
+       if (lignes.length === 0 && isNewList) {
           try {
-             // We can check if title was modified, but "empty" usually implies "discard" for new lists
-             // If user really wanted an empty list named "My List", they can create it again.
-             // This solves "rectifier tous et le par defaux doit ne enregistrer si on fais retours"
              const db = getDb();
              db.runSync('DELETE FROM Article WHERE idListeAchat = ?', [achatId]);
-             db.runSync('DELETE FROM ListeAchat WHERE id = ?', [achatId]);
+             db.runSync('DELETE FROM ListeAchat WHERE idListe = ?', [achatId]);
+             console.log('[CLEANUP] Empty list deleted');
           } catch (err) { console.error(err); }
        } else {
-          // Explicit save of title only if not empty
-          if (title && title.trim()) {
-             try {
-                getDb().runSync('UPDATE ListeAchat SET nomListe = ? WHERE id = ?', [title.trim(), achatId]);
-             } catch(err) { console.error(err); }
-          }
+          const finalTitle = title.trim() || getDefaultListName(language);
+          try {
+             getDb().runSync('UPDATE ListeAchat SET nomListe = ? WHERE idListe = ?', [finalTitle, achatId]);
+             console.log('[SAVE] Title saved:', finalTitle);
+          } catch(err) { console.error(err); }
        }
     });
     return unsubscribe;
-  }, [navigation, lignes, title, achatId, isReadOnly]);
+  }, [navigation, lignes, title, achatId, isReadOnly, isNewList, language]);
 
   const removeList = () => {
     Alert.alert(
       language === 'en' ? 'Delete List' : 'Supprimer la liste',
       language === 'en' ? 'Are you sure you want to delete this list?' : 'Voulez-vous vraiment supprimer cette liste ?',
       [
-        { text: 'Annuler', style: 'cancel' },
+        { text: language === 'en' ? 'Cancel' : 'Annuler', style: 'cancel' },
         { 
-          text: 'Supprimer', 
+          text: language === 'en' ? 'Delete' : 'Supprimer', 
           style: 'destructive', 
           onPress: () => {
             try {
                 const db = getDb();
                 db.runSync('DELETE FROM Article WHERE idListeAchat = ?', [achatId]);
-                db.runSync('DELETE FROM ListeAchat WHERE id = ?', [achatId]);
+                db.runSync('DELETE FROM ListeAchat WHERE idListe = ?', [achatId]);
                 router.back();
             } catch(e) { console.error(e); }
           }
@@ -447,11 +536,12 @@ export default function AchatDetails() {
 
   const shareList = async () => {
     try {
+        const listName = title.trim() || getDefaultListName(language);
         const itemsList = lignes.map((l: any) => `- ${l.quantite > 0 ? l.quantite + ' ' + (l.unite || '') + ' ' : ''}${l.libelleProduit}`).join('\n');
-        const message = `${title || 'Liste de courses'}\n\n${itemsList}`;
+        const message = `${listName}\n\n${itemsList}`;
         await Share.share({
             message,
-            title: title || 'Liste de courses'
+            title: listName
         });
     } catch (error) {
         console.log(error);
@@ -461,7 +551,7 @@ export default function AchatDetails() {
   useEffect(() => {
     if (!achatId) return;
     loadData();
-    loadHistorySuggestions();
+    loadAllSuggestions();
     if (!isReadOnly) registerForPushNotificationsAsync();
   }, [achatId]);
 
@@ -491,22 +581,63 @@ export default function AchatDetails() {
     }
   }, [title]);
 
-  // Filter suggestions when typing - STABLE (no flickering)
-  useEffect(() => {
-    if (newItem.trim().length >= 2) {
-      const searchTerm = newItem.toLowerCase().trim();
-      const filtered = historySuggestions
-        .filter(s => s.nom.toLowerCase().includes(searchTerm))
-        .slice(0, 5);
-      setFilteredSuggestions(filtered);
-    } else {
-      setFilteredSuggestions([]);
+  // Smart filtering
+  const filterSuggestions = useCallback((searchTerm: string) => {
+    if (searchTerm.trim().length < 1) {
+      const topHistory = allSuggestions
+        .filter(s => s.source === 'history')
+        .slice(0, 6);
+      
+      if (topHistory.length > 0) {
+        setFilteredSuggestions(topHistory);
+        setShowSuggestions(true);
+      } else {
+        const popularDefaults = allSuggestions
+          .filter(s => s.source === 'popular')
+          .slice(0, 6);
+        setFilteredSuggestions(popularDefaults);
+        setShowSuggestions(popularDefaults.length > 0);
+      }
+      return;
     }
-  }, [newItem, historySuggestions]);
 
-  // Voice logic
+    const search = searchTerm.toLowerCase().trim();
+    
+    const historyMatches = allSuggestions
+      .filter(s => s.source === 'history' && s.nom.toLowerCase().includes(search))
+      .slice(0, 3);
+    
+    const popularMatches = MALAGASY_POPULAR_PRODUCTS
+      .filter(p => {
+        const nameMatch = p.nom.toLowerCase().includes(search);
+        const keywordMatch = p.keywords.some(k => k.includes(search) || search.includes(k));
+        const notInList = !lignes.some(l => l.libelleProduit.toLowerCase() === p.nom.toLowerCase());
+        const notInHistory = !historyMatches.some(h => h.nom.toLowerCase() === p.nom.toLowerCase());
+        return (nameMatch || keywordMatch) && notInList && notInHistory;
+      })
+      .slice(0, 4)
+      .map(p => ({ 
+        nom: p.nom, 
+        lastPrice: 0, 
+        count: 0, 
+        unite: p.unite, 
+        source: 'popular' as const 
+      }));
+    
+    const combined = [...historyMatches, ...popularMatches].slice(0, 6);
+    setFilteredSuggestions(combined);
+    setShowSuggestions(combined.length > 0);
+  }, [allSuggestions, lignes]);
+
   useEffect(() => {
-    if (isListening) {
+    if (isInputFocused) {
+      filterSuggestions(newItem);
+    }
+  }, [newItem, isInputFocused, filterSuggestions]);
+
+  // Voice animations
+  useEffect(() => {
+    if (isListening || isTitleVoiceActive) {
       Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, { toValue: 1.2, duration: 500, useNativeDriver: true }),
@@ -516,7 +647,7 @@ export default function AchatDetails() {
     } else {
       pulseAnim.setValue(1);
     }
-  }, [isListening]);
+  }, [isListening, isTitleVoiceActive]);
 
   const toggleListening = () => {
     if (isListening) {
@@ -524,10 +655,32 @@ export default function AchatDetails() {
     } else {
       setIsListening(true);
       Vibration.vibrate(50);
-      // Simulation
       setTimeout(() => {
         setIsListening(false);
-        Alert.alert("Info", language === 'en' ? "Voice recognition requires native module." : "La reconnaissance vocale nécessite un module natif.");
+        Alert.alert(
+          "Info", 
+          language === 'en' 
+            ? "Voice recognition requires native module." 
+            : "La reconnaissance vocale nécessite un module natif."
+        );
+      }, 2000);
+    }
+  };
+
+  const toggleTitleVoice = () => {
+    if (isTitleVoiceActive) {
+      setIsTitleVoiceActive(false);
+    } else {
+      setIsTitleVoiceActive(true);
+      Vibration.vibrate(50);
+      setTimeout(() => {
+        setIsTitleVoiceActive(false);
+        Alert.alert(
+          "Info", 
+          language === 'en' 
+            ? "Voice recognition requires native module." 
+            : "La reconnaissance vocale nécessite un module natif."
+        );
       }, 2000);
     }
   };
@@ -535,33 +688,58 @@ export default function AchatDetails() {
   const loadData = () => {
     try {
       const db = getDb();
-      const result = db.getAllSync('SELECT * FROM ListeAchat WHERE id = ?', [achatId]);
+      const result = db.getAllSync('SELECT * FROM ListeAchat WHERE idListe = ?', [achatId]);
       const a = result[0] as Achat;
       if (!a) return;
       setAchat(a);
-      setTitle(a.nomListe);
-      const items = db.getAllSync('SELECT a.*, p.libelle as libelleProduit FROM Article a JOIN Produit p ON p.id = a.idProduit WHERE a.idListeAchat = ? ORDER BY a.id ASC', [achatId]);
+      
+      const displayTitle = (a.nomListe === 'Nouvelle liste' || a.nomListe === 'New list' || !a.nomListe.trim()) 
+        ? '' 
+        : a.nomListe;
+      setTitle(displayTitle);
+      
+      const items = db.getAllSync('SELECT a.*, p.libelle as libelleProduit FROM Article a JOIN Produit p ON p.idProduit = a.idProduit WHERE a.idListeAchat = ? ORDER BY a.idArticle ASC', [achatId]);
+      
       setLignes(items.map((l: any) => ({ 
         ...l, 
         checked: l.prixUnitaire > 0,
         hasQtyOnly: l.quantite > 0 && l.prixUnitaire === 0
       })));
-    } catch (e) { console.error(e); } finally { setLoading(false); }
+    } catch (e) { console.error('[ACHAT] Error loadData:', e); } finally { setLoading(false); }
   };
 
-  const loadHistorySuggestions = () => {
+  const loadAllSuggestions = () => {
     try {
       const db = getDb();
-      const result = db.getAllSync(`
+      
+      const historyResult = db.getAllSync(`
         SELECT p.libelle as nom, a.prixUnitaire as lastPrice, a.unite, COUNT(*) as count 
         FROM Article a 
-        JOIN Produit p ON p.id = a.idProduit
+        JOIN Produit p ON p.idProduit = a.idProduit
         WHERE a.prixUnitaire > 0 
         GROUP BY LOWER(p.libelle) 
         ORDER BY count DESC 
-        LIMIT 50
+        LIMIT 100
       `);
-      setHistorySuggestions(result as SuggestedProduct[]);
+      
+      const historySuggestions: SuggestedProduct[] = (historyResult as any[]).map(r => ({
+        ...r,
+        source: 'history' as const
+      }));
+      
+      const historyNames = new Set(historySuggestions.map(h => h.nom.toLowerCase()));
+      
+      const popularSuggestions: SuggestedProduct[] = MALAGASY_POPULAR_PRODUCTS
+        .filter(p => !historyNames.has(p.nom.toLowerCase()))
+        .map(p => ({
+          nom: p.nom,
+          lastPrice: 0,
+          count: 0,
+          unite: p.unite,
+          source: 'popular' as const
+        }));
+      
+      setAllSuggestions([...historySuggestions, ...popularSuggestions]);
     } catch (e) { console.error(e); }
   };
 
@@ -594,33 +772,26 @@ export default function AchatDetails() {
   };
 
   const validateTitle = (): boolean => {
-    if (!title.trim()) {
-      setTitleError(language === 'en' ? 'List name is required' : 'Le nom de la liste est obligatoire');
-      shakeTitle();
-      triggerHaptic('medium');
-      titleInputRef.current?.focus();
-      return false;
-    }
     setTitleError('');
     return true;
   };
 
   const saveTitle = () => {
     if (isReadOnly) return;
-    if (!validateTitle() || !achat) return;
-    getDb().runSync('UPDATE ListeAchat SET nomListe = ? WHERE id = ?', [title.trim(), achatId]);
-    setAchat({ ...achat, nomListe: title.trim() });
+    if (!achat) return;
+    
+    const finalTitle = title.trim() || getDefaultListName(language);
+    getDb().runSync('UPDATE ListeAchat SET nomListe = ? WHERE idListe = ?', [finalTitle, achatId]);
+    setAchat({ ...achat, nomListe: finalTitle });
   };
 
   const handleTitleChange = (text: string) => {
     setTitle(text);
-    if (text.trim()) setTitleError('');
+    setTitleError('');
   };
 
-  // Add single item
   const addItem = (productName: string, unite?: string) => {
     if (isReadOnly) return;
-    if (!validateTitle()) return;
     
     const nom = productName.trim();
     if (!nom) return;
@@ -638,9 +809,9 @@ export default function AchatDetails() {
     try {
       const db = getDb();
       let productId;
-      const existing = db.getAllSync<{id: number}>('SELECT id FROM Produit WHERE libelle = ?', [nom]);
+      const existing = db.getAllSync<{idProduit: number}>('SELECT idProduit FROM Produit WHERE libelle = ?', [nom]);
       if (existing && existing.length > 0) {
-          productId = existing[0].id;
+          productId = existing[0].idProduit;
       } else {
           const res = db.runSync('INSERT INTO Produit (libelle, unite) VALUES (?, ?)', [nom, unite || 'pcs']);
           productId = res.lastInsertRowId;
@@ -651,9 +822,10 @@ export default function AchatDetails() {
         [achatId, productId, unite || 'pcs']
       );
       const newLine = { 
-        id: r.lastInsertRowId, 
+        idArticle: r.lastInsertRowId,
+        idProduit: productId,
         libelleProduit: nom, 
-        quantite: 0, 
+        quantite: 0,
         prixUnitaire: 0, 
         prixTotal: 0, 
         unite: unite || 'pcs', 
@@ -662,7 +834,7 @@ export default function AchatDetails() {
       };
       setLignes(prev => [...prev, newLine]);
       setNewItem('');
-      setFilteredSuggestions([]);
+      setShowSuggestions(false);
     } catch(e) { console.error(e); }
   };
 
@@ -672,7 +844,6 @@ export default function AchatDetails() {
 
   const addAllRecipeIngredients = () => {
     if (!recipeSuggestion) return;
-    if (!validateTitle()) return;
     
     let addedCount = 0;
     const db = getDb();
@@ -682,9 +853,9 @@ export default function AchatDetails() {
       if (!exists) {
         try {
           let productId;
-          const existing = db.getAllSync<{id: number}>('SELECT id FROM Produit WHERE libelle = ?', [item.nom]);
+          const existing = db.getAllSync<{idProduit: number}>('SELECT idProduit FROM Produit WHERE libelle = ?', [item.nom]);
           if (existing && existing.length > 0) {
-              productId = existing[0].id;
+              productId = existing[0].idProduit;
           } else {
               const res = db.runSync('INSERT INTO Produit (libelle, unite) VALUES (?, ?)', [item.nom, item.unite]);
               productId = res.lastInsertRowId;
@@ -695,7 +866,8 @@ export default function AchatDetails() {
             [achatId, productId, item.unite]
           );
           const newLine = { 
-            id: r.lastInsertRowId, 
+            idArticle: r.lastInsertRowId,
+            idProduit: productId,
             libelleProduit: item.nom, 
             quantite: 0, 
             prixUnitaire: 0, 
@@ -721,7 +893,7 @@ export default function AchatDetails() {
     }
   };
 
-  const addFromHistorySuggestion = (s: SuggestedProduct) => {
+  const addFromSuggestion = (s: SuggestedProduct) => {
     addItem(s.nom, s.unite);
   };
 
@@ -735,59 +907,57 @@ export default function AchatDetails() {
     }
   };
 
-  const openBuyForItem = (item: any) => {
-    if (isReadOnly) return;
-    const idx = lignes.findIndex(l => l.id === item.id);
-    if (idx === -1) return;
-    const l = lignes[idx];
-    const suggestion = historySuggestions.find(s => s.nom.toLowerCase() === l.libelleProduit.toLowerCase());
-    setBuyIdx(idx);
-    setBuyData({
-      nom: l.libelleProduit,
-      qty: l.quantite > 0 ? String(l.quantite) : '1',
-      prix: l.prixUnitaire > 0 ? String(l.prixUnitaire) : '',
-      unite: l.unite || 'pcs',
-      suggestedPrice: suggestion?.lastPrice || 0,
-    });
-    setBuyModal(true);
-    triggerHaptic('light');
+  const handleInputFocus = () => {
+    setIsInputFocused(true);
+    filterSuggestions(newItem);
   };
 
-  const openEditForItem = (item: any) => {
-    if (isReadOnly) return;
-    const idx = lignes.findIndex(l => l.id === item.id);
-    if (idx === -1) return;
-    const l = lignes[idx];
-    setEditIdx(idx);
-    setEditData({ 
-      nom: l.libelleProduit, 
-      qty: l.quantite > 0 ? String(l.quantite) : '', 
-      prix: l.prixUnitaire > 0 ? String(l.prixUnitaire) : '',
-      unite: l.unite || 'pcs' 
-    });
-    setEditModal(true);
-    triggerHaptic('light');
+  const handleInputBlur = () => {
+    setTimeout(() => {
+      setIsInputFocused(false);
+      setShowSuggestions(false);
+    }, 200);
   };
 
-  const uncheckItem = (item: any) => {
+  const openDetailModal = (item: any, type: 'add' | 'edit') => {
     if (isReadOnly) return;
-    const idx = lignes.findIndex(l => l.id === item.id);
-    if (idx === -1) return;
-    triggerHaptic('light');
-    const l = lignes[idx];
-    getDb().runSync('UPDATE Article SET prixUnitaire=0, prixTotal=0 WHERE id=?', [l.id]);
-    const updatedLignes = [...lignes];
-    updatedLignes[idx] = { ...l, prixUnitaire: 0, prixTotal: 0, checked: false, hasQtyOnly: l.quantite > 0 };
-    setLignes(updatedLignes);
-  };
-
-  const saveEdit = () => {
-    const qty = Number.parseFloat(editData.qty) || 0;
-    const prix = Number.parseFloat(editData.prix) || 0;
-    const nom = editData.nom.trim();
-    const unite = editData.unite.trim() || 'pcs';
     
-    if (!nom) {
+    const suggestion = allSuggestions.find(s => s.nom.toLowerCase() === item.libelleProduit.toLowerCase());
+    
+    setModalKey(prev => prev + 1);
+    
+    const freshData: ModalData = {
+      type: type,
+      itemId: item.idArticle,
+      nom: item.libelleProduit,
+      qty: item.quantite > 0 ? String(item.quantite) : '',
+      prix: item.prixUnitaire > 0 ? String(item.prixUnitaire) : '',
+      unite: item.unite || 'pcs',
+      suggestedPrice: suggestion?.lastPrice || 0,
+    };
+    
+    setModalData(freshData);
+    setDetailModal(true);
+    triggerHaptic('light');
+  };
+
+  const closeDetailModal = () => {
+    setDetailModal(false);
+    setTimeout(() => {
+      setModalData(null);
+    }, 300);
+  };
+
+  const saveDetailModal = () => {
+    if (!modalData) return;
+    
+    const qty = Number.parseFloat(modalData.qty) || 0;
+    const prix = Number.parseFloat(modalData.prix) || 0;
+    const unite = modalData.unite.trim() || 'pcs';
+    const nom = modalData.nom.trim();
+    const total = qty * prix;
+    
+    if (modalData.type === 'edit' && !nom) {
       Alert.alert(
         language === 'en' ? 'Error' : 'Erreur',
         language === 'en' ? 'Product name is required' : 'Le nom du produit est obligatoire'
@@ -795,31 +965,41 @@ export default function AchatDetails() {
       return;
     }
     
-    const total = qty * prix;
-    const l = lignes[editIdx];
+    if (modalData.type === 'add' && qty <= 0) {
+      Alert.alert(
+        language === 'en' ? 'Error' : 'Erreur', 
+        language === 'en' ? 'Please enter a quantity' : 'Veuillez saisir une quantité'
+      );
+      return;
+    }
+    
+    const idx = lignes.findIndex(l => l.idArticle === modalData.itemId);
+    if (idx === -1) return;
+    
+    const l = lignes[idx];
     const db = getDb();
-
+    
     let productId = l.idProduit;
     
-    if (nom !== l.libelleProduit) {
-        const existing = db.getAllSync<{id: number}>('SELECT id FROM Produit WHERE libelle = ?', [nom]);
-        if (existing && existing.length > 0) {
-            productId = existing[0].id;
-        } else {
-            const res = db.runSync('INSERT INTO Produit (libelle, unite) VALUES (?, ?)', [nom, unite]);
-            productId = res.lastInsertRowId;
-        }
+    if (modalData.type === 'edit' && nom !== l.libelleProduit) {
+      const existing = db.getAllSync<{idProduit: number}>('SELECT idProduit FROM Produit WHERE libelle = ?', [nom]);
+      if (existing && existing.length > 0) {
+        productId = existing[0].idProduit;
+      } else {
+        const res = db.runSync('INSERT INTO Produit (libelle, unite) VALUES (?, ?)', [nom, unite]);
+        productId = res.lastInsertRowId;
+      }
     }
-
+    
     db.runSync(
-      'UPDATE Article SET idProduit=?, quantite=?, prixUnitaire=?, prixTotal=?, unite=? WHERE id=?', 
-      [productId, qty, prix, total, unite, l.id]
+      'UPDATE Article SET idProduit=?, quantite=?, prixUnitaire=?, prixTotal=?, unite=? WHERE idArticle=?', 
+      [productId, qty, prix, total, unite, l.idArticle]
     );
-      
+    
     const updatedLignes = [...lignes];
-    updatedLignes[editIdx] = { 
+    updatedLignes[idx] = { 
       ...l, 
-      libelleProduit: nom, 
+      libelleProduit: nom,
       idProduit: productId,
       quantite: qty, 
       prixUnitaire: prix,
@@ -829,47 +1009,26 @@ export default function AchatDetails() {
       hasQtyOnly: qty > 0 && prix === 0
     };
     setLignes(updatedLignes);
-    setEditModal(false);
-    triggerHaptic('light');
-  };
-
-  const saveBuy = () => {
-    const qty = Number.parseFloat(buyData.qty) || 0;
-    const prix = Number.parseFloat(buyData.prix) || 0;
-    const unite = buyData.unite.trim() || 'pcs';
-    const total = qty * prix;
-    const l = lignes[buyIdx];
     
-    if (qty <= 0) {
-      Alert.alert(
-        language === 'en' ? 'Error' : 'Erreur', 
-        language === 'en' ? 'Please enter a quantity' : 'Veuillez renseigner la quantité'
-      );
-      return;
-    }
-    
-    getDb().runSync(
-      'UPDATE Article SET quantite=?, prixUnitaire=?, prixTotal=?, unite=? WHERE id=?', 
-      [qty, prix, total, unite, l.id]
-    );
-    const updatedLignes = [...lignes];
-    updatedLignes[buyIdx] = { 
-      ...l, 
-      quantite: qty, 
-      prixUnitaire: prix, 
-      prixTotal: total, 
-      unite: unite, 
-      checked: prix > 0,
-      hasQtyOnly: qty > 0 && prix === 0
-    };
-    setLignes(updatedLignes);
-    setBuyModal(false);
+    closeDetailModal();
     
     if (prix > 0) {
       playSuccessAnimation();
     } else {
       triggerHaptic('light');
     }
+  };
+
+  const uncheckItem = (item: any) => {
+    if (isReadOnly) return;
+    const idx = lignes.findIndex(l => l.idArticle === item.idArticle);
+    if (idx === -1) return;
+    triggerHaptic('light');
+    const l = lignes[idx];
+    getDb().runSync('UPDATE Article SET prixUnitaire=0, prixTotal=0 WHERE idArticle=?', [l.idArticle]);
+    const updatedLignes = [...lignes];
+    updatedLignes[idx] = { ...l, prixUnitaire: 0, prixTotal: 0, checked: false, hasQtyOnly: l.quantite > 0 };
+    setLignes(updatedLignes);
   };
 
   const askDelete = (item: any) => {
@@ -881,8 +1040,8 @@ export default function AchatDetails() {
 
   const confirmDelete = () => {
     if (!itemToDelete) return;
-    getDb().runSync('DELETE FROM Article WHERE id=?', [itemToDelete.id]);
-    setLignes(lignes.filter(l => l.id !== itemToDelete.id));
+    getDb().runSync('DELETE FROM Article WHERE idArticle=?', [itemToDelete.idArticle]);
+    setLignes(lignes.filter(l => l.idArticle !== itemToDelete.idArticle));
     setDeleteModal(false);
     setItemToDelete(null);
     triggerHaptic('medium');
@@ -897,7 +1056,7 @@ export default function AchatDetails() {
         language === 'en' ? 'Incomplete' : 'Incomplet',
         language === 'en' 
           ? `${itemsNotProcessed.length} item(s) not processed` 
-          : `${itemsNotProcessed.length} article(s) non traités`
+          : `${itemsNotProcessed.length} article(s) non traité(s)`
       );
       return;
     }
@@ -907,8 +1066,6 @@ export default function AchatDetails() {
       setValidateModal(true);
       return;
     }
-    
-    if (!validateTitle()) return;
     
     playSuccessAnimation();
     Alert.alert(
@@ -922,7 +1079,7 @@ export default function AchatDetails() {
     setShowPurchaseDatePicker(Platform.OS === 'ios');
     if (selectedDate) {
       const iso = selectedDate.toISOString();
-      getDb().runSync('UPDATE ListeAchat SET dateAchat=? WHERE id=?', [iso, achatId]);
+      getDb().runSync('UPDATE ListeAchat SET dateAchat=? WHERE idListe=?', [iso, achatId]);
       setAchat({ ...achat, dateAchat: iso });
     }
   };
@@ -975,47 +1132,45 @@ export default function AchatDetails() {
           <View style={{ flex: 1, marginHorizontal: 12 }}>
             {isReadOnly ? (
               <View>
-                <Text style={s.headerTitle}>{title}</Text>
+                <Text style={s.headerTitle}>{title || getDefaultListName(language)}</Text>
                 <Text style={s.headerDate}>
                   {format(new Date(achat.dateAchat), 'EEEE dd MMMM yyyy', { locale: language === 'en' ? enUS : fr })}
                 </Text>
               </View>
             ) : (
               <View>
-                <Animated.View style={{ transform: [{ translateX: shakeAnim }] }}>
+                <Animated.View style={[s.titleRow, { transform: [{ translateX: shakeAnim }] }]}>
                   <TextInput
                     ref={titleInputRef}
                     style={[s.titleInput, titleError ? s.titleInputError : undefined]}
                     value={title}
                     onChangeText={handleTitleChange}
                     onBlur={saveTitle}
-                    placeholder={language === 'en' ? 'List name *' : 'Nom de la liste *'}
-                    placeholderTextColor="rgba(255,255,255,0.5)"
+                    placeholder={language === 'en' ? 'Enter list name...' : 'Nom de la liste...'}
+                    placeholderTextColor="rgba(255,255,255,0.6)"
                     cursorColor="#ffffff"
                     selectionColor="rgba(255,255,255,0.4)"
                   />
                   
-                  {/* Action Buttons Row */}
-                  <View style={{ position: 'absolute', right: 0, top: 5, flexDirection: 'row', alignItems: 'center' }}>
-                     {/* Voice Button */}
-                     <TouchableOpacity 
-                      onPress={() => {
-                          triggerHaptic('medium');
-                          Alert.alert('Info', 'La reconnaissance vocale pour le titre sera disponible prochainement via une mise à jour native.');
-                      }}
-                      style={{ padding: 5, marginRight: 5 }}
-                     >
-                       <Ionicons name="mic-outline" size={20} color="rgba(255,255,255,0.8)" />
-                     </TouchableOpacity>
-                   </View>
-
-                  {titleError ? (
-                    <View style={s.errorContainer}>
-                      <Ionicons name="alert-circle" size={12} color="#FECACA" />
-                      <Text style={s.errorText}>{titleError}</Text>
-                    </View>
-                  ) : null}
+                  {/* Bouton reconnaissance vocale pour le titre */}
+                  <TouchableOpacity onPress={toggleTitleVoice} style={s.titleVoiceBtn}>
+                    <Animated.View style={{ transform: [{ scale: isTitleVoiceActive ? pulseAnim : 1 }] }}>
+                      <Ionicons 
+                        name={isTitleVoiceActive ? "mic" : "mic-outline"} 
+                        size={20} 
+                        color={isTitleVoiceActive ? "#EF4444" : "rgba(255,255,255,0.8)"} 
+                      />
+                    </Animated.View>
+                  </TouchableOpacity>
                 </Animated.View>
+                
+                {titleError ? (
+                  <View style={s.errorContainer}>
+                    <Ionicons name="alert-circle" size={12} color="#FECACA" />
+                    <Text style={s.errorText}>{titleError}</Text>
+                  </View>
+                ) : null}
+                
                 <TouchableOpacity onPress={() => setShowPurchaseDatePicker(true)} style={s.dateButton}>
                   <Ionicons name="calendar-outline" size={12} color="rgba(255,255,255,0.8)" />
                   <Text style={s.headerDate}>
@@ -1047,8 +1202,8 @@ export default function AchatDetails() {
                 <Text style={s.ticketTitle}>{language === 'en' ? 'SUMMARY' : 'RÉSUMÉ'}</Text>
               </View>
               <View style={s.dashedLine} />
-              {lignes.map((item, i) => (
-                <View key={i} style={s.ticketRow}>
+              {lignes.map((item) => (
+                <View key={item.idArticle} style={s.ticketRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={s.ticketItemName}>{item.libelleProduit}</Text>
                     <Text style={s.ticketItemSub}>{item.quantite} {item.unite} × {formatMoney(item.prixUnitaire)}</Text>
@@ -1085,7 +1240,7 @@ export default function AchatDetails() {
                 >
                   <View style={s.summaryRow}>
                     <View>
-                      <Text style={s.summaryLabel}>{language === 'en' ? 'TOTAL' : 'TOTAL'}</Text>
+                      <Text style={s.summaryLabel}>TOTAL</Text>
                       <Text style={s.summaryTotal}>{formatMoney(totalDepense)} <Text style={s.summaryCurrency}>{currency}</Text></Text>
                     </View>
                     <View style={s.summaryRight}>
@@ -1105,7 +1260,7 @@ export default function AchatDetails() {
                 </LinearGradient>
               </View>
 
-              {/* ADD ITEM INPUT - EN HAUT */}
+              {/* ADD ITEM INPUT */}
               <View style={s.addSection}>
                 <Text style={s.addSectionTitle}>
                   {language === 'en' ? 'Add product' : 'Ajouter un produit'}
@@ -1120,8 +1275,8 @@ export default function AchatDetails() {
                     value={newItem} 
                     onChangeText={setNewItem}
                     onSubmitEditing={handleSubmitItem}
-                    onFocus={() => setIsInputFocused(true)}
-                    onBlur={() => setTimeout(() => setIsInputFocused(false), 150)}
+                    onFocus={handleInputFocus}
+                    onBlur={handleInputBlur}
                     returnKeyType="done"
                   />
                   {newItem.trim() ? (
@@ -1137,33 +1292,67 @@ export default function AchatDetails() {
                   )}
                 </View>
                 
-                {/* History Suggestions Dropdown */}
-                {isInputFocused && filteredSuggestions.length > 0 && (
+                {/* SMART SUGGESTIONS DROPDOWN */}
+                {showSuggestions && filteredSuggestions.length > 0 && (
                   <View style={s.suggestionsBox}>
-                    <Text style={s.suggestionsTitle}>{language === 'en' ? 'History' : 'Historique'}</Text>
-                    {filteredSuggestions.map((sug, i) => (
-                      <TouchableOpacity 
-                        key={i} 
-                        style={s.suggestionRow}
-                        onPress={() => addFromHistorySuggestion(sug)}
-                      >
-                        <Ionicons name="time-outline" size={16} color={s.textSec.color} />
-                        <Text style={s.suggestionName}>{sug.nom}</Text>
-                        <Text style={s.suggestionUnit}>{sug.unite}</Text>
-                        <Text style={s.suggestionPrice}>{formatMoney(sug.lastPrice)} {currency}</Text>
-                      </TouchableOpacity>
-                    ))}
+                    <View style={s.suggestionsHeaderRow}>
+                      <Text style={s.suggestionsTitle}>
+                        {newItem.trim() 
+                          ? (language === 'en' ? 'Suggestions' : 'Suggestions')
+                          : (language === 'en' ? 'Your frequent purchases' : 'Vos achats fréquents')
+                        }
+                      </Text>
+                    </View>
+                    {filteredSuggestions.map((sug, sugIdx) => {
+                      const alreadyInList = lignes.some(l => l.libelleProduit.toLowerCase() === sug.nom.toLowerCase());
+                      return (
+                        <TouchableOpacity 
+                          key={`sug-${sug.nom}-${sugIdx}`} 
+                          style={[s.suggestionRow, alreadyInList && s.suggestionRowDisabled]}
+                          onPress={() => !alreadyInList && addFromSuggestion(sug)}
+                          disabled={alreadyInList}
+                        >
+                          <View style={s.suggestionIconBox}>
+                            <Ionicons 
+                              name={sug.source === 'history' ? 'time-outline' : 'storefront-outline'} 
+                              size={16} 
+                              color={alreadyInList ? '#9CA3AF' : (sug.source === 'history' ? activeTheme.primary : '#10B981')} 
+                            />
+                          </View>
+                          <View style={s.suggestionContent}>
+                            <Text style={[s.suggestionName, alreadyInList && s.suggestionNameDisabled]}>
+                              {sug.nom}
+                            </Text>
+                            <Text style={s.suggestionMeta}>
+                              {sug.source === 'history' 
+                                ? (language === 'en' ? `Bought ${sug.count}x` : `Acheté ${sug.count}x`)
+                                : (language === 'en' ? 'Popular' : 'Populaire')
+                              }
+                            </Text>
+                          </View>
+                          <Text style={s.suggestionUnit}>{sug.unite}</Text>
+                          {sug.lastPrice > 0 && (
+                            <Text style={s.suggestionPrice}>{formatMoney(sug.lastPrice)} {currency}</Text>
+                          )}
+                          {alreadyInList ? (
+                            <Ionicons name="checkmark-circle" size={18} color="#10B981" />
+                          ) : (
+                            <Ionicons name="add-circle-outline" size={18} color={activeTheme.primary} />
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
                 )}
                 
                 {/* Quick chips */}
                 {!isInputFocused && !recipeSuggestion && (
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.quickChipsScroll}>
-                    {QUICK_PRODUCTS.map((p, i) => {
+                    {QUICK_PRODUCTS.map((p, pIdx) => {
                       const added = lignes.some(l => l.libelleProduit.toLowerCase() === p.nom.toLowerCase());
                       return (
                         <TouchableOpacity 
-                          key={i} 
+                          key={`quick-${p.nom}-${pIdx}`} 
                           style={[s.quickChip, added && s.quickChipAdded]} 
                           onPress={() => !added && addFromQuickChip(p)}
                           disabled={added}
@@ -1195,11 +1384,11 @@ export default function AchatDetails() {
                   </View>
                   
                   <View style={s.recipeChips}>
-                    {recipeSuggestion.items.map((item, i) => {
+                    {recipeSuggestion.items.map((item, idx) => {
                       const added = lignes.some(l => l.libelleProduit.toLowerCase() === item.nom.toLowerCase());
                       return (
-                        <TouchableOpacity 
-                          key={i}
+                                                <TouchableOpacity 
+                          key={`recipe-${recipeSuggestion.name}-${item.nom}-${idx}`}
                           style={[s.recipeChip, added && s.recipeChipAdded]}
                           onPress={() => !added && addFromRecipeSuggestion(item)}
                           disabled={added}
@@ -1236,21 +1425,22 @@ export default function AchatDetails() {
                   <View style={s.emptyState}>
                     <Ionicons name="basket-outline" size={40} color={s.textSec.color} />
                     <Text style={s.emptyText}>{language === 'en' ? 'No items yet' : 'Aucun article'}</Text>
+                    <Text style={s.emptyHint}>
+                      {language === 'en' 
+                        ? 'Type a product name or select from suggestions' 
+                        : 'Saisissez un nom ou choisissez dans les suggestions'}
+                    </Text>
                   </View>
                 )}
 
-                {unchecked.map((item) => (
+                {unchecked.map((item, unchkIdx) => (
                   <TouchableOpacity 
-                    key={item.id} 
+                    key={`unchecked-${item.idArticle}-${unchkIdx}`} 
                     style={[s.itemCard, item.hasQtyOnly && s.itemCardPending]}
-                    onPress={() => openBuyForItem(item)}
+                    onPress={() => openDetailModal(item, 'add')}
                   >
-                    <View style={[s.itemCheck, { borderColor: item.hasQtyOnly ? '#F59E0B' : activeTheme.primary }]}>
-                      {item.hasQtyOnly ? (
-                        <Ionicons name="time" size={14} color="#F59E0B" />
-                      ) : (
-                        <Ionicons name="add" size={12} color={activeTheme.primary} style={{ opacity: 0.4 }} />
-                      )}
+                    <View style={[s.itemCheck, { borderColor: activeTheme.primary }]}>
+                      <Ionicons name="add" size={12} color={activeTheme.primary} style={{ opacity: 0.4 }} />
                     </View>
                     
                     <View style={s.itemContent}>
@@ -1272,10 +1462,16 @@ export default function AchatDetails() {
                     </View>
 
                     <View style={s.itemActions}>
-                      <TouchableOpacity onPress={(e) => { e.stopPropagation(); openEditForItem(item); }} style={s.actionBtn}>
+                      <TouchableOpacity 
+                        onPress={(e) => { e.stopPropagation(); openDetailModal(item, 'edit'); }} 
+                        style={[s.actionBtn, s.editActionBtn]}
+                      >
                         <Ionicons name="pencil" size={16} color={activeTheme.primary} />
                       </TouchableOpacity>
-                      <TouchableOpacity onPress={(e) => { e.stopPropagation(); askDelete(item); }} style={[s.actionBtn, { backgroundColor: '#FEE2E2' }]}>
+                      <TouchableOpacity 
+                        onPress={(e) => { e.stopPropagation(); askDelete(item); }} 
+                        style={[s.actionBtn, { backgroundColor: '#FEE2E2' }]}
+                      >
                         <Ionicons name="trash-outline" size={16} color="#EF4444" />
                       </TouchableOpacity>
                     </View>
@@ -1294,8 +1490,8 @@ export default function AchatDetails() {
                     <View style={[s.badge, { backgroundColor: '#10B981' }]}><Text style={[s.badgeText, { color: '#fff' }]}>{checked.length}</Text></View>
                   </View>
                   
-                  {checked.map((item) => (
-                    <View key={item.id} style={s.doneCard}>
+                  {checked.map((item, itemIdx) => (
+                    <View key={`checked-${item.idArticle}-${itemIdx}`} style={s.doneCard}>
                       <TouchableOpacity onPress={() => uncheckItem(item)}>
                         <Ionicons name="checkmark-circle" size={26} color="#10B981" />
                       </TouchableOpacity>
@@ -1307,7 +1503,10 @@ export default function AchatDetails() {
                       </View>
                       
                       <View style={s.itemActions}>
-                        <TouchableOpacity onPress={() => openEditForItem(item)} style={s.actionBtn}>
+                        <TouchableOpacity 
+                          onPress={() => openDetailModal(item, 'edit')} 
+                          style={[s.actionBtn, s.editActionBtn]}
+                        >
                           <Ionicons name="pencil" size={16} color={activeTheme.primary} />
                         </TouchableOpacity>
                         <TouchableOpacity onPress={() => askDelete(item)} style={[s.actionBtn, { backgroundColor: '#FEE2E2' }]}>
@@ -1338,116 +1537,144 @@ export default function AchatDetails() {
         isDarkMode={isDarkMode} 
       />
 
-      {/* Edit Modal */}
-      <Modal visible={editModal} transparent animationType="fade">
+      {/* Modal unifié pour ajout/modification */}
+      <Modal visible={detailModal} transparent animationType="fade">
         <View style={s.backdrop}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.modalBox}>
-            <View style={s.modalHeader}>
-              <Ionicons name="create" size={24} color={activeTheme.primary} />
-              <Text style={s.modalTitle}>{language === 'en' ? 'Edit' : 'Modifier'}</Text>
-            </View>
-            
-            <Text style={s.label}>{language === 'en' ? 'Name' : 'Nom'} *</Text>
-            <TextInput style={s.input} value={editData.nom} onChangeText={t => setEditData({...editData, nom: t})} autoFocus />
-            
-            <View style={s.row}>
-              <View style={{ flex: 1 }}>
-                <Text style={s.label}>{language === 'en' ? 'Quantity' : 'Quantité'}</Text>
-                <TextInput style={s.input} keyboardType="numeric" value={editData.qty} onChangeText={t => setEditData({...editData, qty: t})} placeholder="0" placeholderTextColor={s.textSec.color} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.label}>{language === 'en' ? 'Unit' : 'Unité'}</Text>
-                <TextInput style={s.input} value={editData.unite} onChangeText={t => setEditData({...editData, unite: t})} placeholder="pcs" placeholderTextColor={s.textSec.color} />
-              </View>
-            </View>
-            
-            <Text style={s.label}>{language === 'en' ? 'Price' : 'Prix'} ({currency}) <Text style={s.optional}>({language === 'en' ? 'optional' : 'optionnel'})</Text></Text>
-            <TextInput style={s.input} keyboardType="numeric" value={editData.prix} onChangeText={t => setEditData({...editData, prix: t})} placeholder="0" placeholderTextColor={s.textSec.color} />
+            {modalData && (
+              <View key={`modal-content-${modalKey}`}>
+                <View style={[s.modalHeader, modalData.type === 'edit' ? s.modalHeaderEdit : s.modalHeaderAdd]}>
+                  <View style={[
+                    s.modalIconContainer, 
+                    { backgroundColor: modalData.type === 'edit' ? '#3B82F620' : '#10B98120' }
+                  ]}>
+                    <Ionicons 
+                      name={modalData.type === 'edit' ? 'create' : 'add-circle'} 
+                      size={24} 
+                      color={modalData.type === 'edit' ? '#3B82F6' : '#10B981'} 
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.modalTitle}>
+                      {modalData.type === 'edit' 
+                        ? (language === 'en' ? 'Edit item' : 'Modifier l\'article')
+                        : (language === 'en' ? 'Add details' : 'Ajouter les détails')
+                      }
+                    </Text>
+                    <Text style={s.modalSubtitleSmall}>
+                      {modalData.type === 'edit' 
+                        ? (language === 'en' ? 'Change name, quantity, or price' : 'Modifier le nom, la quantité ou le prix')
+                        : (language === 'en' ? 'Enter quantity and optional price' : 'Saisissez la quantité et le prix optionnel')
+                      }
+                    </Text>
+                  </View>
+                </View>
 
-            <View style={s.modalActions}>
-              <TouchableOpacity onPress={() => setEditModal(false)} style={s.cancelBtn}>
-                <Text style={s.cancelBtnText}>{language === 'en' ? 'Cancel' : 'Annuler'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={saveEdit} style={[s.saveBtn, { backgroundColor: activeTheme.primary }]}>
-                <Text style={s.saveBtnText}>{language === 'en' ? 'Save' : 'Enregistrer'}</Text>
-              </TouchableOpacity>
-            </View>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
-
-      {/* Buy Modal */}
-      <Modal visible={buyModal} transparent animationType="fade">
-        <View style={s.backdrop}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.modalBox}>
-            <View style={s.modalHeader}>
-              <Ionicons name="checkbox" size={24} color={activeTheme.primary} />
-              <Text style={s.modalTitle}>{language === 'en' ? 'Item Details' : 'Détails'}</Text>
-            </View>
-            
-            <View style={s.productNameBox}>
-              <Text style={s.productName}>{buyData.nom}</Text>
-            </View>
-            
-            <View style={s.row}>
-              <View style={{ flex: 1 }}>
-                <Text style={s.label}>{language === 'en' ? 'Quantity' : 'Quantité'} *</Text>
-                <TextInput style={s.input} keyboardType="numeric" value={buyData.qty} onChangeText={t => setBuyData({...buyData, qty: t})} autoFocus />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={s.label}>{language === 'en' ? 'Unit' : 'Unité'}</Text>
-                <TextInput style={s.input} value={buyData.unite} onChangeText={t => setBuyData({...buyData, unite: t})} placeholder="pcs" placeholderTextColor={s.textSec.color} />
-              </View>
-            </View>
-            
-            <Text style={s.label}>{language === 'en' ? 'Unit Price' : 'Prix unitaire'} ({currency}) <Text style={s.optional}>({language === 'en' ? 'optional' : 'optionnel'})</Text></Text>
-            <TextInput 
-              style={s.input} 
-              keyboardType="numeric" 
-              value={buyData.prix} 
-              onChangeText={t => setBuyData({...buyData, prix: t})} 
-              placeholder={buyData.suggestedPrice ? `${language === 'en' ? 'Suggested' : 'Suggéré'}: ${formatMoney(buyData.suggestedPrice)}` : '0'} 
-              placeholderTextColor={s.textSec.color} 
-            />
-            
-            {buyData.suggestedPrice > 0 && !buyData.prix && (
-              <TouchableOpacity 
-                onPress={() => setBuyData({...buyData, prix: String(buyData.suggestedPrice)})}
-                style={[s.suggestionBtn, { backgroundColor: activeTheme.primary + '15' }]}
-              >
-                <Ionicons name="flash" size={16} color={activeTheme.primary} />
-                <Text style={[s.suggestionBtnText, { color: activeTheme.primary }]}>
-                  {language === 'en' ? 'Use' : 'Utiliser'}: {formatMoney(buyData.suggestedPrice)} {currency}
+                {/* Nom du produit */}
+                {modalData.type === 'add' ? (
+                  <View style={s.productNameBox}>
+                    <Text style={s.productName}>{modalData.nom}</Text>
+                  </View>
+                ) : (
+                  <>
+                    <Text style={s.label}>{language === 'en' ? 'Name' : 'Nom'} *</Text>
+                    <TextInput 
+                      style={s.input} 
+                      value={modalData.nom} 
+                      onChangeText={t => setModalData({...modalData, nom: t})} 
+                    />
+                  </>
+                )}
+                
+                <View style={s.row}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.label}>{language === 'en' ? 'Quantity' : 'Quantité'} *</Text>
+                    <TextInput 
+                      style={s.input} 
+                      keyboardType="numeric" 
+                      value={modalData.qty} 
+                      onChangeText={t => setModalData({...modalData, qty: t})} 
+                      placeholder={language === 'en' ? 'Enter qty' : 'Saisir qté'}
+                      placeholderTextColor={s.textSec.color}
+                      autoFocus={modalData.type === 'add'}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.label}>{language === 'en' ? 'Unit' : 'Unité'}</Text>
+                    <TextInput 
+                      style={s.input} 
+                      value={modalData.unite} 
+                      onChangeText={t => setModalData({...modalData, unite: t})} 
+                      placeholder="pcs" 
+                      placeholderTextColor={s.textSec.color} 
+                    />
+                  </View>
+                </View>
+                
+                <Text style={s.label}>
+                  {language === 'en' ? 'Unit Price' : 'Prix unitaire'} ({currency}) 
+                  <Text style={s.optional}> ({language === 'en' ? 'optional' : 'optionnel'})</Text>
                 </Text>
-              </TouchableOpacity>
-            )}
-            
-            {buyData.prix && Number(buyData.prix) > 0 && (
-              <View style={s.totalPreview}>
-                <Text style={s.totalPreviewLabel}>Total</Text>
-                <Text style={[s.totalPreviewValue, { color: activeTheme.primary }]}>
-                  {formatMoney((Number(buyData.qty) || 0) * (Number(buyData.prix) || 0))} {currency}
-                </Text>
+                <TextInput 
+                  style={s.input} 
+                  keyboardType="numeric" 
+                  value={modalData.prix} 
+                  onChangeText={t => setModalData({...modalData, prix: t})} 
+                  placeholder={modalData.suggestedPrice ? `${language === 'en' ? 'Suggested' : 'Suggéré'}: ${formatMoney(modalData.suggestedPrice)}` : '0'} 
+                  placeholderTextColor={s.textSec.color} 
+                />
+                
+                {modalData.suggestedPrice > 0 && !modalData.prix && (
+                  <TouchableOpacity 
+                    onPress={() => setModalData({...modalData, prix: String(modalData.suggestedPrice)})}
+                    style={[s.suggestionBtn, { backgroundColor: activeTheme.primary + '15' }]}
+                  >
+                    <Ionicons name="flash" size={16} color={activeTheme.primary} />
+                    <Text style={[s.suggestionBtnText, { color: activeTheme.primary }]}>
+                      {language === 'en' ? 'Use' : 'Utiliser'}: {formatMoney(modalData.suggestedPrice)} {currency}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                
+                {modalData.prix && Number(modalData.prix) > 0 && (
+                  <View style={s.totalPreview}>
+                    <Text style={s.totalPreviewLabel}>Total</Text>
+                    <Text style={[s.totalPreviewValue, { color: activeTheme.primary }]}>
+                      {formatMoney((Number(modalData.qty) || 0) * (Number(modalData.prix) || 0))} {currency}
+                    </Text>
+                  </View>
+                )}
+                
+                <View style={s.infoBox}>
+                  <Ionicons name="information-circle-outline" size={16} color={s.textSec.color} />
+                  <Text style={s.infoText}>
+                    {language === 'en' 
+                      ? 'Price is optional. Required to finalize list.' 
+                      : 'Le prix est optionnel. Requis pour finaliser la liste.'}
+                  </Text>
+                </View>
+
+                <View style={s.modalActions}>
+                  <TouchableOpacity onPress={closeDetailModal} style={s.cancelBtn}>
+                    <Text style={s.cancelBtnText}>{language === 'en' ? 'Cancel' : 'Annuler'}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    onPress={saveDetailModal} 
+                    style={[
+                      s.saveBtn, 
+                      { backgroundColor: modalData.type === 'edit' ? '#3B82F6' : activeTheme.primary }
+                    ]}
+                  >
+                    <Text style={s.saveBtnText}>
+                      {modalData.type === 'edit' 
+                        ? (language === 'en' ? 'Update' : 'Modifier')
+                        : (language === 'en' ? 'Save' : 'Enregistrer')
+                      }
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             )}
-            
-            <View style={s.infoBox}>
-              <Ionicons name="information-circle-outline" size={16} color={s.textSec.color} />
-              <Text style={s.infoText}>
-                {language === 'en' 
-                  ? 'Price is optional. Required to finalize list.' 
-                  : 'Le prix est optionnel. Requis pour finaliser la liste.'}
-              </Text>
-            </View>
-
-            <View style={s.modalActions}>
-              <TouchableOpacity onPress={() => setBuyModal(false)} style={s.cancelBtn}>
-                <Text style={s.cancelBtnText}>{language === 'en' ? 'Cancel' : 'Annuler'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={saveBuy} style={[s.saveBtn, { backgroundColor: activeTheme.primary }]}>
-                <Text style={s.saveBtnText}>{language === 'en' ? 'Save' : 'Enregistrer'}</Text>
-              </TouchableOpacity>
-            </View>
           </KeyboardAvoidingView>
         </View>
       </Modal>
@@ -1465,11 +1692,11 @@ export default function AchatDetails() {
             </Text>
             
             <View style={s.validateList}>
-              {itemsWithoutPrice.map((item, i) => (
+              {itemsWithoutPrice.map((item, vIdx) => (
                 <TouchableOpacity 
-                  key={i} 
+                  key={`validate-${item.idArticle}-${vIdx}`} 
                   style={s.validateItem}
-                  onPress={() => { setValidateModal(false); setTimeout(() => openBuyForItem(item), 200); }}
+                  onPress={() => { setValidateModal(false); setTimeout(() => openDetailModal(item, 'add'), 200); }}
                 >
                   <Ionicons name="alert-circle" size={18} color="#D97706" />
                   <Text style={s.validateItemText}>{item.libelleProduit}</Text>
@@ -1503,8 +1730,25 @@ const styles = (c: any) => StyleSheet.create({
   backBtn: { padding: 10, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 12 },
   validateBtn: { padding: 10, borderRadius: 12 },
   headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
-  titleInput: { fontSize: 20, fontWeight: 'bold', color: '#fff', borderBottomWidth: 2, borderBottomColor: 'rgba(255,255,255,0.3)', paddingVertical: 4 },
+  
+  titleRow: { flexDirection: 'row', alignItems: 'center' },
+  titleInput: { 
+    flex: 1,
+    fontSize: 20, 
+    fontWeight: 'bold', 
+    color: '#fff', 
+    borderBottomWidth: 2, 
+    borderBottomColor: 'rgba(255,255,255,0.3)', 
+    paddingVertical: 4 
+  },
   titleInputError: { borderBottomColor: '#FECACA' },
+  titleVoiceBtn: { 
+    padding: 8, 
+    marginLeft: 8, 
+    backgroundColor: 'rgba(255,255,255,0.15)', 
+    borderRadius: 10 
+  },
+  
   errorContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
   errorText: { color: '#FECACA', fontSize: 11, marginLeft: 4 },
   dateButton: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
@@ -1512,7 +1756,6 @@ const styles = (c: any) => StyleSheet.create({
   
   contentContainer: { flex: 1, marginTop: -25, borderTopLeftRadius: 25, borderTopRightRadius: 25, backgroundColor: c.bg },
   
-  // Summary
   summaryCard: { borderRadius: 16, padding: 16 },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   summaryLabel: { color: 'rgba(255,255,255,0.8)', fontSize: 11, fontWeight: '600' },
@@ -1526,29 +1769,31 @@ const styles = (c: any) => StyleSheet.create({
   pendingBadge: { flexDirection: 'row', alignItems: 'center', marginTop: 10, backgroundColor: 'rgba(0,0,0,0.15)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, alignSelf: 'flex-start' },
   pendingText: { color: '#FCD34D', fontSize: 11, marginLeft: 4 },
   
-  // Add Section
   addSection: { paddingHorizontal: 20, marginTop: 20 },
   addSectionTitle: { fontSize: 13, fontWeight: '600', color: c.textSec, marginBottom: 10 },
   addInputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.card, borderRadius: 12, borderWidth: 1.5, paddingHorizontal: 12, paddingVertical: 10 },
   addInput: { flex: 1, fontSize: 16, color: c.text, marginLeft: 10 },
   addBtn: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   
-  // Suggestions
-  suggestionsBox: { backgroundColor: c.card, borderRadius: 12, marginTop: 8, padding: 12, borderWidth: 1, borderColor: c.border },
-  suggestionsTitle: { fontSize: 11, color: c.textSec, marginBottom: 8, fontWeight: '600' },
+  suggestionsBox: { backgroundColor: c.card, borderRadius: 12, marginTop: 8, padding: 12, borderWidth: 1, borderColor: c.border, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
+  suggestionsHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  suggestionsTitle: { fontSize: 12, color: c.textSec, fontWeight: '600' },
   suggestionRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.border },
-  suggestionName: { flex: 1, fontSize: 14, color: c.text, marginLeft: 8 },
-  suggestionUnit: { fontSize: 12, color: c.textSec, marginRight: 10 },
-  suggestionPrice: { fontSize: 12, color: c.primary, fontWeight: '600' },
+  suggestionRowDisabled: { opacity: 0.5 },
+  suggestionIconBox: { width: 28, height: 28, borderRadius: 8, backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  suggestionContent: { flex: 1 },
+  suggestionName: { fontSize: 14, fontWeight: '500', color: c.text },
+  suggestionNameDisabled: { color: c.textSec },
+  suggestionMeta: { fontSize: 11, color: c.textSec, marginTop: 1 },
+  suggestionUnit: { fontSize: 12, color: c.textSec, marginHorizontal: 8, backgroundColor: c.bg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  suggestionPrice: { fontSize: 12, color: c.primary, fontWeight: '600', marginRight: 8 },
   
-  // Quick chips
   quickChipsScroll: { marginTop: 12 },
   quickChip: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 12, backgroundColor: c.card, borderRadius: 20, marginRight: 8, borderWidth: 1, borderColor: c.border },
   quickChipAdded: { borderColor: '#10B98150', backgroundColor: '#10B98110' },
   quickChipEmoji: { fontSize: 16 },
   quickChipText: { fontSize: 13, color: c.text, marginLeft: 6, marginRight: 4 },
   
-  // Recipe card
   recipeCard: { marginHorizontal: 20, marginTop: 16, backgroundColor: c.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: c.border },
   recipeHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   recipeEmoji: { fontSize: 28, marginRight: 12 },
@@ -1561,7 +1806,6 @@ const styles = (c: any) => StyleSheet.create({
   addAllBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 14, paddingVertical: 10, borderRadius: 10, gap: 6 },
   addAllBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   
-  // Section
   section: { paddingHorizontal: 20, marginTop: 20 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   sectionIcon: { width: 28, height: 28, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginRight: 8 },
@@ -1570,12 +1814,12 @@ const styles = (c: any) => StyleSheet.create({
   badgeText: { fontSize: 11, fontWeight: '700', color: c.textSec },
   
   emptyState: { alignItems: 'center', paddingVertical: 30, backgroundColor: c.card, borderRadius: 14 },
-  emptyText: { color: c.textSec, marginTop: 10 },
+  emptyText: { color: c.textSec, marginTop: 10, fontSize: 15, fontWeight: '500' },
+  emptyHint: { color: c.textSec, marginTop: 4, fontSize: 12, textAlign: 'center', paddingHorizontal: 20 },
   
-  // Item card
   itemCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.card, padding: 14, borderRadius: 14, marginBottom: 10, borderWidth: 1, borderColor: c.border },
-  itemCardPending: { borderColor: '#F59E0B40' },
-  itemCheck: { width: 26, height: 26, borderRadius: 8, borderWidth: 2, justifyContent: 'center',alignItems: 'center' },
+  itemCardPending: { borderColor: '#F59E0B40', backgroundColor: '#FEF3C710' },
+  itemCheck: { width: 26, height: 26, borderRadius: 8, borderWidth: 2, justifyContent: 'center', alignItems: 'center' },
   itemContent: { flex: 1, marginLeft: 12 },
   itemName: { fontSize: 16, fontWeight: '600', color: c.text },
   itemHint: { fontSize: 12, color: c.textSec, marginTop: 2 },
@@ -1584,15 +1828,14 @@ const styles = (c: any) => StyleSheet.create({
   itemTagText: { fontSize: 11, fontWeight: '600' },
   itemActions: { flexDirection: 'row', gap: 6 },
   actionBtn: { width: 32, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center', backgroundColor: c.bg },
+  editActionBtn: { backgroundColor: c.primary + '15', borderWidth: 1, borderColor: c.primary + '30' },
   
-  // Done card
   doneCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.card, padding: 14, borderRadius: 14, marginBottom: 10, borderWidth: 1, borderColor: '#10B98130' },
   doneContent: { flex: 1, marginLeft: 12 },
   doneName: { fontSize: 16, fontWeight: '600', color: c.text },
   doneDetails: { fontSize: 12, color: c.textSec, marginTop: 2 },
   doneTotal: { fontSize: 15, fontWeight: '700', marginTop: 2 },
   
-  // Ticket (read only)
   ticketCard: { backgroundColor: c.card, borderRadius: 16, padding: 20 },
   ticketHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
   ticketTitle: { fontSize: 16, fontWeight: '700', color: c.text },
@@ -1605,18 +1848,21 @@ const styles = (c: any) => StyleSheet.create({
   ticketTotalLabel: { fontSize: 16, fontWeight: '700', color: c.text },
   ticketTotalValue: { fontSize: 22, fontWeight: '800' },
   
-  // Modal
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 20 },
   modalBox: { backgroundColor: c.modal, borderRadius: 20, padding: 20 },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: c.border },
+  modalHeaderAdd: { borderBottomColor: '#10B98130' },
+  modalHeaderEdit: { borderBottomColor: '#3B82F630' },
+  modalIconContainer: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   modalIconBig: { width: 60, height: 60, borderRadius: 16, justifyContent: 'center', alignItems: 'center', alignSelf: 'center', marginBottom: 12 },
   modalTitle: { fontSize: 18, fontWeight: '700', color: c.text },
   modalSubtitle: { fontSize: 14, color: c.textSec, textAlign: 'center', marginBottom: 16 },
+  modalSubtitleSmall: { fontSize: 12, color: c.textSec, marginTop: 2 },
   label: { fontSize: 12, color: c.textSec, marginBottom: 6, marginTop: 12, fontWeight: '600' },
   optional: { fontWeight: '400', fontStyle: 'italic' },
   input: { backgroundColor: c.input, padding: 14, borderRadius: 12, color: c.text, fontSize: 16, borderWidth: 1, borderColor: c.border },
   row: { flexDirection: 'row', gap: 12 },
-  productNameBox: { backgroundColor: c.input, padding: 14, borderRadius: 12, marginBottom: 8 },
+  productNameBox: { backgroundColor: c.input, padding: 14, borderRadius: 12, marginBottom: 8, borderWidth: 1, borderColor: c.border },
   productName: { fontSize: 16, fontWeight: '600', color: c.text, textAlign: 'center' },
   suggestionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 10, borderRadius: 10, marginTop: 8, gap: 6 },
   suggestionBtnText: { fontSize: 13, fontWeight: '600' },
@@ -1631,12 +1877,10 @@ const styles = (c: any) => StyleSheet.create({
   saveBtn: { flex: 1, padding: 14, borderRadius: 12, alignItems: 'center' },
   saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   
-  // Validate modal
   validateList: { backgroundColor: c.input, borderRadius: 12, marginBottom: 16 },
   validateItem: { flexDirection: 'row', alignItems: 'center', padding: 14, borderBottomWidth: 1, borderBottomColor: c.border, gap: 10 },
   validateItemText: { flex: 1, fontSize: 14, fontWeight: '500', color: c.text },
   
-  // Helpers
   text: { color: c.text },
   textSec: { color: c.textSec },
 });

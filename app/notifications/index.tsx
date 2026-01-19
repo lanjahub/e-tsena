@@ -20,7 +20,6 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
 import { useTheme } from '../../src/context/ThemeContext';
-import { useSettings } from '../../src/context/SettingsContext';
 import { getDb } from '../../src/db/init';
 import {
   getRappels,
@@ -28,7 +27,6 @@ import {
   marquerCommeLu,
   marquerToutCommeLu,
   supprimerRappel,
-  getUnreadCount,
   RappelItem,
 } from '../../src/services/notificationService';
 
@@ -36,7 +34,6 @@ export default function NotificationsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { activeTheme, getStyles, isDarkMode } = useTheme();
-  const { currency } = useSettings();
   const s = getStyles(styles);
 
   const [rappels, setRappels] = useState<RappelItem[]>([]);
@@ -61,7 +58,7 @@ export default function NotificationsScreen() {
       // Charger les achats pour le modal
       const db = getDb();
       const achatsList = db.getAllSync(`
-        SELECT id, nomListe FROM Achat 
+        SELECT idListe as id, nomListe FROM ListeAchat 
         WHERE statut = 0 OR statut IS NULL
         ORDER BY dateAchat DESC LIMIT 10
       `);
@@ -85,14 +82,29 @@ export default function NotificationsScreen() {
     setTimeout(() => setRefreshing(false), 800);
   };
 
-  // Cliquer sur un rappel
+  // Cliquer sur un rappel - Navigation améliorée
   const handlePress = (item: RappelItem) => {
-    marquerCommeLu(item.id);
+    marquerCommeLu(item.idRappel);
     setRappels((prev) =>
-      prev.map((r) => (r.id === item.id ? { ...r, lu: 1 } : r))
+      prev.map((r) => (r.idRappel === item.idRappel ? { ...r, lu: 1 } : r))
     );
-    if (item.achatId) {
-      router.push(`/achat/${item.achatId}`);
+    
+    // Navigation vers la liste d'achat avec animation
+    if (item.achatId || item.idListeAchat) {
+      const listeId = item.achatId || item.idListeAchat;
+      console.log(`📱 Navigation vers liste ${listeId}`);
+      
+      // Utiliser replace pour éviter l'empilement dans la stack
+      router.push({
+        pathname: `/achat/[id]`,
+        params: { id: listeId, fromNotif: 'true' }
+      });
+    } else {
+      Alert.alert(
+        'Liste introuvable',
+        'Cette liste d\'achat n\'existe plus ou a été supprimée.',
+        [{ text: 'OK', onPress: () => loadData() }]
+      );
     }
   };
 
@@ -107,8 +119,8 @@ export default function NotificationsScreen() {
           text: 'Supprimer',
           style: 'destructive',
           onPress: () => {
-            supprimerRappel(item.id);
-            setRappels((prev) => prev.filter((r) => r.id !== item.id));
+            supprimerRappel(item.idRappel);
+            setRappels((prev) => prev.filter((r) => r.idRappel !== item.idRappel));
           },
         },
       ]
@@ -319,7 +331,7 @@ export default function NotificationsScreen() {
                 <>
                   <SectionHeader title="📅 Aujourd'hui" count={todayRappels.length} />
                   {todayRappels.map((item) => (
-                    <View key={item.id}>{renderItem({ item })}</View>
+                    <View key={item.idRappel}>{renderItem({ item })}</View>
                   ))}
                 </>
               )}
@@ -328,7 +340,7 @@ export default function NotificationsScreen() {
                 <>
                   <SectionHeader title="📆 Demain" count={tomorrowRappels.length} />
                   {tomorrowRappels.map((item) => (
-                    <View key={item.id}>{renderItem({ item })}</View>
+                    <View key={item.idRappel}>{renderItem({ item })}</View>
                   ))}
                 </>
               )}
@@ -337,7 +349,7 @@ export default function NotificationsScreen() {
                 <>
                   <SectionHeader title="📋 À venir" count={futureRappels.length} />
                   {futureRappels.map((item) => (
-                    <View key={item.id}>{renderItem({ item })}</View>
+                    <View key={item.idRappel}>{renderItem({ item })}</View>
                   ))}
                 </>
               )}
@@ -346,7 +358,7 @@ export default function NotificationsScreen() {
                 <>
                   <SectionHeader title="⏰ Passés" count={pastRappels.length} />
                   {pastRappels.map((item) => (
-                    <View key={item.id}>{renderItem({ item })}</View>
+                    <View key={item.idRappel}>{renderItem({ item })}</View>
                   ))}
                 </>
               )}

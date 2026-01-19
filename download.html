@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E-tsena - Télécharger l'APK</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 600px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            animation: slideUp 0.5s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .logo {
+            width: 100px;
+            height: 100px;
+            margin: 0 auto 20px;
+            animation: bounce 2s ease-in-out infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        h1 {
+            color: #7C3AED;
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .status {
+            display: inline-block;
+            background: #10B981;
+            color: white;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .download-section {
+            margin: 30px 0;
+            text-align: center;
+        }
+
+        .download-btn {
+            display: inline-block;
+            background: linear-gradient(135deg, #7C3AED 0%, #A855F7 100%);
+            color: white;
+            padding: 20px 40px;
+            border-radius: 15px;
+            text-decoration: none;
+            font-size: 20px;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 10px 30px rgba(124, 58, 237, 0.3);
+        }
+
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 40px rgba(124, 58, 237, 0.4);
+        }
+
+        .download-icon {
+            margin-right: 10px;
+            font-size: 24px;
+        }
+
+        .steps {
+            margin-top: 40px;
+        }
+
+        .steps h2 {
+            color: #1E293B;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        .step {
+            display: flex;
+            align-items: start;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8fafc;
+            border-radius: 10px;
+            transition: transform 0.2s;
+        }
+
+        .step:hover {
+            transform: translateX(5px);
+        }
+
+        .step-number {
+            background: linear-gradient(135deg, #7C3AED 0%, #A855F7 100%);
+            color: white;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+
+        .step-content {
+            flex: 1;
+        }
+
+        .step-title {
+            font-weight: 600;
+            color: #1E293B;
+            margin-bottom: 5px;
+        }
+
+        .step-desc {
+            color: #64748b;
+            font-size: 14px;
+        }
+
+        .info-box {
+            background: #EEF2FF;
+            border-left: 4px solid #7C3AED;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+
+        .info-box h3 {
+            color: #7C3AED;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+
+        .info-box p {
+            color: #475569;
+            line-height: 1.6;
+        }
+
+        .build-info {
+            background: #f8fafc;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 30px;
+        }
+
+        .build-info h3 {
+            color: #1E293B;
+            margin-bottom: 15px;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            color: #64748b;
+            font-weight: 600;
+        }
+
+        .info-value {
+            color: #1E293B;
+            font-family: monospace;
+        }
+
+        .links {
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 2px solid #e2e8f0;
+            text-align: center;
+        }
+
+        .link-btn {
+            display: inline-block;
+            color: #7C3AED;
+            text-decoration: none;
+            padding: 10px 20px;
+            border: 2px solid #7C3AED;
+            border-radius: 10px;
+            margin: 5px;
+            transition: all 0.2s;
+        }
+
+        .link-btn:hover {
+            background: #7C3AED;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <svg class="logo" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#7C3AED;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#A855F7;stop-opacity:1" />
+                    </linearGradient>
+                </defs>
+                <path d="M11 12 Q11 3 20 3 Q29 3 29 12" fill="none" stroke="url(#grad)" stroke-width="2.5" stroke-linecap="round"/>
+                <path d="M6 12 L34 12 L31 34 Q30 38 26 38 L14 38 Q10 38 9 34 Z" fill="url(#grad)"/>
+                <path d="M8 14 L32 14 L31 18 Q20 12 9 18 Z" fill="#fff" opacity="0.3"/>
+                <circle cx="15" cy="41" r="2.5" fill="url(#grad)"/>
+                <circle cx="25" cy="41" r="2.5" fill="url(#grad)"/>
+            </svg>
+            <h1>E-tsena</h1>
+            <div class="status">✅ APK Prêt !</div>
+        </div>
+
+        <div class="download-section">
+            <a href="https://expo.dev/artifacts/eas/voYJdsnkJ6CpVeyx7ZCCCs.apk" class="download-btn">
+                <span class="download-icon">📥</span>
+                Télécharger l'APK
+            </a>
+        </div>
+
+        <div class="info-box">
+            <h3>🎨 Splash Screen Inclus</h3>
+            <p>Cette version inclut le nouveau splash screen avec fond blanc et logo violet centré avec animation fluide.</p>
+        </div>
+
+        <div class="steps">
+            <h2>📱 Guide d'installation</h2>
+            
+            <div class="step">
+                <div class="step-number">1</div>
+                <div class="step-content">
+                    <div class="step-title">Télécharger l'APK</div>
+                    <div class="step-desc">Cliquez sur le bouton ci-dessus pour télécharger le fichier .apk</div>
+                </div>
+            </div>
+
+            <div class="step">
+                <div class="step-number">2</div>
+                <div class="step-content">
+                    <div class="step-title">Transférer sur Android</div>
+                    <div class="step-desc">Envoyez le fichier sur votre téléphone (USB, email, cloud, etc.)</div>
+                </div>
+            </div>
+
+            <div class="step">
+                <div class="step-number">3</div>
+                <div class="step-content">
+                    <div class="step-title">Autoriser les sources inconnues</div>
+                    <div class="step-desc">Paramètres → Sécurité → Autoriser l'installation d'apps tierces</div>
+                </div>
+            </div>
+
+            <div class="step">
+                <div class="step-number">4</div>
+                <div class="step-content">
+                    <div class="step-title">Installer l'application</div>
+                    <div class="step-desc">Ouvrez le fichier .apk avec un gestionnaire de fichiers</div>
+                </div>
+            </div>
+
+            <div class="step">
+                <div class="step-number">5</div>
+                <div class="step-content">
+                    <div class="step-title">Profiter ! ✨</div>
+                    <div class="step-desc">Lancez E-tsena et admirez votre splash screen violet</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="build-info">
+            <h3>ℹ️ Informations du Build</h3>
+            <div class="info-row">
+                <span class="info-label">Build ID :</span>
+                <span class="info-value">ee0e5806-c681</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Version :</span>
+                <span class="info-value">1.0.0</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">SDK :</span>
+                <span class="info-value">54.0.0</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Date :</span>
+                <span class="info-value">12/01/2026</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Durée build :</span>
+                <span class="info-value">37 minutes</span>
+            </div>
+        </div>
+
+        <div class="links">
+            <a href="https://expo.dev/accounts/lanjaprincy/projects/e-tsena/builds/ee0e5806-c681-4824-8999-c0d9a9c46602" target="_blank" class="link-btn">
+                📋 Voir les détails
+            </a>
+            <a href="splash-preview.html" class="link-btn">
+                🎨 Voir le splash screen
+            </a>
+        </div>
+    </div>
+</body>
+</html>

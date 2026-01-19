@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E-tsena - Prévisualisation du Splash Screen</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f0f0f0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #7C3AED;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+
+        .preview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        .preview-card {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .preview-card h2 {
+            color: #1E293B;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        .phone-frame {
+            width: 100%;
+            max-width: 300px;
+            aspect-ratio: 9/19.5;
+            background: #FFFFFF;
+            border-radius: 40px;
+            padding: 15px;
+            margin: 0 auto;
+            box-shadow: 0 0 0 12px #1E293B, 0 20px 40px rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .phone-notch {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 150px;
+            height: 30px;
+            background: #1E293B;
+            border-radius: 0 0 20px 20px;
+        }
+
+        .splash-content {
+            width: 100%;
+            height: 100%;
+            background: #FFFFFF;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 1s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .logo-container {
+            animation: bounce 2s ease-in-out infinite;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0) scale(1); }
+            50% { transform: translateY(-10px) scale(1.05); }
+        }
+
+        .logo {
+            width: 120px;
+            height: 120px;
+        }
+
+        .app-name {
+            margin-top: 30px;
+            color: #7C3AED;
+            font-size: 32px;
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+
+        .color-palette {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .color-swatch {
+            text-align: center;
+        }
+
+        .color-box {
+            width: 80px;
+            height: 80px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .color-label {
+            font-size: 12px;
+            color: #64748b;
+            font-weight: 600;
+        }
+
+        .specs {
+            background: #f8fafc;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+
+        .specs h3 {
+            color: #7C3AED;
+            margin-bottom: 15px;
+        }
+
+        .spec-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .spec-item:last-child {
+            border-bottom: none;
+        }
+
+        .spec-label {
+            color: #64748b;
+            font-weight: 600;
+        }
+
+        .spec-value {
+            color: #1E293B;
+            font-family: monospace;
+        }
+
+        .status-banner {
+            background: linear-gradient(135deg, #7C3AED 0%, #A855F7 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .build-link {
+            background: white;
+            color: #7C3AED;
+            padding: 10px 20px;
+            border-radius: 8px;
+            text-decoration: none;
+            display: inline-block;
+            margin-top: 10px;
+            font-weight: 600;
+            transition: transform 0.2s;
+        }
+
+        .build-link:hover {
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 E-tsena - Prévisualisation du Splash Screen</h1>
+        
+        <div class="status-banner">
+            ✅ Splash Screen créé • 📱 Build en cours
+            <br>
+            <a href="https://expo.dev/accounts/lanjaprincy/projects/e-tsena/builds" class="build-link" target="_blank">
+                Suivre le build →
+            </a>
+        </div>
+
+        <div class="preview-grid">
+            <!-- Preview du splash screen -->
+            <div class="preview-card">
+                <h2>📱 Splash Screen</h2>
+                <div class="phone-frame">
+                    <div class="phone-notch"></div>
+                    <div class="splash-content">
+                        <div class="logo-container">
+                            <svg class="logo" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <defs>
+                                    <linearGradient id="cartGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" style="stop-color:#7C3AED;stop-opacity:1" />
+                                        <stop offset="100%" style="stop-color:#A855F7;stop-opacity:1" />
+                                    </linearGradient>
+                                </defs>
+                                <path d="M11 12 Q11 3 20 3 Q29 3 29 12" fill="none" stroke="url(#cartGrad)" stroke-width="2.5" stroke-linecap="round"/>
+                                <path d="M6 12 L34 12 L31 34 Q30 38 26 38 L14 38 Q10 38 9 34 Z" fill="url(#cartGrad)"/>
+                                <path d="M8 14 L32 14 L31 18 Q20 12 9 18 Z" fill="#fff" opacity="0.3"/>
+                                <circle cx="15" cy="41" r="2.5" fill="url(#cartGrad)"/>
+                                <circle cx="25" cy="41" r="2.5" fill="url(#cartGrad)"/>
+                            </svg>
+                        </div>
+                        <div class="app-name">E-tsena</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Palette de couleurs -->
+            <div class="preview-card">
+                <h2>🎨 Palette de couleurs</h2>
+                <div class="color-palette">
+                    <div class="color-swatch">
+                        <div class="color-box" style="background: #FFFFFF; border: 2px solid #e2e8f0;"></div>
+                        <div class="color-label">Fond</div>
+                        <div class="spec-value">#FFFFFF</div>
+                    </div>
+                    <div class="color-swatch">
+                        <div class="color-box" style="background: linear-gradient(135deg, #7C3AED 0%, #A855F7 100%);"></div>
+                        <div class="color-label">Logo</div>
+                        <div class="spec-value">#7C3AED</div>
+                    </div>
+                </div>
+                
+                <div class="specs">
+                    <h3>Spécifications</h3>
+                    <div class="spec-item">
+                        <span class="spec-label">Fond :</span>
+                        <span class="spec-value">#FFFFFF</span>
+                    </div>
+                    <div class="spec-item">
+                        <span class="spec-label">Logo primaire :</span>
+                        <span class="spec-value">#7C3AED</span>
+                    </div>
+                    <div class="spec-item">
+                        <span class="spec-label">Logo secondaire :</span>
+                        <span class="spec-value">#A855F7</span>
+                    </div>
+                    <div class="spec-item">
+                        <span class="spec-label">Mode d'affichage :</span>
+                        <span class="spec-value">contain</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dimensions des assets -->
+            <div class="preview-card">
+                <h2>📏 Dimensions des assets</h2>
+                <div class="specs">
+                    <h3>Images générées</h3>
+                    <div class="spec-item">
+                        <span class="spec-label">icon.png</span>
+                        <span class="spec-value">1024×1024</span>
+                    </div>
+                    <div class="spec-item">
+                        <span class="spec-label">splash.png</span>
+                        <span class="spec-value">1284×2778</span>
+                    </div>
+                    <div class="spec-item">
+                        <span class="spec-label">adaptive-icon.png</span>
+                        <span class="spec-value">1024×1024</span>
+                    </div>
+                    <div class="spec-item">
+                        <span class="spec-label">notification-icon.png</span>
+                        <span class="spec-value">96×96</span>
+                    </div>
+                </div>
+                
+                <div class="specs" style="margin-top: 15px;">
+                    <h3>Formats</h3>
+                    <div class="spec-item">
+                        <span class="spec-label">Type :</span>
+                        <span class="spec-value">PNG</span>
+                    </div>
+                    <div class="spec-item">
+                        <span class="spec-label">Source :</span>
+                        <span class="spec-value">SVG</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
