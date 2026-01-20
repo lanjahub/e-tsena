@@ -4,7 +4,9 @@ let dbInstance: SQLite.SQLiteDatabase | null = null;
 
 export const getDb = () => {
   if (!dbInstance) {
+    console.log('📂 Ouverture de la base de données etsena.db...');
     dbInstance = SQLite.openDatabaseSync('etsena.db');
+    console.log('✅ Base de données ouverte');
   }
   return dbInstance;
 };
@@ -109,9 +111,14 @@ const migrateDatabase = (db: SQLite.SQLiteDatabase) => {
     if (tableExists(db, 'Article')) {
       const hasOldId = columnExists(db, 'Article', 'id') && !columnExists(db, 'Article', 'idArticle');
       const hasOldFK = columnExists(db, 'Article', 'idAchat');
+      const hasIdArticle = columnExists(db, 'Article', 'idArticle');
+      const hasIdListeAchat = columnExists(db, 'Article', 'idListeAchat');
       const hasLibelle = columnExists(db, 'Article', 'libelleProduit');
       
-      if (hasOldId || hasOldFK || hasLibelle) {
+      // Migration nécessaire UNIQUEMENT si les anciennes colonnes existent
+      const needsMigration = hasOldId || hasOldFK;
+      
+      if (needsMigration) {
         console.log('📝 Migration: Article (id->idArticle, idAchat->idListeAchat, normalisation)');
         
         // Créer les produits manquants si la colonne libelleProduit existe
@@ -183,6 +190,8 @@ const migrateDatabase = (db: SQLite.SQLiteDatabase) => {
         db.execSync('DROP TABLE Article');
         db.execSync('ALTER TABLE Article_new RENAME TO Article');
         console.log('✅ Migration Article réussie');
+      } else {
+        console.log('⏭️  Table Article déjà au bon format, migration ignorée');
       }
     }
   } catch (e) {
@@ -272,8 +281,19 @@ export const initDatabase = () => {
   console.log('🚀 Initialisation de la base de données...');
   const db = getDb();
   
+  // Configuration pour assurer la persistance
   db.execSync('PRAGMA journal_mode = WAL;');
+  db.execSync('PRAGMA synchronous = NORMAL;');
+  db.execSync('PRAGMA temp_store = MEMORY;');
+  db.execSync('PRAGMA mmap_size = 268435456;'); // 256MB mmap
+  
+  // Vérifier le mode journal actuel
+  const journalMode = db.getFirstSync<{ journal_mode: string }>('PRAGMA journal_mode');
+  console.log(`📋 Mode journal: ${journalMode?.journal_mode}`);
 
+  // Vérifier si les tables existent avant de faire les migrations
+  console.log('🔍 Vérification des tables existantes...');
+  
   db.execSync(`
     CREATE TABLE IF NOT EXISTS Produit (
       idProduit INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -315,6 +335,16 @@ export const initDatabase = () => {
   `);
   
   console.log('✅ Tables créées (ou existantes)');
+  
+  // Vérifier les données existantes AVANT la migration
+  try {
+    const existingListeCount = db.getFirstSync<{ count: number }>('SELECT COUNT(*) as count FROM ListeAchat');
+    const existingArticleCount = db.getFirstSync<{ count: number }>('SELECT COUNT(*) as count FROM Article'); 
+    const existingProduitCount = db.getFirstSync<{ count: number }>('SELECT COUNT(*) as count FROM Produit');
+    console.log(`📊 Données existantes - Listes: ${existingListeCount?.count || 0}, Articles: ${existingArticleCount?.count || 0}, Produits: ${existingProduitCount?.count || 0}`);
+  } catch (e) {
+    console.warn('⚠️ Erreur vérification données existantes:', e);
+  }
   
   migrateDatabase(db);
   

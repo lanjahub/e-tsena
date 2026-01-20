@@ -8,7 +8,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { format, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear } from 'date-fns';
+import { 
+  format, 
+  startOfMonth, 
+  endOfMonth, 
+  subMonths, 
+  startOfYear, 
+  endOfYear,
+  startOfDay,  // ✅ Ajouté
+  endOfDay     // ✅ Ajouté
+} from 'date-fns';
 import formatMoney from '../src/utils/formatMoney';
 import { fr, enUS } from 'date-fns/locale';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -67,101 +76,113 @@ export default function AnalyseProduit() {
   const [viewMode, setViewMode] = useState<'transactions' | 'summary'>('transactions');
 
   const [sortBy, setSortBy] = useState<'alpha' | 'amount' | 'qty'>('amount');
+  const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => { loadProduits(); }, []);
   useEffect(() => { handleAnalyze(); }, [selectedProduit, dateDebut, dateFin]);
-  useEffect(() => { setCurrentPage(1); }, [sortBy, selectedProduit, dateDebut, dateFin]);
+  useEffect(() => { setCurrentPage(1); }, [sortBy, sortOrder, selectedProduit, dateDebut, dateFin]);
 
   const loadProduits = () => {
     try {
+      console.log('🔄 [ANALYSE] Chargement des produits...');
       const db = getDb();
+      
+      // Charger depuis la table Produit avec les articles associés
       const result = db.getAllSync(`
-        SELECT DISTINCT libelleProduit as libelle
-        FROM Article
-        WHERE libelleProduit IS NOT NULL AND libelleProduit != ''
-        ORDER BY libelleProduit ASC
+        SELECT DISTINCT p.idProduit, p.libelle
+        FROM Produit p
+        INNER JOIN Article a ON a.idProduit = p.idProduit
+        ORDER BY p.libelle ASC
       `);
+      
+      console.log(`📊 [ANALYSE] ${result.length} produits chargés:`, result);
+      
       const allOption = { idProduit: -1, libelle: 'Tous les produits' };
-      setProduits([allOption, ...result.map((p: any, i: number) => ({ idProduit: i + 1, libelle: p.libelle }))]);
+      setProduits([allOption, ...result as Produit[]]);
     } catch (e) {
-      console.error(e);
+      console.error('❌ [ANALYSE] Erreur chargement produits:', e);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAnalyze = () => {
-    try {
-      const db = getDb();
-      const startStr = dateDebut.toISOString();
-      const endStr = dateFin.toISOString();
+ // Dans handleAnalyze(), remplacez les requêtes par celles-ci:
 
-      if (selectedProduit === -1) {
-        // Résumé : tous les produits
-        setViewMode('summary');
-        const result = db.getAllSync(`
-          SELECT 
-            l.libelleProduit,
-            SUM(l.quantite) as totalQte,
-            SUM(l.prixTotal) as totalPrix,
-            MAX(l.unite) as unite,
-            COUNT(*) as nbAchats
-          FROM Article l
-          JOIN ListeAchat a ON a.idListe = l.idListeAchat
-          WHERE a.dateAchat BETWEEN ? AND ?
-            AND l.libelleProduit IS NOT NULL 
-            AND l.libelleProduit != ''
-          GROUP BY l.libelleProduit
-          ORDER BY totalPrix DESC
-        `, [startStr, endStr] as any[]);
+const handleAnalyze = () => {
+  try {
+    const db = getDb();
+    const startDate = format(dateDebut, 'yyyy-MM-dd');
+    const endDate = format(dateFin, 'yyyy-MM-dd');
 
-        setPeriodSummary(result);
-        setTotalProduitAnalyse(
-          result.reduce((sum: number, item: any) => sum + (item.totalPrix || 0), 0)
-        );
-        // nombre de types différents (Farine = 1 type)
-        setTotalQuantite(result.length);
-        setUnitePrincipale('Types');
-      } else {
-        // Détail : un produit spécifique
-        setViewMode('transactions');
-        const nomProduit = produits.find(p => p.idProduit === selectedProduit)?.libelle || '';
-        if (!nomProduit) return;
+    console.log(`🔍 Analyse de ${startDate} à ${endDate}`);
 
-        const result = db.getAllSync(`
-          SELECT 
-            la.idArticle as idTransaction,
-            a.dateAchat, 
-            a.nomListe,
-            la.libelleProduit as produit,
-            la.quantite, 
-            la.prixUnitaire,
-            la.prixTotal, 
-            la.unite
-          FROM ListeAchat a
-          JOIN Article la ON a.idListe = la.idListeAchat
-          WHERE la.libelleProduit = ?
-            AND a.dateAchat BETWEEN ? AND ?
-          ORDER BY a.dateAchat DESC
-        `, [nomProduit, startStr, endStr] as any[]);
+    if (selectedProduit === -1) {
+      // Résumé : tous les produits
+      setViewMode('summary');
+      const result = db.getAllSync(`
+        SELECT 
+          p.libelle as libelleProduit,
+          SUM(a.quantite) as totalQte,
+          SUM(a.prixTotal) as totalPrix,
+          MAX(a.unite) as unite,
+          COUNT(*) as nbAchats
+        FROM Article a
+        JOIN ListeAchat l ON l.idListe = a.idListeAchat
+        JOIN Produit p ON p.idProduit = a.idProduit
+        WHERE (date(l.dateAchat) BETWEEN ? AND ?)
+           OR (substr(l.dateAchat, 1, 10) BETWEEN ? AND ?)
+        GROUP BY p.idProduit, p.libelle
+        ORDER BY totalPrix DESC
+      `, [startDate, endDate, startDate, endDate]);
 
-        const trans = result as Transaction[];
-        setTransactions(trans);
-        setTotalProduitAnalyse(
-          trans.reduce((sum, t) => sum + (t.prixTotal || 0), 0)
-        );
-        // nombre d’achats de ce produit
-        setTotalQuantite(trans.length);
-        setUnitePrincipale('Achats');
-      }
+      console.log(`📊 Résultat: ${result.length} produits trouvés`);
+      setPeriodSummary(result);
+      setTotalProduitAnalyse(
+        result.reduce((sum: number, item: any) => sum + (item.totalPrix || 0), 0)
+      );
+      setTotalQuantite(result.length);
+      setUnitePrincipale('Types');
+    } else {
+      // Détail : un produit spécifique
+      setViewMode('transactions');
+      const nomProduit = produits.find(p => p.idProduit === selectedProduit)?.libelle || '';
+      if (!nomProduit) return;
 
-      setShowResults(true);
-    } catch (e) {
-      console.error(e);
+      const result = db.getAllSync(`
+        SELECT 
+          a.idArticle as idTransaction,
+          l.dateAchat, 
+          l.nomListe,
+          p.libelle as produit,
+          a.quantite, 
+          a.prixUnitaire,
+          a.prixTotal, 
+          a.unite
+        FROM ListeAchat l
+        JOIN Article a ON l.idListe = a.idListeAchat
+        JOIN Produit p ON p.idProduit = a.idProduit
+        WHERE p.libelle = ?
+          AND ((date(l.dateAchat) BETWEEN ? AND ?)
+            OR (substr(l.dateAchat, 1, 10) BETWEEN ? AND ?))
+        ORDER BY l.dateAchat DESC
+      `, [nomProduit, startDate, endDate, startDate, endDate]);
+
+      console.log(`📊 Transactions: ${result.length} trouvées pour ${nomProduit}`);
+      const trans = result as Transaction[];
+      setTransactions(trans);
+      setTotalProduitAnalyse(
+        trans.reduce((sum, t) => sum + (t.prixTotal || 0), 0)
+      );
+      setTotalQuantite(trans.length);
+      setUnitePrincipale('Achats');
     }
-  };
 
+    setShowResults(true);
+  } catch (e) {
+    console.error('Erreur analyse:', e);
+  }
+};
   const applyFilter = (type: 'current_month' | 'last_month' | 'year') => {
     const now = new Date();
     setActiveFilter(type);
@@ -178,24 +199,31 @@ export default function AnalyseProduit() {
     }
   };
 
+  const toggleSortOrder = () => {
+    setSortOrder(sortOrder === 'ASC' ? 'DESC' : 'ASC');
+  };
+
   const getProcessedData = () => {
     let data = viewMode === 'summary' ? [...periodSummary] : [...transactions];
 
     data.sort((a: any, b: any) => {
+      let compareResult = 0;
+      
       if (sortBy === 'alpha') {
         const nameA = viewMode === 'summary' ? a.libelleProduit : a.nomListe;
         const nameB = viewMode === 'summary' ? b.libelleProduit : b.nomListe;
-        return nameA.localeCompare(nameB);
+        compareResult = (nameA || '').localeCompare(nameB || '');
       } else if (sortBy === 'amount') {
         const amountA = viewMode === 'summary' ? a.totalPrix : a.prixTotal;
         const amountB = viewMode === 'summary' ? b.totalPrix : b.prixTotal;
-        return (amountB || 0) - (amountA || 0);
+        compareResult = (amountB || 0) - (amountA || 0);
       } else if (sortBy === 'qty') {
         const qtyA = viewMode === 'summary' ? a.totalQte : a.quantite;
         const qtyB = viewMode === 'summary' ? b.totalQte : b.quantite;
-        return (qtyB || 0) - (qtyA || 0);
+        compareResult = (qtyB || 0) - (qtyA || 0);
       }
-      return 0;
+
+      return sortOrder === 'ASC' ? compareResult : -compareResult;
     });
 
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -213,7 +241,7 @@ export default function AnalyseProduit() {
       return (
         <View style={s.emptyBox}>
           <Ionicons name="cube-outline" size={40} color={colors.textSec} />
-          <Text style={{ color: colors.textSec, marginTop: 10 }}>aucun produit</Text>
+          <Text style={{ color: colors.textSec, marginTop: 10 }}>Aucun produit trouvé</Text>
         </View>
       );
     }
@@ -227,7 +255,6 @@ export default function AnalyseProduit() {
 
       const price = isSummary ? item.totalPrix : item.prixTotal;
 
-      // Détail affiché : quantité * PU
       let detailText = '';
       if (isSummary) {
         const totalQte = Math.round(item.totalQte || 0);
@@ -238,7 +265,7 @@ export default function AnalyseProduit() {
       }
 
       return (
-        <View key={`transaction-${item.idTransaction || item.dateAchat}-${idx}`} style={s.transactionItem}>
+        <View key={`transaction-${item.idTransaction || item.libelleProduit}-${idx}`} style={s.transactionItem}>
           <View style={s.transLeft}>
             <View style={[s.dateBadge, { backgroundColor: isDarkMode ? '#334155' : '#F3F4F6' }]}>
               {isSummary ? (
@@ -247,8 +274,8 @@ export default function AnalyseProduit() {
                 <Text style={s.dateDay}>{format(new Date(item.dateAchat), 'dd')}</Text>
               )}
             </View>
-            <View>
-              <Text style={s.transPrice}>{title}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={s.transTitle} numberOfLines={1}>{title}</Text>
               <Text style={s.transDetail}>{detailText}</Text>
             </View>
           </View>
@@ -315,7 +342,6 @@ export default function AnalyseProduit() {
 
       const { uri: tempUri } = await Print.printToFileAsync({ html: htmlContent });
 
-      // 🟢 Sécurisation : vérifier la présence de StorageAccessFramework
       const saf: any = (FileSystem as any).StorageAccessFramework;
 
       if (Platform.OS === 'android' && saf?.requestDirectoryPermissionsAsync) {
@@ -338,10 +364,8 @@ export default function AnalyseProduit() {
           Alert.alert('Succès', 'Fichier PDF enregistré dans le dossier choisi.');
           return;
         }
-        // Permission refusée -> fallback partage
         await Sharing.shareAsync(tempUri, { UTI: '.pdf', mimeType: 'application/pdf' });
       } else {
-        // iOS ou Android sans SAF -> partage (inclut "Enregistrer dans les fichiers")
         await Sharing.shareAsync(tempUri, { UTI: '.pdf', mimeType: 'application/pdf' });
       }
     } catch (e) {
@@ -447,7 +471,7 @@ export default function AnalyseProduit() {
         {/* Résultats */}
         {showResults && (
           <View style={{ marginTop: 10 }}>
-            {/* Bouton PDF amélioré - Plus visible */}
+            {/* Bouton PDF */}
             <TouchableOpacity 
               style={[s.pdfExportCard, { backgroundColor: activeTheme.primary }]}
               onPress={savePdfFile}
@@ -458,7 +482,7 @@ export default function AnalyseProduit() {
                   <Ionicons name="document-text-outline" size={24} color="#fff" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={s.pdfExportTitle}>📄 Exporter en PDF</Text>
+                  <Text style={s.pdfExportTitle}> Exporter en PDF</Text>
                   <Text style={s.pdfExportSub}>Télécharger le rapport d'analyse</Text>
                 </View>
                 <View style={[s.pdfArrowIcon, { backgroundColor: 'rgba(255,255,255,0.3)' }]}>
@@ -480,24 +504,24 @@ export default function AnalyseProduit() {
                 end={{ x: 1, y: 1 }}
               >
                 <View style={s.statIconCircle}>
-                  <Ionicons name="layers" size={18} color="#10B981" />
+                  <Ionicons name="layers" size={20} color="#fff" />
                 </View>
-                <Text style={s.statLabelWhite}>Quantité ({unitePrincipale})</Text>
+                <Text style={s.statLabelWhite}>QUANTITÉ ({unitePrincipale.toUpperCase()})</Text>
                 <Text style={s.statValueWhite}>{totalQuantite}</Text>
               </LinearGradient>
 
               <LinearGradient
-                colors={activeTheme.gradient as any}
+                colors={[activeTheme.primary, activeTheme.secondary]}
                 style={s.statCard}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
               >
                 <View style={s.statIconCircle}>
-                  <Ionicons name="wallet" size={18} color={activeTheme.primary} />
+                  <Ionicons name="wallet" size={20} color="#fff" />
                 </View>
-                <Text style={s.statLabelWhite}>Totals</Text>
+                <Text style={s.statLabelWhite}>TOTAL</Text>
                 <Text style={s.statValueWhite} numberOfLines={1} adjustsFontSizeToFit>
-                  {formatMoney(totalProduitAnalyse)}
+                  {formatMoney(totalProduitAnalyse)} {currency}
                 </Text>
               </LinearGradient>
             </View>
@@ -507,7 +531,10 @@ export default function AnalyseProduit() {
               <Text style={s.sortLabel}>Trier par :</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <TouchableOpacity
-                  onPress={() => setSortBy('amount')}
+                  onPress={() => {
+                    if (sortBy === 'amount') toggleSortOrder();
+                    else setSortBy('amount');
+                  }}
                   style={[s.sortChip, sortBy === 'amount' && s.sortChipActive]}
                 >
                   <Text
@@ -516,11 +543,14 @@ export default function AnalyseProduit() {
                       sortBy === 'amount' ? s.sortChipTextActive : { color: colors.textSec },
                     ]}
                   >
-                    Montant ▼
+                    Montant {sortBy === 'amount' && (sortOrder === 'ASC' ? '↑' : '↓')}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={() => setSortBy('qty')}
+                  onPress={() => {
+                    if (sortBy === 'qty') toggleSortOrder();
+                    else setSortBy('qty');
+                  }}
                   style={[s.sortChip, sortBy === 'qty' && s.sortChipActive]}
                 >
                   <Text
@@ -529,11 +559,14 @@ export default function AnalyseProduit() {
                       sortBy === 'qty' ? s.sortChipTextActive : { color: colors.textSec },
                     ]}
                   >
-                    Qté ▼
+                    Qté {sortBy === 'qty' && (sortOrder === 'ASC' ? '↑' : '↓')}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={() => setSortBy('alpha')}
+                  onPress={() => {
+                    if (sortBy === 'alpha') toggleSortOrder();
+                    else setSortBy('alpha');
+                  }}
                   style={[s.sortChip, sortBy === 'alpha' && s.sortChipActive]}
                 >
                   <Text
@@ -542,7 +575,7 @@ export default function AnalyseProduit() {
                       sortBy === 'alpha' ? s.sortChipTextActive : { color: colors.textSec },
                     ]}
                   >
-                    A - Z
+                    A - Z {sortBy === 'alpha' && (sortOrder === 'ASC' ? '↑' : '↓')}
                   </Text>
                 </TouchableOpacity>
               </ScrollView>
@@ -717,10 +750,6 @@ const getStyles = (theme: any, dark: boolean) => {
     resultHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, marginTop: 10 },
     resultTitle: { fontWeight: 'bold', fontSize: 18, color: colors.text },
 
-    pdfBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#EF4444', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20 },
-    pdfBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 11 },
-
-    // Nouveau style pour le bouton PDF amélioré
     pdfExportCard: {
       marginBottom: 20,
       padding: 18,
@@ -757,24 +786,58 @@ const getStyles = (theme: any, dark: boolean) => {
       alignItems: 'center',
     },
 
-    statsContainer: { flexDirection: 'row', gap: 10, marginBottom: 20 },
-    statCard: { flex: 1, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center', elevation: 2 },
-    statIconCircle: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
-    statLabelWhite: { color: 'rgba(255,255,255,0.9)', fontSize: 10, fontWeight: '600', textTransform: 'uppercase' },
-    statValueWhite: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginTop: 2 },
+    statsContainer: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+    statCard: { 
+      flex: 1, 
+      borderRadius: 16, 
+      paddingVertical: 16, 
+      paddingHorizontal: 14, 
+      alignItems: 'center', 
+      justifyContent: 'center', 
+      elevation: 4,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.2,
+      shadowRadius: 6,
+      minHeight: 100
+    },
+    statIconCircle: { 
+      width: 36, 
+      height: 36, 
+      borderRadius: 18, 
+      backgroundColor: 'rgba(255,255,255,0.2)', 
+      justifyContent: 'center', 
+      alignItems: 'center', 
+      marginBottom: 8 
+    },
+    statLabelWhite: { 
+      color: '#fff', 
+      fontSize: 11, 
+      fontWeight: '700', 
+      textTransform: 'uppercase',
+      marginBottom: 4,
+      textAlign: 'center'
+    },
+    statValueWhite: { 
+      color: '#fff', 
+      fontSize: 20, 
+      fontWeight: '800', 
+      textAlign: 'center'
+    },
 
     sortBar: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
     sortLabel: { fontSize: 12, color: colors.textSec, marginRight: 10 },
-    sortChip: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 15, backgroundColor: colors.input, marginRight: 8, borderWidth: 1, borderColor: colors.border },
+    sortChip: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 15, backgroundColor: colors.input, marginRight: 8, borderWidth: 1, borderColor: colors.border },
     sortChipActive: { backgroundColor: colors.primary + '20', borderColor: colors.primary },
     sortChipText: { fontSize: 11, color: colors.textSec },
     sortChipTextActive: { color: colors.primary, fontWeight: 'bold' },
 
     listContainer: { backgroundColor: colors.card, borderRadius: 16, overflow: 'hidden' },
     transactionItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: 1, borderColor: colors.border },
-    transLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    transLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
     dateBadge: { width: 38, height: 38, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
     dateDay: { fontSize: 14, fontWeight: 'bold', color: colors.text },
+    transTitle: { fontSize: 14, fontWeight: '600', color: colors.text },
     transPrice: { fontSize: 14, fontWeight: '700', color: colors.text },
     transDetail: { fontSize: 12, color: colors.textSec },
     emptyBox: { alignItems: 'center', padding: 30 },

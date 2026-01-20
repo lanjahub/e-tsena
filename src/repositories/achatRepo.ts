@@ -32,6 +32,11 @@ export const AchatRepo = {
       `INSERT INTO ListeAchat(nomListe, dateAchat, montantTotal, notes, statut) VALUES(?,?,?,?,?)`,
       [a.nomListe, a.dateAchat, a.montantTotal ?? 0, a.notes ?? null, a.statut ?? 0]
     );
+    
+    // Forcer l'écriture sur disque
+    db.execSync('PRAGMA wal_checkpoint(FULL)');
+    
+    console.log(`💾 Liste d'achat créée avec ID: ${res?.lastInsertRowId}`);
     return (res?.lastInsertRowId as number) ?? 0;
   },
 
@@ -81,6 +86,11 @@ export const AchatRepo = {
       ) WHERE idListe = ?`,
       [l.idListeAchat, l.idListeAchat]
     );
+    
+    // Forcer l'écriture sur disque
+    db.execSync('PRAGMA wal_checkpoint(FULL)');
+    
+    console.log(`💾 Article ajouté à la liste ${l.idListeAchat}`);
   },
 
   // Alias pour compatibilité si nécessaire, mais on préfère addArticle

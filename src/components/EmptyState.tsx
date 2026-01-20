@@ -1,87 +1,52 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '@constants/colors';
+import { useTheme } from '../context/ThemeContext';
 
-interface EmptyStateProps {
-  icon: string;
+interface Props {
   title: string;
-  message: string;
-  actionText?: string;
-  onAction?: () => void;
+  message?: string;
+  icon?: string;
 }
 
-export const EmptyState: React.FC<EmptyStateProps> = ({ 
-  icon, 
-  title, 
-  message, 
-  actionText, 
-  onAction 
-}) => {
+export function EmptyState({ title, message, icon = 'folder-open-outline' }: Props) {
+  const { isDarkMode, activeTheme } = useTheme();
+
   return (
     <View style={styles.container}>
-      <View style={styles.iconContainer}>
-        <Ionicons name={icon as any} size={48} color={COLORS.textLight} />
-      </View>
-      
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.message}>{message}</Text>
-      
-      {actionText && onAction && (
-        <TouchableOpacity style={styles.actionButton} onPress={onAction}>
-          <Ionicons name="add" size={20} color="white" style={styles.actionIcon} />
-          <Text style={styles.actionText}>{actionText}</Text>
-        </TouchableOpacity>
+      <Ionicons 
+        name={icon as any} 
+        size={48} 
+        color={isDarkMode ? '#475569' : '#CBD5E1'} 
+      />
+      <Text style={[styles.title, { color: isDarkMode ? '#94A3B8' : '#64748B' }]}>
+        {title}
+      </Text>
+      {message && (
+        <Text style={[styles.message, { color: isDarkMode ? '#64748B' : '#94A3B8' }]}>
+          {message}
+        </Text>
       )}
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    padding: 40,
-  },
-  iconContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: COLORS.surfaceVariant,
     justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
+    paddingVertical: 40,
+    paddingHorizontal: 20,
   },
   title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: COLORS.text,
-    marginBottom: 8,
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 16,
     textAlign: 'center',
   },
   message: {
-    fontSize: 16,
-    color: COLORS.textLight,
+    fontSize: 13,
+    marginTop: 8,
     textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 32,
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-    gap: 8,
-  },
-  actionIcon: {
-    marginRight: 4,
-  },
-  actionText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
   },
 });

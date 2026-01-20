@@ -19,6 +19,7 @@ import * as VoiceService from '../../src/services/voiceService';
 
 // ✅ IMPORT DES LOGOS
 import { MiniLogo, HeaderLogo } from '../../src/components/Logo';
+import { DatabaseDebugPanel } from '../../src/components/DatabaseDebugPanel';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -669,7 +670,7 @@ export default function Home() {
   const [unreadCount, setUnreadCount] = useState(0);
   // Voice state
   const [isListening, setIsListening] = useState(false);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   // Pulse animation for recording
@@ -735,18 +736,25 @@ export default function Home() {
 
   const loadData = useCallback(() => {
     try {
+      console.log('🔄 [LOAD] Chargement des listes...');
       const db = getDb();
       ensureSchema(db);
       db.runSync(`DELETE FROM ListeAchat WHERE (nomListe = 'Nouvelle Liste' OR nomListe = '' OR nomListe IS NULL) AND idListe NOT IN (SELECT DISTINCT idListeAchat FROM Article)`);
       const result = db.getAllSync(`SELECT a.idListe as idAchat, a.nomListe, a.dateAchat, a.statut, COALESCE(SUM(l.prixTotal), 0) as totalDepense, COUNT(l.idArticle) as nombreArticles FROM ListeAchat a LEFT JOIN Article l ON a.idListe = l.idListeAchat GROUP BY a.idListe ORDER BY a.dateAchat DESC`);
+      console.log(`📊 [LOAD] ${result.length} listes chargées:`, result);
+      
       if (NotifService.getUnreadNotificationCount) setUnreadCount(NotifService.getUnreadNotificationCount());
       let sorted = [...(result as Achat[])];
       if (sortMode === 'name') sorted.sort((a, b) => (a.nomListe || '').localeCompare(b.nomListe || ''));
       else if (sortMode === 'amount') sorted.sort((a, b) => b.totalDepense - a.totalDepense);
       else sorted.sort((a, b) => new Date(b.dateAchat).getTime() - new Date(a.dateAchat).getTime());
+      
+      console.log(`✅ [LOAD] Listes triées par ${sortMode}:`, sorted.length);
       setAchats(sorted);
       Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+      console.error('❌ [LOAD] Erreur:', e); 
+    }
   }, [sortMode]);
 
   // Init Notifications
@@ -758,9 +766,22 @@ export default function Home() {
 
   useEffect(() => {
     let filtered = achats;
-    if (searchQuery !== '') filtered = filtered.filter(a => (a.nomListe || '').toLowerCase().includes(searchQuery.toLowerCase()));
-    if (activeTab === 'ongoing') filtered = filtered.filter(a => (a.statut === 0 || a.statut === null));
-    else filtered = filtered.filter(a => a.statut === 1);
+    console.log(`🔍 [FILTER] Début filtrage - Total: ${achats.length}, Tab: ${activeTab}, Query: "${searchQuery}"`);
+    
+    if (searchQuery !== '') {
+      filtered = filtered.filter(a => (a.nomListe || '').toLowerCase().includes(searchQuery.toLowerCase()));
+      console.log(`🔍 [FILTER] Après recherche: ${filtered.length}`);
+    }
+    
+    if (activeTab === 'ongoing') {
+      filtered = filtered.filter(a => (a.statut === 0 || a.statut === null));
+      console.log(`🔍 [FILTER] En cours: ${filtered.length}`);
+    } else {
+      filtered = filtered.filter(a => a.statut === 1);
+      console.log(`🔍 [FILTER] Historique: ${filtered.length}`);
+    }
+    
+    console.log(`✅ [FILTER] Résultat final: ${filtered.length} listes affichées`);
     setFilteredAchats(filtered);
   }, [searchQuery, achats, activeTab]);
 
@@ -979,6 +1000,9 @@ export default function Home() {
         </TouchableOpacity>
       </Modal>
       </>
+      
+      {/* Panneau de debug pour le développement */}
+      <DatabaseDebugPanel />
     </View>
   );
 }

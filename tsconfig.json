@@ -7,14 +7,15 @@
       "es2020"
     ],
     "target": "es2020",
-    "module": "esnext",
+    "module": "es2020",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "ignoreDeprecations": "6.0",
     "noEmit": true,
+    "noImplicitAny": false,
+    "suppressImplicitAnyIndexErrors": false,
     "baseUrl": ".",
     "paths": {
       "@db/*": [

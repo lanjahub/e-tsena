@@ -1,39 +1,36 @@
+// src/services/journalService.ts
 import { getDb } from '../db/init';
-import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, subDays } from 'date-fns';
+import { format, startOfWeek, addDays } from 'date-fns';
+import { fr } from 'date-fns/locale';
+
+export interface WeekDayData {
+  date: Date;
+  dayName: string;
+  dayNumber: string;
+  amount: number;
+  hasData: boolean;
+  isToday: boolean;
+  listCount: number;
+}
+
+export interface JournalList {
+  id: number;
+  name: string;
+  amount: number;
+  itemCount: number;
+  status: number;
+  dateAchat: string;
+}
 
 export interface DayData {
   date: Date;
   totalAmount: number;
-  purchaseCount: number;
-  purchases: Purchase[];
-  hourlyDistribution: HourlyData[];
+  listCount: number;
+  lists: JournalList[];
+  hourlyDistribution: { hour: number; amount: number }[];
 }
 
-export interface Purchase {
-  id: number;
-  libelleProduit: string;
-  quantite: number;
-  prixUnitaire: number;
-  montant: number;
-  dateAchat: string;
-  heureAchat: string;
-}
-
-export interface HourlyData {
-  hour: number;
-  amount: number;
-}
-
-export interface WeekDayData {
-  day: number;
-  date: Date;
-  isToday: boolean;
-  amount: number;
-  purchaseCount: number;
-  status: 'empty' | 'low' | 'medium' | 'high';
-}
-
-export interface ComparisonData {
+export interface ComparisonResult {
   vsYesterday: {
     difference: number;
     percentage: number;
@@ -47,163 +44,223 @@ export interface ComparisonData {
   weekTotal: number;
 }
 
-export class JournalService {
-  /**
-   * Récupère toutes les données d'un jour spécifique
-   */
-  static async getDayData(date: Date): Promise<DayData> {
-    const db = getDb();
-    const startStr = format(startOfDay(date), 'yyyy-MM-dd HH:mm:ss');
-    const endStr = format(endOfDay(date), 'yyyy-MM-dd HH:mm:ss');
-
-    const purchases = db.getAllSync(
-      `SELECT 
-        a.idArticle as id,
-        COALESCE(p.libelle, a.libelleProduit) as libelleProduit,
-        a.quantite,
-        a.prixUnitaire,
-        a.prixTotal as montant,
-        l.dateAchat,
-        strftime('%H:%M', l.dateAchat) as heureAchat
-      FROM Article a
-      JOIN ListeAchat l ON a.idListeAchat = l.idListe
-      LEFT JOIN Produit p ON a.idProduit = p.idProduit
-      WHERE l.dateAchat >= ? AND l.dateAchat <= ?
-      ORDER BY l.dateAchat DESC`,
-      [startStr, endStr]
-    ) as Purchase[];
-
-    const totalAmount = purchases.reduce((sum, p) => sum + (p.montant || 0), 0);
-    const hourlyDistribution = await this.getHourlyDistribution(date);
-
+// Fonction pour obtenir le total d'une date (flexible sur le format)
+const getTotalForDate = (db: any, dateStr: string): { amount: number; count: number } => {
+  try {
+    // Essayer plusieurs formats de date
+    const result = db.getFirstSync(`
+      SELECT 
+        COALESCE(SUM(a.prixTotal), 0) as totalAmount,
+        COUNT(DISTINCT l.idListe) as listCount
+      FROM ListeAchat l
+      LEFT JOIN Article a ON l.idListe = a.idListeAchat
+      WHERE date(l.dateAchat) = ? 
+         OR l.dateAchat LIKE ?
+         OR substr(l.dateAchat, 1, 10) = ?
+    `, [dateStr, dateStr + '%', dateStr]) as any;
+    
     return {
-      date,
-      totalAmount,
-      purchaseCount: purchases.length,
-      purchases: purchases || [],
-      hourlyDistribution,
+      amount: result?.totalAmount || 0,
+      count: result?.listCount || 0,
     };
+  } catch (e) {
+    console.error('[JOURNAL] getTotalForDate error:', e);
+    return { amount: 0, count: 0 };
   }
+};
 
-  /**
-   * Récupère les données de la semaine actuelle (Lundi-Dimanche)
-   */
-  static async getCurrentWeekData(): Promise<WeekDayData[]> {
-    const today = new Date();
-    const weekStart = startOfWeek(today, { weekStartsOn: 1 }); // Lundi
-    const weekEnd = endOfWeek(today, { weekStartsOn: 1 }); // Dimanche
+export const JournalService = {
+  getCurrentWeekData: async (): Promise<WeekDayData[]> => {
+    try {
+      const db = getDb();
+      const today = new Date();
+      const weekStart = startOfWeek(today, { weekStartsOn: 1 });
+      const weekData: WeekDayData[] = [];
 
-    const days: WeekDayData[] = [];
-    let currentDate = new Date(weekStart);
+      console.log('[JOURNAL] Loading week data...');
 
-    while (currentDate <= weekEnd) {
-      const dayData = await this.getDayData(currentDate);
-      const status = this.calculateDayStatus(dayData.totalAmount);
+      for (let i = 0; i < 7; i++) {
+        const currentDay = addDays(weekStart, i);
+        const dateStr = format(currentDay, 'yyyy-MM-dd');
+        
+        const { amount, count } = getTotalForDate(db, dateStr);
 
-      days.push({
-        day: currentDate.getDate(),
-        date: new Date(currentDate),
-        isToday: format(currentDate, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd'),
-        amount: dayData.totalAmount,
-        purchaseCount: dayData.purchaseCount,
-        status,
-      });
+        weekData.push({
+          date: currentDay,
+          dayName: format(currentDay, 'EEE', { locale: fr }),
+          dayNumber: format(currentDay, 'd'),
+          amount: amount,
+          hasData: amount > 0 || count > 0,
+          isToday: dateStr === format(today, 'yyyy-MM-dd'),
+          listCount: count,
+        });
+      }
 
-      currentDate.setDate(currentDate.getDate() + 1);
+      console.log('[JOURNAL] Week data loaded:', weekData.map(d => ({ day: d.dayName, amount: d.amount, count: d.listCount })));
+      return weekData;
+    } catch (error) {
+      console.error('[JOURNAL] getCurrentWeekData error:', error);
+      return [];
     }
+  },
 
-    return days;
-  }
+  getWeekStats: async (): Promise<{ total: number; avg: number; max: number; min: number }> => {
+    try {
+      const db = getDb();
+      
+      // Récupérer TOUTES les données pour calculer les stats
+      const result = db.getFirstSync(`
+        SELECT COALESCE(SUM(a.prixTotal), 0) as total
+        FROM ListeAchat l
+        LEFT JOIN Article a ON l.idListe = a.idListeAchat
+        WHERE l.dateAchat >= date('now', '-7 days')
+      `) as any;
 
-  /**
-   * Compare les dépenses d'aujourd'hui avec hier et la moyenne
-   */
-  static async compareWithYesterday(today: Date): Promise<ComparisonData> {
-    const todayData = await this.getDayData(today);
-    const yesterday = subDays(today, 1);
-    const yesterdayData = await this.getDayData(yesterday);
-
-    // Calcul moyenne sur 7 derniers jours
-    const weekData = await this.getCurrentWeekData();
-    const weekTotal = weekData.reduce((sum, d) => sum + d.amount, 0);
-    const average = weekTotal / 7;
-
-    const calculateComparison = (current: number, previous: number) => {
-      const difference = current - previous;
-      const percentage = previous > 0 ? ((difference / previous) * 100) : 0;
-      let trend: 'up' | 'down' | 'stable' = 'stable';
-      if (Math.abs(percentage) < 5) trend = 'stable';
-      else trend = difference > 0 ? 'up' : 'down';
-      return { difference, percentage, trend };
-    };
-
-    return {
-      vsYesterday: calculateComparison(todayData.totalAmount, yesterdayData.totalAmount),
-      vsAverage: calculateComparison(todayData.totalAmount, average),
-      weekTotal,
-    };
-  }
-
-  /**
-   * Distribution horaire des achats pour le graphique area chart
-   */
-  static async getHourlyDistribution(date: Date): Promise<HourlyData[]> {
-    const db = getDb();
-    const startStr = format(startOfDay(date), 'yyyy-MM-dd HH:mm:ss');
-    const endStr = format(endOfDay(date), 'yyyy-MM-dd HH:mm:ss');
-
-    const hourlyData = db.getAllSync(
-      `SELECT 
-        CAST(strftime('%H', l.dateAchat) AS INTEGER) as hour,
-        SUM(a.prixTotal) as amount
-      FROM Article a
-      JOIN ListeAchat l ON a.idListeAchat = l.idListe
-      WHERE l.dateAchat >= ? AND l.dateAchat <= ?
-      GROUP BY hour
-      ORDER BY hour`,
-      [startStr, endStr]
-    ) as { hour: number; amount: number }[];
-
-    // Remplir toutes les heures (0-23) avec 0 si pas de données
-    const hours: HourlyData[] = [];
-    for (let h = 0; h < 24; h++) {
-      const found = hourlyData.find(d => d.hour === h);
-      hours.push({
-        hour: h,
-        amount: found ? found.amount : 0,
-      });
+      const total = result?.total || 0;
+      
+      console.log('[JOURNAL] Week stats - total:', total);
+      return { total, avg: total / 7, max: total, min: 0 };
+    } catch (error) {
+      console.error('[JOURNAL] getWeekStats error:', error);
+      return { total: 0, avg: 0, max: 0, min: 0 };
     }
+  },
 
-    return hours;
-  }
+  getDayData: async (date: Date): Promise<DayData> => {
+    try {
+      const db = getDb();
+      const dateStr = format(date, 'yyyy-MM-dd');
 
-  /**
-   * Évalue le statut du jour basé sur le montant
-   */
-  private static calculateDayStatus(amount: number): 'empty' | 'low' | 'medium' | 'high' {
-    if (amount === 0) return 'empty';
-    if (amount < 500) return 'low';
-    if (amount < 1500) return 'medium';
-    return 'high';
-  }
+      console.log('[JOURNAL] Loading day:', dateStr);
 
-  /**
-   * Récupère les statistiques de la semaine pour affichage
-   */
-  static async getWeekStats() {
-    const weekData = await this.getCurrentWeekData();
-    const amounts = weekData.map(d => d.amount);
-    const total = amounts.reduce((sum, a) => sum + a, 0);
-    const max = Math.max(...amounts);
-    const min = Math.min(...amounts.filter(a => a > 0)); // Exclure les zéros
-    const avg = total / weekData.length;
+      // Requête flexible sur le format de date
+      const lists = db.getAllSync(`
+        SELECT 
+          l.idListe as id,
+          l.nomListe as name,
+          l.dateAchat,
+          COALESCE(SUM(a.prixTotal), 0) as amount,
+          COUNT(a.idArticle) as itemCount
+        FROM ListeAchat l
+        LEFT JOIN Article a ON l.idListe = a.idListeAchat
+        WHERE date(l.dateAchat) = ? 
+           OR l.dateAchat LIKE ?
+           OR substr(l.dateAchat, 1, 10) = ?
+        GROUP BY l.idListe
+        ORDER BY l.dateAchat DESC
+      `, [dateStr, dateStr + '%', dateStr]) as any[];
 
-    return {
-      total,
-      max,
-      min: isFinite(min) ? min : 0,
-      avg,
-      days: weekData,
-    };
-  }
-}
+      console.log('[JOURNAL] Found', lists.length, 'lists for', dateStr);
+
+      const mappedLists: JournalList[] = lists.map(l => ({
+        id: l.id,
+        name: l.name || 'Sans nom',
+        amount: l.amount || 0,
+        itemCount: l.itemCount || 0,
+        status: 1,
+        dateAchat: l.dateAchat || '',
+      }));
+
+      const totalAmount = mappedLists.reduce((sum, l) => sum + l.amount, 0);
+
+      return {
+        date,
+        totalAmount,
+        listCount: mappedLists.length,
+        lists: mappedLists,
+        hourlyDistribution: Array.from({ length: 24 }, (_, h) => ({ hour: h, amount: 0 })),
+      };
+    } catch (error) {
+      console.error('[JOURNAL] getDayData error:', error);
+      return {
+        date,
+        totalAmount: 0,
+        listCount: 0,
+        lists: [],
+        hourlyDistribution: Array.from({ length: 24 }, (_, h) => ({ hour: h, amount: 0 })),
+      };
+    }
+  },
+
+  compareWithYesterday: async (date: Date): Promise<ComparisonResult> => {
+    try {
+      const db = getDb();
+      const dateStr = format(date, 'yyyy-MM-dd');
+      const yesterdayDate = new Date(date);
+      yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+      const yesterdayStr = format(yesterdayDate, 'yyyy-MM-dd');
+
+      const { amount: todayTotal } = getTotalForDate(db, dateStr);
+      const { amount: yesterdayTotal } = getTotalForDate(db, yesterdayStr);
+
+      // Total semaine
+      const weekResult = db.getFirstSync(`
+        SELECT COALESCE(SUM(a.prixTotal), 0) as total
+        FROM ListeAchat l
+        LEFT JOIN Article a ON l.idListe = a.idListeAchat
+        WHERE l.dateAchat >= date('now', '-7 days')
+      `) as any;
+      const weekTotal = weekResult?.total || 0;
+      const weekAvg = weekTotal / 7;
+
+      const vsDiff = todayTotal - yesterdayTotal;
+      const vsPct = yesterdayTotal > 0 ? (vsDiff / yesterdayTotal) * 100 : 0;
+      const vsAvgDiff = todayTotal - weekAvg;
+      const vsAvgPct = weekAvg > 0 ? (vsAvgDiff / weekAvg) * 100 : 0;
+
+      return {
+        vsYesterday: {
+          difference: vsDiff,
+          percentage: vsPct,
+          trend: vsDiff > 0 ? 'up' : vsDiff < 0 ? 'down' : 'stable',
+        },
+        vsAverage: {
+          difference: vsAvgDiff,
+          percentage: vsAvgPct,
+          trend: vsAvgDiff > 0 ? 'up' : vsAvgDiff < 0 ? 'down' : 'stable',
+        },
+        weekTotal,
+      };
+    } catch (error) {
+      console.error('[JOURNAL] Compare error:', error);
+      return {
+        vsYesterday: { difference: 0, percentage: 0, trend: 'stable' },
+        vsAverage: { difference: 0, percentage: 0, trend: 'stable' },
+        weekTotal: 0,
+      };
+    }
+  },
+
+  // NOUVELLE FONCTION : Récupérer TOUTES les listes (pour debug)
+  getAllLists: async (): Promise<JournalList[]> => {
+    try {
+      const db = getDb();
+      const lists = db.getAllSync(`
+        SELECT 
+          l.idListe as id,
+          l.nomListe as name,
+          l.dateAchat,
+          COALESCE(SUM(a.prixTotal), 0) as amount,
+          COUNT(a.idArticle) as itemCount
+        FROM ListeAchat l
+        LEFT JOIN Article a ON l.idListe = a.idListeAchat
+        GROUP BY l.idListe
+        ORDER BY l.dateAchat DESC
+        LIMIT 50
+      `) as any[];
+
+      console.log('[JOURNAL] All lists:', lists.length);
+      return lists.map(l => ({
+        id: l.id,
+        name: l.name || 'Sans nom',
+        amount: l.amount || 0,
+        itemCount: l.itemCount || 0,
+        status: 1,
+        dateAchat: l.dateAchat || '',
+      }));
+    } catch (error) {
+      console.error('[JOURNAL] getAllLists error:', error);
+      return [];
+    }
+  },
+};

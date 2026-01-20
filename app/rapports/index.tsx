@@ -1011,7 +1011,7 @@ const [currentTotal] = db.getAllSync(`SELECT SUM(l.prixTotal) as total FROM Arti
         {/* ============================================ */}
         <View style={s.section}>
           <View style={s.sectionHeader}>
-            <Text style={s.sectionTitle}>📊 Évolution Mensuelle</Text>
+            <Text style={s.sectionTitle}> Évolution Mensuelle</Text>
             
             <View style={s.zoomControls}>
               <TouchableOpacity onPress={zoomOut} style={[s.zoomBtn, { opacity: chartZoom <= 0.5 ? 0.4 : 1 }]} disabled={chartZoom <= 0.5}>
@@ -1115,7 +1115,7 @@ const [currentTotal] = db.getAllSync(`SELECT SUM(l.prixTotal) as total FROM Arti
         {/* ============================================ */}
         <View style={s.section}>
           <View style={s.sectionHeader}>
-            <Text style={s.sectionTitle}>📈 Tendances</Text>
+            <Text style={s.sectionTitle}> Tendances</Text>
           </View>
           {trendData.map((trend, index) => (
             <TrendCard
@@ -1136,7 +1136,7 @@ const [currentTotal] = db.getAllSync(`SELECT SUM(l.prixTotal) as total FROM Arti
         {/* ============================================ */}
         <View style={s.section}>
           <View style={s.sectionHeader}>
-            <Text style={s.sectionTitle}>🏆 Top Produits</Text>
+            <Text style={s.sectionTitle}> Top Produits</Text>
             <View style={{ flexDirection: 'row', backgroundColor: isDarkMode ? '#1E293B' : '#E2E8F0', padding: 2, borderRadius: 10 }}>
               {(['spending', 'quantity', 'frequency'] as const).map((mode) => (
                 <TouchableOpacity 

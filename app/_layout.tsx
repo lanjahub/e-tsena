@@ -1,6 +1,8 @@
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { View, ActivityIndicator, Text, AppState, AppStateStatus, Alert, Vibration } from 'react-native';
+import { View, ActivityIndicator, Text, AppState, AppStateStatus, Alert, Vibration, Animated } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Path } from 'react-native-svg';
 import * as Font from 'expo-font';
 import { Ionicons } from '@expo/vector-icons';
 import * as SQLite from 'expo-sqlite';
@@ -9,18 +11,141 @@ import { initDatabase, checkDatabase, getDb } from '../src/db/init';
 import { ThemedStatusBar } from '../src/components/ThemedStatusBar';
 import { useTheme, ThemeProvider } from '../src/context/ThemeContext';
 import { SettingsProvider } from '../src/context/SettingsContext';
-import { ToastProvider } from '../src/context/ToastContext'
+import { ToastProvider } from '../src/context/ToastContext';
+import { useDatabasePersistence } from '../src/hooks/useDatabasePersistence';
 
 import { 
   initNotificationTables,
   isRunningInExpoGo,
 } from '../src/services/notificationService';
 
+// ============================================================
+// 🎨 SPLASHSCREEN AVEC ANIMATION
+// ============================================================
+function SplashScreen() {
+  const dot1 = useRef(new Animated.Value(0)).current;
+  const dot2 = useRef(new Animated.Value(0)).current;
+  const dot3 = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const createAnimation = (dotAnim: Animated.Value, delay: number) => {
+      return Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(dotAnim, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+          Animated.timing(dotAnim, {
+            toValue: 0,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+    };
+
+    Animated.parallel([
+      createAnimation(dot1, 0),
+      createAnimation(dot2, 200),
+      createAnimation(dot3, 400),
+    ]).start();
+  }, []);
+
+  return (
+    <LinearGradient
+      colors={['#7C3AED', '#A855F7']}
+      style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
+    >
+      {/* Logo en cercle */}
+      <View style={{
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.3,
+        shadowRadius: 16,
+        elevation: 10,
+      }}>
+        {/* Logo panier SVG - Même que sur la page d'accueil */}
+        <Svg width="60" height="60" viewBox="0 0 24 24">
+          <Path 
+            d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zM17 18c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z"
+            fill="#7C3AED"
+          />
+        </Svg>
+      </View>
+
+      {/* Indicateurs de chargement (3 points) */}
+      <View style={{ 
+        flexDirection: 'row', 
+        marginTop: 40,
+        gap: 12,
+      }}>
+        {[dot1, dot2, dot3].map((dot, index) => (
+          <Animated.View
+            key={index}
+            style={{
+              width: 12,
+              height: 12,
+              borderRadius: 6,
+              backgroundColor: '#FFFFFF',
+              opacity: dot.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.3, 1],
+              }),
+              transform: [{
+                scale: dot.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.8, 1.2],
+                }),
+              }],
+            }}
+          />
+        ))}
+      </View>
+
+      {/* Texte (optionnel) */}
+      <Text style={{
+        marginTop: 20,
+        fontSize: 16,
+        fontWeight: '600',
+        color: 'rgba(255, 255, 255, 0.9)',
+        letterSpacing: 1,
+      }}>
+        Chargement...
+      </Text>
+    </LinearGradient>
+  );
+}
+
 function NotificationChecker() {
   const router = useRouter();
   const appState = useRef(AppState.currentState);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const isChecking = useRef(false);
+  
+  // Vérifier la persistance de la base de données
+  const { isVerified, wasDatabaseReset } = useDatabasePersistence();
+  
+  // Afficher un avertissement si la base a été réinitialisée
+  useEffect(() => {
+    if (isVerified && wasDatabaseReset) {
+      Alert.alert(
+        '⚠️ Données effacées',
+        'Vos données ont été effacées car vous utilisez Expo Go en mode développement.\n\n' +
+        'Pour conserver vos données entre les sessions, créez un build de développement avec:\n\n' +
+        'npm run build:dev\n\n' +
+        'Consultez SOLUTION_PERSISTANCE.md pour plus d\'informations.',
+        [{ text: 'OK' }]
+      );
+    }
+  }, [isVerified, wasDatabaseReset]);
 
   const checkRappels = useCallback(() => {
     if (isChecking.current) return;
@@ -255,26 +380,10 @@ export default function Layout() {
   }
 
   // ============================================================
-  // ⏳ ÉCRAN DE CHARGEMENT
+  // ⏳ ÉCRAN DE CHARGEMENT (SPLASHSCREEN)
   // ============================================================
   if (!fontsLoaded || !dbReady) {
-    return (
-      <View style={{ 
-        flex: 1, 
-        justifyContent: 'center', 
-        alignItems: 'center',
-        backgroundColor: '#F8FAFC'
-      }}>
-        <ActivityIndicator size="large" color="#7143b5" />
-        <Text style={{ 
-          marginTop: 20, 
-          color: '#64748B',
-          fontSize: 14 
-        }}>
-          Chargement...
-        </Text>
-      </View>
-    );
+    return <SplashScreen />;
   }
 
   // ============================================================

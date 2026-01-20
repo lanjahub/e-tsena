@@ -687,25 +687,35 @@ export default function AchatDetails() {
 
   const loadData = () => {
     try {
+      console.log(`🔄 [ACHAT] Chargement liste ID=${achatId}...`);
       const db = getDb();
       const result = db.getAllSync('SELECT * FROM ListeAchat WHERE idListe = ?', [achatId]);
       const a = result[0] as Achat;
-      if (!a) return;
+      if (!a) {
+        console.log('❌ [ACHAT] Liste introuvable');
+        return;
+      }
       setAchat(a);
       
       const displayTitle = (a.nomListe === 'Nouvelle liste' || a.nomListe === 'New list' || !a.nomListe.trim()) 
         ? '' 
         : a.nomListe;
       setTitle(displayTitle);
+      console.log(`✅ [ACHAT] Liste chargée: ${a.nomListe}`);
       
       const items = db.getAllSync('SELECT a.*, p.libelle as libelleProduit FROM Article a JOIN Produit p ON p.idProduit = a.idProduit WHERE a.idListeAchat = ? ORDER BY a.idArticle ASC', [achatId]);
+      console.log(`📊 [ACHAT] ${items.length} articles chargés:`, items);
       
       setLignes(items.map((l: any) => ({ 
         ...l, 
         checked: l.prixUnitaire > 0,
         hasQtyOnly: l.quantite > 0 && l.prixUnitaire === 0
       })));
-    } catch (e) { console.error('[ACHAT] Error loadData:', e); } finally { setLoading(false); }
+    } catch (e) { 
+      console.error('❌ [ACHAT] Erreur loadData:', e); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const loadAllSuggestions = () => {
@@ -807,20 +817,29 @@ export default function AchatDetails() {
     
     triggerHaptic('light');
     try {
+      console.log(`➕ [ACHAT] Ajout article "${nom}" (${unite || 'pcs'})...`);
       const db = getDb();
       let productId;
       const existing = db.getAllSync<{idProduit: number}>('SELECT idProduit FROM Produit WHERE libelle = ?', [nom]);
       if (existing && existing.length > 0) {
           productId = existing[0].idProduit;
+          console.log(`✅ [ACHAT] Produit existant ID=${productId}`);
       } else {
           const res = db.runSync('INSERT INTO Produit (libelle, unite) VALUES (?, ?)', [nom, unite || 'pcs']);
           productId = res.lastInsertRowId;
+          console.log(`✅ [ACHAT] Nouveau produit créé ID=${productId}`);
       }
 
       const r = db.runSync(
         'INSERT INTO Article (idListeAchat, idProduit, quantite, prixUnitaire, prixTotal, unite) VALUES (?, ?, 0, 0, 0, ?)', 
         [achatId, productId, unite || 'pcs']
       );
+      
+      // Forcer l'écriture sur disque
+      db.execSync('PRAGMA wal_checkpoint(FULL)');
+      
+      console.log(`💾 [ACHAT] Article ajouté ID=${r.lastInsertRowId}`);
+      
       const newLine = { 
         idArticle: r.lastInsertRowId,
         idProduit: productId,
@@ -835,7 +854,10 @@ export default function AchatDetails() {
       setLignes(prev => [...prev, newLine]);
       setNewItem('');
       setShowSuggestions(false);
-    } catch(e) { console.error(e); }
+      console.log(`✅ [ACHAT] Article affiché dans la liste`);
+    } catch(e) { 
+      console.error('❌ [ACHAT] Erreur ajout article:', e); 
+    }
   };
 
   const addFromRecipeSuggestion = (item: { nom: string; unite: string }) => {

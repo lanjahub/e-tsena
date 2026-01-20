@@ -585,7 +585,7 @@ export default function StatsScreen() {
             { k: 'repartition', l: t('distribution') || 'Répartition', icon: 'pie-chart' },
             { k: 'weekly', l: t('week') || 'Semaine', icon: 'calendar' },
             { k: 'monthly', l: t('month') || 'Mois', icon: 'calendar-outline' },
-            { k: 'monthFull', l: t('month_full') || 'Mois complet', icon: 'grid-outline' }
+            // { k: 'monthFull', l: t('month_full') || 'Mois complet', icon: 'grid-outline' }
           ].map(tab => (
             <TouchableOpacity key={tab.k} style={[s.tab, viewMode === tab.k && { backgroundColor: activeTheme.primary }]} onPress={() => setViewMode(tab.k as ViewMode)}>
               <Ionicons name={tab.icon as any} size={16} color={getTabIconColor(viewMode === tab.k)} />
@@ -599,7 +599,7 @@ export default function StatsScreen() {
           <View style={s.card}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <View>
-                <Text style={s.cardTitle}>📊 {t('distribution') || 'Répartition'}</Text>
+                <Text style={s.cardTitle}> {t('distribution') || 'Répartition'}</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
                   <Text style={{ fontSize: 12, color: isDarkMode ? '#94A3B8' : '#9CA3AF' }}>
                     {selectedProducts.length} {t('products') || 'produits'} sélectionnés
@@ -664,7 +664,7 @@ export default function StatsScreen() {
         {/* VUE 4 : MOIS COMPLET (1-31) */}
         {viewMode === 'monthFull' && (
           <View style={s.card}>
-            <Text style={s.cardTitle}>📅 {format(new Date(), 'MMMM yyyy', { locale })}</Text>
+            <Text style={s.cardTitle}> {format(new Date(), 'MMMM yyyy', { locale })}</Text>
             
             {/* Stats du mois */}
             <View style={{ marginTop: 15, marginBottom: 20 }}>
@@ -739,7 +739,7 @@ export default function StatsScreen() {
         )}
 
         {/* BOUTON VERS RAPPORTS PDF (visible pour tous les modes) */}
-        {viewMode !== 'monthFull' && (
+        {/* {viewMode !== 'monthFull' && (
           <TouchableOpacity
             style={{
               flexDirection: 'row',
@@ -778,7 +778,7 @@ export default function StatsScreen() {
             </View>
             <Ionicons name="chevron-forward" size={24} color={activeTheme.primary} />
           </TouchableOpacity>
-        )}
+        )} */}
       </Animated.ScrollView>
 
       {/* MODAL JOURNAL */}
@@ -792,7 +792,7 @@ export default function StatsScreen() {
               <TouchableOpacity onPress={() => setShowAllProductsModal(false)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><Ionicons name="arrow-back" size={24} color={activeTheme.primary} /><Text style={{ fontSize: 16, fontWeight: '600', color: activeTheme.primary }}>{t('back') || 'Retour'}</Text></TouchableOpacity>
               <View style={s.selectedBadge}><Text style={{ color: activeTheme.primary, fontWeight: '700', fontSize: 14 }}>{selectedProducts.length}/{allProducts.length}</Text></View>
             </View>
-            <View style={{ marginTop: 20 }}><Text style={{ fontSize: 20, fontWeight: '800', color: isDarkMode ? '#F1F5F9' : '#1F2937' }}>🎯 {t('manage_display') || 'Gérer l\'affichage'}</Text><Text style={{ fontSize: 13, color: isDarkMode ? '#64748B' : '#9CA3AF', marginTop: 4 }}>Sélectionnez les produits à afficher</Text></View>
+            <View style={{ marginTop: 20 }}><Text style={{ fontSize: 20, fontWeight: '800', color: isDarkMode ? '#F1F5F9' : '#1F2937' }}> {t('manage_display') || 'Gérer l\'affichage'}</Text><Text style={{ fontSize: 13, color: isDarkMode ? '#64748B' : '#9CA3AF', marginTop: 4 }}>Sélectionnez les produits à afficher</Text></View>
             <TouchableOpacity onPress={toggleAllProducts} style={s.toggleAllBtn}><Ionicons name={selectedProducts.length === allProducts.length ? "checkbox" : "square-outline"} size={24} color={activeTheme.primary} /><Text style={{ color: activeTheme.primary, fontWeight: '600', fontSize: 15 }}>{getSelectAllText()}</Text></TouchableOpacity>
           </View>
           <FlatList data={allProducts} keyExtractor={(_: any, index: number) => index.toString()} contentContainerStyle={{ padding: 20, paddingBottom: 40 }} showsVerticalScrollIndicator={false} renderItem={renderProductItem} ListEmptyComponent={<View style={{ alignItems: 'center', marginTop: 50 }}><Ionicons name="cube-outline" size={60} color={isDarkMode ? '#334155' : '#E5E7EB'} /><Text style={{ color: isDarkMode ? '#64748B' : '#9CA3AF', marginTop: 10 }}>Aucun produit</Text></View>} />
