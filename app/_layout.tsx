@@ -17,7 +17,16 @@ import { useDatabasePersistence } from '../src/hooks/useDatabasePersistence';
 import { 
   initNotificationTables,
   isRunningInExpoGo,
+  initNotificationService,
 } from '../src/services/notificationService';
+
+// Import dynamique du module Notifications
+let Notifications: any = null;
+try {
+  Notifications = require('expo-notifications');
+} catch (e) {
+  console.log('⚠️ expo-notifications non disponible');
+}
 
 // ============================================================
 // 🎨 SPLASHSCREEN AVEC ANIMATION
@@ -129,6 +138,18 @@ function NotificationChecker() {
   const appState = useRef(AppState.currentState);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const isChecking = useRef(false);
+  const notificationListener = useRef<any>();
+  const responseListener = useRef<any>();
+
+  const markRappelAsDisplayedByNotificationId = useCallback((notificationId?: string) => {
+    if (!notificationId) return;
+    try {
+      const db = getDb();
+      db.runSync('UPDATE Rappel SET affiche = 1, estLu = 1 WHERE notificationId = ?', [notificationId]);
+    } catch (e) {
+      console.warn('⚠️ Impossible de marquer le rappel (notificationId):', e);
+    }
+  }, []);
   
   // Vérifier la persistance de la base de données
   const { isVerified, wasDatabaseReset } = useDatabasePersistence();
@@ -146,6 +167,63 @@ function NotificationChecker() {
       );
     }
   }, [isVerified, wasDatabaseReset]);
+
+  // Gérer les notifications push reçues
+  useEffect(() => {
+    if (!Notifications) return;
+
+    // Initialiser les notifications
+    initNotificationService();
+
+    // Listener pour les notifications reçues quand l'app est ouverte
+    notificationListener.current = Notifications.addNotificationReceivedListener((notification: any) => {
+      console.log('🔔 Notification reçue:', notification);
+      Vibration.vibrate([0, 250, 250, 250]);
+
+      const notificationId = notification?.request?.identifier;
+      markRappelAsDisplayedByNotificationId(notificationId);
+      
+      // Afficher une alerte
+      const { title, body, data } = notification.request.content;
+      Alert.alert(
+        title || 'Rappel',
+        body || '',
+        [
+          { text: 'OK', style: 'cancel' },
+          data?.idListeAchat && {
+            text: 'Voir la liste',
+            onPress: () => router.push(`/achat/${data.idListeAchat}`)
+          }
+        ].filter(Boolean) as any
+      );
+    });
+
+    // Listener pour quand l'utilisateur clique sur la notification
+    responseListener.current = Notifications.addNotificationResponseReceivedListener((response: any) => {
+      console.log('👆 Notification cliquée:', response);
+      const data = response.notification.request.content.data;
+
+      const notificationId = response?.notification?.request?.identifier;
+      markRappelAsDisplayedByNotificationId(notificationId);
+      
+      // Naviguer vers la liste d'achat
+      if (data?.idListeAchat) {
+        console.log(`📱 Navigation vers liste ${data.idListeAchat}`);
+        setTimeout(() => {
+          router.push(`/achat/${data.idListeAchat}`);
+        }, 500);
+      }
+    });
+
+    return () => {
+      if (notificationListener.current) {
+        Notifications.removeNotificationSubscription(notificationListener.current);
+      }
+      if (responseListener.current) {
+        Notifications.removeNotificationSubscription(responseListener.current);
+      }
+    };
+  }, [router]);
 
   const checkRappels = useCallback(() => {
     if (isChecking.current) return;
@@ -198,14 +276,14 @@ function NotificationChecker() {
               style: 'cancel',
               onPress: () => {
                 
-                db.runSync('UPDATE Rappel SET affiche = 1 WHERE idRappel = ?', [rappel.id]);
+                db.runSync('UPDATE Rappel SET affiche = 1 WHERE idRappel = ?', [rappel.idRappel]);
               },
             },
             {
               text: 'Voir la liste',
               onPress: () => {
                 
-                db.runSync('UPDATE Rappel SET affiche = 1, estLu = 1 WHERE idRappel = ?', [rappel.id]);
+                db.runSync('UPDATE Rappel SET affiche = 1, estLu = 1 WHERE idRappel = ?', [rappel.idRappel]);
                 if (rappel.idListeAchat) {
                   router.push(`/achat/${rappel.idListeAchat}`);
                 }
@@ -216,7 +294,7 @@ function NotificationChecker() {
         );
 
        
-        db.runSync('UPDATE Rappel SET affiche = 1 WHERE idRappel = ?', [rappel.id]);
+        db.runSync('UPDATE Rappel SET affiche = 1 WHERE idRappel = ?', [rappel.idRappel]);
       }
     } catch (e) {
       console.error('Erreur vérification rappels:', e);

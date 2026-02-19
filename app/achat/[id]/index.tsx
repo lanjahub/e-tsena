@@ -19,6 +19,7 @@ import { useTheme } from '../../../src/context/ThemeContext';
 import { useSettings } from '../../../src/context/SettingsContext';
 import { registerForPushNotificationsAsync } from '../../../src/services/notificationService';
 import { ConfirmModal } from '../../../src/components/ConfirmModal';
+import voiceRecognitionService from '../../../src/services/voiceRecognitionService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -555,6 +556,13 @@ export default function AchatDetails() {
     if (!isReadOnly) registerForPushNotificationsAsync();
   }, [achatId]);
 
+  // Cleanup voice recognition on unmount
+  useEffect(() => {
+    return () => {
+      voiceRecognitionService.destroy();
+    };
+  }, []);
+
   // Detect recipe based on title
   useEffect(() => {
     if (title.trim()) {
@@ -649,39 +657,83 @@ export default function AchatDetails() {
     }
   }, [isListening, isTitleVoiceActive]);
 
-  const toggleListening = () => {
+  const toggleListening = async () => {
     if (isListening) {
+      await voiceRecognitionService.stopListening();
       setIsListening(false);
     } else {
-      setIsListening(true);
       Vibration.vibrate(50);
-      setTimeout(() => {
-        setIsListening(false);
+      const started = await voiceRecognitionService.startListening({
+        onStart: () => {
+          setIsListening(true);
+        },
+        onResult: (text: string) => {
+          setFormData(prev => ({ ...prev, nom: text }));
+          setIsListening(false);
+        },
+        onError: (error: any) => {
+          console.error('Erreur reconnaissance:', error);
+          setIsListening(false);
+          Alert.alert(
+            language === 'en' ? "Error" : "Erreur",
+            language === 'en' 
+              ? "Voice recognition failed. Please check microphone permissions." 
+              : "La reconnaissance vocale a échoué. Vérifiez les permissions du microphone."
+          );
+        },
+        onEnd: () => {
+          setIsListening(false);
+        }
+      });
+      
+      if (!started) {
         Alert.alert(
-          "Info", 
+          language === 'en' ? "Not Available" : "Non disponible",
           language === 'en' 
-            ? "Voice recognition requires native module." 
-            : "La reconnaissance vocale nécessite un module natif."
+            ? "Voice recognition is not available on this device." 
+            : "La reconnaissance vocale n'est pas disponible sur cet appareil."
         );
-      }, 2000);
+      }
     }
   };
 
-  const toggleTitleVoice = () => {
+  const toggleTitleVoice = async () => {
     if (isTitleVoiceActive) {
+      await voiceRecognitionService.stopListening();
       setIsTitleVoiceActive(false);
     } else {
-      setIsTitleVoiceActive(true);
       Vibration.vibrate(50);
-      setTimeout(() => {
-        setIsTitleVoiceActive(false);
+      const started = await voiceRecognitionService.startListening({
+        onStart: () => {
+          setIsTitleVoiceActive(true);
+        },
+        onResult: (text: string) => {
+          setEditableTitle(text);
+          setIsTitleVoiceActive(false);
+        },
+        onError: (error: any) => {
+          console.error('Erreur reconnaissance titre:', error);
+          setIsTitleVoiceActive(false);
+          Alert.alert(
+            language === 'en' ? "Error" : "Erreur",
+            language === 'en' 
+              ? "Voice recognition failed. Please check microphone permissions." 
+              : "La reconnaissance vocale a échoué. Vérifiez les permissions du microphone."
+          );
+        },
+        onEnd: () => {
+          setIsTitleVoiceActive(false);
+        }
+      });
+      
+      if (!started) {
         Alert.alert(
-          "Info", 
+          language === 'en' ? "Not Available" : "Non disponible",
           language === 'en' 
-            ? "Voice recognition requires native module." 
-            : "La reconnaissance vocale nécessite un module natif."
+            ? "Voice recognition is not available on this device." 
+            : "La reconnaissance vocale n'est pas disponible sur cet appareil."
         );
-      }, 2000);
+      }
     }
   };
 
@@ -1445,7 +1497,19 @@ export default function AchatDetails() {
                 
                 {unchecked.length === 0 && checked.length === 0 && (
                   <View style={s.emptyState}>
-                    <Ionicons name="basket-outline" size={40} color={s.textSec.color} />
+                    <View style={{
+                      width: 80,
+                      height: 80,
+                      borderRadius: 40,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: isDarkMode ? activeTheme.primaryDark + '20' : activeTheme.primary + '10',
+                      borderColor: activeTheme.primary + '30',
+                      borderWidth: 3,
+                      marginBottom: 12,
+                    }}>
+                      <Ionicons name="basket-outline" size={40} color={activeTheme.primary} />
+                    </View>
                     <Text style={s.emptyText}>{language === 'en' ? 'No items yet' : 'Aucun article'}</Text>
                     <Text style={s.emptyHint}>
                       {language === 'en' 

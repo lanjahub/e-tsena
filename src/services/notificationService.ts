@@ -115,8 +115,9 @@ export async function initNotificationService(): Promise<boolean> {
     // Setup handler
     setupNotificationHandler();
 
-    // Configurer le canal Android
+    // Configurer les canaux Android
     if (Platform.OS === 'android') {
+      // Canal par défaut
       await Notifications.setNotificationChannelAsync('default', {
         name: 'Rappels E-tsena',
         importance: Notifications.AndroidImportance.MAX,
@@ -125,18 +126,26 @@ export async function initNotificationService(): Promise<boolean> {
         sound: 'default',
         enableVibrate: true,
         enableLights: true,
+        showBadge: true,
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       });
       
+      // Canal spécifique pour les rappels
       await Notifications.setNotificationChannelAsync('reminders', {
         name: 'Rappels de courses',
-        description: 'Notifications pour vos listes de courses',
+        description: 'Notifications pour vos listes de courses et rappels',
         importance: Notifications.AndroidImportance.HIGH,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#7C3AED',
         sound: 'default',
+        enableVibrate: true,
+        enableLights: true,
+        showBadge: true,
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+        bypassDnd: false,
       });
       
-      console.log('✅ Canaux Android configurés');
+      console.log('✅ Canaux Android configurés (default + reminders)');
     }
 
     // Demander les permissions
@@ -173,16 +182,35 @@ export async function registerForPushNotificationsAsync(): Promise<boolean> {
 
     // Si pas déjà accordé, demander
     if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
+      console.log('🔔 Demande de permissions notifications...');
+      const { status } = await Notifications.requestPermissionsAsync({
+        ios: {
+          allowAlert: true,
+          allowBadge: true,
+          allowSound: true,
+          allowAnnouncements: true,
+        },
+      });
       finalStatus = status;
     }
 
     if (finalStatus !== 'granted') {
       console.log('⚠️ Permission notifications refusée');
+      console.log('   Les rappels seront enregistrés mais ne déclencheront pas de notifications');
       return false;
     }
 
     console.log('✅ Permissions notifications accordées');
+    
+    // Pour Android, vérifier les permissions spécifiques
+    if (Platform.OS === 'android') {
+      const settings = await Notifications.getPermissionsAsync();
+      console.log('📱 Paramètres Android:', {
+        canAskAgain: settings.canAskAgain,
+        granted: settings.granted,
+      });
+    }
+    
     return true;
   } catch (error) {
     console.error('❌ Erreur permissions:', error);
@@ -206,43 +234,62 @@ export async function creerRappel(
     const dateStr = dateRappel.toISOString().split('T')[0];
     const heureStr = dateRappel.toTimeString().slice(0, 5);
 
-    // 1. Planifier la notification système
+    // 1. Vérifier et demander les permissions si nécessaire
+    const hasPermission = await registerForPushNotificationsAsync();
+    if (!hasPermission) {
+      console.warn('⚠️ Permissions notification non accordées');
+    }
+
+    // 2. Planifier la notification système
     let notificationId = '';
     const now = new Date();
     const triggerSeconds = Math.floor((dateRappel.getTime() - now.getTime()) / 1000);
 
     const Notifications = getNotificationsModule();
-    if (Notifications && triggerSeconds > 0) {
+    if (Notifications && triggerSeconds > 0 && hasPermission) {
       try {
+        // Configuration complète de la notification
         notificationId = await Notifications.scheduleNotificationAsync({
           content: {
             title: `🔔 ${titre}`,
-            body: message,
+            body: message || `Il est temps d'aller faire vos courses !`,
             data: { 
               idListeAchat, 
               type,
               action: 'openList',
               screen: 'achat',
+              listId: String(idListeAchat),
               timestamp: Date.now()
             },
             sound: 'default',
-            priority: 'high',
+            priority: Notifications.AndroidNotificationPriority.HIGH,
             badge: 1,
+            ...(Platform.OS === 'android' && {
+              channelId: 'reminders',
+              color: '#7C3AED',
+              vibrate: [0, 250, 250, 250],
+            }),
           },
           trigger: {
-            seconds: triggerSeconds,
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
+            date: dateRappel,
             channelId: 'reminders',
           },
         });
-        console.log(`🔔 Notification planifiée (ID: ${notificationId}) dans ${Math.round(triggerSeconds / 60)} min`);
+        
+        const minutes = Math.round(triggerSeconds / 60);
+        const hours = Math.floor(minutes / 60);
+        const timeStr = hours > 0 ? `${hours}h${minutes % 60}min` : `${minutes}min`;
+        console.log(`🔔 Notification planifiée (ID: ${notificationId}) dans ${timeStr}`);
+        console.log(`   Date: ${dateRappel.toLocaleString('fr-FR')}`);
       } catch (notifError) {
-        console.warn('⚠️ Erreur planification notification:', notifError);
+        console.error('❌ Erreur planification notification:', notifError);
       }
     } else if (triggerSeconds <= 0) {
       console.warn("⚠️ Date passée, notification non planifiée");
     }
 
-    // 2. Enregistrer en base
+    // 3. Enregistrer en base
     const result = db.runSync(
       `INSERT INTO Rappel (idListeAchat, titre, message, dateRappel, heureRappel, type, notificationId)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,

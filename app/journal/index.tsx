@@ -10,6 +10,7 @@ import {
   FlatList,
   RefreshControl,
   Alert,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -53,6 +54,9 @@ export default function JournalScreen() {
   const [evaluation, setEvaluation] = useState<any>(null);
   const [allLists, setAllLists] = useState<JournalList[]>([]);
   const [showAllLists, setShowAllLists] = useState(false);
+  const [sortBy, setSortBy] = useState<'date' | 'amount' | 'name'>('date');
+  const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
+  const [showSortModal, setShowSortModal] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -198,37 +202,115 @@ export default function JournalScreen() {
     setRefreshing(false);
   }, []);
 
-  const renderListItem = ({ item }: { item: JournalList }) => (
-    <TouchableOpacity
-      style={s.purchaseCard}
-      onPress={() => router.push(`/achat/${item.id}`)}
-      activeOpacity={0.7}
-    >
-      <View style={s.purchaseIconContainer}>
-        <View style={[s.purchaseIcon, { backgroundColor: activeTheme.primary + '20' }]}>
-          <Ionicons name="cart" size={20} color={activeTheme.primary} />
+  const renderListItem = ({ item }: { item: JournalList }) => {
+    // Extraire et formater date et heure
+    let dateStr = '';
+    let timeStr = '';
+    
+    if (item.dateAchat) {
+      try {
+        const dateObj = new Date(item.dateAchat);
+        // Format: "24 janv." au lieu de "2024-01-24"
+        dateStr = format(dateObj, 'dd MMM', { locale: fr });
+        // Format: "16:49" au lieu de heure complète
+        timeStr = format(dateObj, 'HH:mm');
+      } catch (e) {
+        // Fallback si le format est déjà "2024-01-24 16:49:00"
+        const dateTime = item.dateAchat.split(' ');
+        dateStr = dateTime[0];
+        timeStr = dateTime[1]?.substring(0, 5) || '';
+      }
+    }
+
+    // Vérifier si la liste est archivée (historique)
+    const isArchived = showAllLists;
+    
+    return (
+      <TouchableOpacity
+        style={s.purchaseCard}
+        onPress={() => router.push(`/achat/${item.id}`)}
+        activeOpacity={0.7}
+      >
+        <View style={s.purchaseIconContainer}>
+          <View style={[s.purchaseIcon, { backgroundColor: activeTheme.primary + '20' }]}>
+            <Ionicons name="cart" size={20} color={activeTheme.primary} />
+            {isArchived && (
+              <View style={{ position: 'absolute', bottom: -2, right: -2, backgroundColor: '#10B981', borderRadius: 8, padding: 2, borderWidth: 1.5, borderColor: isDarkMode ? '#0F172A' : '#F8FAFC' }}>
+                <Ionicons name="checkmark" size={10} color="white" />
+              </View>
+            )}
+          </View>
         </View>
-      </View>
-      <View style={s.purchaseInfo}>
-        <Text style={s.purchaseName} numberOfLines={1}>{item.name}</Text>
-        <View style={s.purchaseDetails}>
-          <Text style={s.purchaseTime}>{item.itemCount} articles</Text>
-          {item.dateAchat && (
-            <>
-              <Text style={s.purchaseDot}>•</Text>
-              <Text style={s.purchaseTime}>{item.dateAchat.split(' ')[0]}</Text>
-            </>
+        <View style={s.purchaseInfo}>
+          <Text style={s.purchaseName} numberOfLines={1}>{item.name}</Text>
+          <View style={s.purchaseDetails}>
+            <Ionicons name="cube-outline" size={12} color={isDarkMode ? '#94A3B8' : '#64748B'} />
+            <Text style={s.purchaseTime}>{item.itemCount} article{item.itemCount > 1 ? 's' : ''}</Text>
+            {isArchived && (
+              <>
+                <Text style={{ color: isDarkMode ? '#475569' : '#CBD5E1', marginHorizontal: 4 }}>•</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#10B98110', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                  <Ionicons name="archive" size={10} color="#10B981" />
+                  <Text style={{ fontSize: 10, fontWeight: '600', color: '#10B981' }}>Archivé</Text>
+                </View>
+              </>
+            )}
+          </View>
+          {(dateStr || timeStr) && (
+            <View style={s.purchaseDateTimeRow}>
+              {dateStr && (
+                <View style={s.purchaseDateBadge}>
+                  <Ionicons name="calendar-outline" size={11} color={activeTheme.primary} />
+                  <Text style={[s.purchaseDateText, { color: activeTheme.primary }]}>{dateStr}</Text>
+                </View>
+              )}
+              {timeStr && (
+                <View style={s.purchaseTimeBadge}>
+                  <Ionicons name="time-outline" size={11} color={activeTheme.primaryLight} />
+                  <Text style={[s.purchaseTimeText, { color: activeTheme.primaryLight }]}>{timeStr}</Text>
+                </View>
+              )}
+            </View>
           )}
         </View>
-      </View>
-      <View style={s.purchaseAmountContainer}>
-        <Text style={s.purchaseAmount}>{formatMoney(item.amount)}</Text>
-        <Text style={s.purchaseCurrency}>{currency}</Text>
-      </View>
-    </TouchableOpacity>
-  );
+        <View style={s.purchaseAmountContainer}>
+          <Text style={s.purchaseAmount}>{formatMoney(item.amount)}</Text>
+          <Text style={s.purchaseCurrency}>{currency}</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   const listsToShow = showAllLists ? allLists : (dayData?.lists || []);
+
+  // Fonction de tri
+  const getSortedLists = () => {
+    let sorted = [...listsToShow];
+    
+    sorted.sort((a, b) => {
+      let compareResult = 0;
+      
+      if (sortBy === 'name') {
+        compareResult = (a.name || '').localeCompare(b.name || '');
+      } else if (sortBy === 'amount') {
+        compareResult = (b.amount || 0) - (a.amount || 0);
+      } else if (sortBy === 'date') {
+        const dateA = a.dateAchat ? new Date(a.dateAchat).getTime() : 0;
+        const dateB = b.dateAchat ? new Date(b.dateAchat).getTime() : 0;
+        compareResult = dateB - dateA;
+      }
+      
+      return sortOrder === 'ASC' ? -compareResult : compareResult;
+    });
+    
+    return sorted;
+  };
+
+  const sortedLists = getSortedLists();
+
+  const toggleSortOrder = () => {
+    setSortOrder(sortOrder === 'ASC' ? 'DESC' : 'ASC');
+  };
 
   if (loading) {
     return (
@@ -244,6 +326,68 @@ export default function JournalScreen() {
   return (
     <View style={s.container}>
       <ThemedStatusBar transparent />
+
+      {/* Modal de tri */}
+      <Modal visible={showSortModal} transparent animationType="fade">
+        <TouchableOpacity 
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }} 
+          onPress={() => setShowSortModal(false)} 
+          activeOpacity={1}
+        >
+          <View style={{ width: '85%', backgroundColor: isDarkMode ? '#1E293B' : '#FFFFFF', padding: 24, borderRadius: 24 }}>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: isDarkMode ? '#F1F5F9' : '#1E293B', textAlign: 'center', marginBottom: 15 }}>Trier par</Text>
+            
+            {[
+              { key: 'date', icon: 'calendar-outline', label: 'Date' },
+              { key: 'name', icon: 'text-outline', label: 'Nom (A-Z)' },
+              { key: 'amount', icon: 'wallet-outline', label: 'Montant' },
+            ].map((item) => (
+              <TouchableOpacity
+                key={item.key}
+                onPress={() => {
+                  if (sortBy === item.key) {
+                    toggleSortOrder();
+                  } else {
+                    setSortBy(item.key as any);
+                    setSortOrder('DESC');
+                  }
+                }}
+                style={{ 
+                  flexDirection: 'row', 
+                  alignItems: 'center', 
+                  padding: 14, 
+                  borderRadius: 12, 
+                  marginBottom: 8, 
+                  gap: 12, 
+                  backgroundColor: sortBy === item.key ? activeTheme.secondary : 'transparent' 
+                }}
+              >
+                <Ionicons 
+                  name={item.icon as any} 
+                  size={20} 
+                  color={sortBy === item.key ? activeTheme.primary : (isDarkMode ? '#94A3B8' : '#64748B')} 
+                />
+                <Text style={{ 
+                  flex: 1, 
+                  fontSize: 15, 
+                  color: sortBy === item.key ? activeTheme.primary : (isDarkMode ? '#F1F5F9' : '#1E293B'), 
+                  fontWeight: sortBy === item.key ? '700' : '500' 
+                }}>
+                  {item.label} {sortBy === item.key && (sortOrder === 'ASC' ? '↑' : '↓')}
+                </Text>
+                {sortBy === item.key && <Ionicons name="checkmark" size={20} color={activeTheme.primary} />}
+              </TouchableOpacity>
+            ))}
+            
+            <TouchableOpacity 
+              onPress={() => setShowSortModal(false)}
+              style={{ marginTop: 10, padding: 14, alignItems: 'center', backgroundColor: isDarkMode ? '#0F172A' : '#F8FAFC', borderRadius: 12 }}
+            >
+              <Text style={{ fontSize: 15, fontWeight: '600', color: isDarkMode ? '#94A3B8' : '#64748B' }}>Fermer</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       <LinearGradient
         colors={activeTheme.gradient as [string, string, ...string[]]}
@@ -358,18 +502,23 @@ export default function JournalScreen() {
         <View style={s.card}>
           <View style={s.cardHeader}>
             <Text style={s.cardTitle}>
-               {showAllLists ? 'Toutes les listes' : 'Listes du jour'} ({listsToShow.length})
+               {showAllLists ? 'Toutes les listes' : 'Listes du jour'} ({sortedLists.length})
             </Text>
-            <TouchableOpacity onPress={() => setShowAllLists(!showAllLists)}>
-              <Text style={[s.linkText, { color: activeTheme.primary }]}>
-                {showAllLists ? 'Voir jour' : 'Voir tout'}
-              </Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TouchableOpacity onPress={() => setShowSortModal(true)} style={{ padding: 4 }}>
+                <Ionicons name="swap-vertical" size={20} color={activeTheme.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowAllLists(!showAllLists)}>
+                <Text style={[s.linkText, { color: activeTheme.primary }]}>
+                  {showAllLists ? 'Voir jour' : 'Voir tout'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
-          {listsToShow.length > 0 ? (
+          {sortedLists.length > 0 ? (
             <FlatList
-              data={listsToShow}
+              data={sortedLists}
               keyExtractor={(item) => item.id.toString()}
               renderItem={renderListItem}
               scrollEnabled={false}
@@ -439,9 +588,14 @@ const getStyles = (theme: any, dark: boolean) => {
     purchaseIconContainer: { marginRight: 12 },
     purchaseIcon: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
     purchaseInfo: { flex: 1 },
-    purchaseName: { fontSize: 15, fontWeight: '700', color: c.text, marginBottom: 4 },
-    purchaseDetails: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-    purchaseTime: { fontSize: 12, color: c.textSec },
+    purchaseName: { fontSize: 15, fontWeight: '700', color: c.text, marginBottom: 6 },
+    purchaseDetails: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 6 },
+    purchaseTime: { fontSize: 12, color: c.textSec, fontWeight: '500' },
+    purchaseDateTimeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    purchaseDateBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: dark ? '#1E293B' : '#fff', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: theme.primary + '30' },
+    purchaseDateText: { fontSize: 11, fontWeight: '600' },
+    purchaseTimeBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: dark ? '#1E293B' : '#fff', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1, borderColor: theme.primaryLight + '30' },
+    purchaseTimeText: { fontSize: 11, fontWeight: '600' },
     purchaseDot: { fontSize: 12, color: c.textSec },
     purchaseAmountContainer: { alignItems: 'flex-end' },
     purchaseAmount: { fontSize: 18, fontWeight: '800', color: theme.primary },

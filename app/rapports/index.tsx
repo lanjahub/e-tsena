@@ -1246,8 +1246,15 @@ const [currentTotal] = db.getAllSync(`SELECT SUM(l.prixTotal) as total FROM Arti
             <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
               {dailyPurchases.length === 0 ? (
                 <View style={s.emptyState}>
-                  <View style={s.emptyIcon}>
-                    <Ionicons name="cart-outline" size={50} color="#94A3B8" />
+                  <View style={[
+                    s.emptyIcon,
+                    {
+                      backgroundColor: isDarkMode ? activeTheme.primaryDark + '20' : activeTheme.primary + '10',
+                      borderColor: activeTheme.primary + '30',
+                      borderWidth: 3,
+                    }
+                  ]}>
+                    <Ionicons name="cart-outline" size={50} color={activeTheme.primary} />
                   </View>
                   <Text style={s.emptyText}>{t('no_purchase')}</Text>
                   <Text style={s.emptySubText}>Aucun achat enregistré pour cette date</Text>

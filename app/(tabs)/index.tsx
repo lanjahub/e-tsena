@@ -471,35 +471,115 @@ const SettingsModal = ({ visible, onClose, isDarkMode, toggleDarkMode, currentTh
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, marginTop: 50, backgroundColor: bgColor, borderTopLeftRadius: 30, borderTopRightRadius: 30 }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderColor }}>
-          <Text style={{ fontSize: 24, fontWeight: '800', color: textColor }}>{TEXTS.settings}</Text>
-          <TouchableOpacity onPress={onClose} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: isDarkMode ? '#334155' : '#F1F5F9', justifyContent: 'center', alignItems: 'center' }}>
-            <Ionicons name="close" size={24} color={textColor} />
+        {/* Header amélioré */}
+        <LinearGradient
+          colors={activeTheme.gradient as [string, string, ...string[]]}
+          style={{ 
+            flexDirection: 'row', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            padding: 20, 
+            paddingTop: 25,
+            borderTopLeftRadius: 30, 
+            borderTopRightRadius: 30,
+          }}
+        >
+          <View>
+            <Text style={{ fontSize: 26, fontWeight: '800', color: '#fff' }}>{TEXTS.settings}</Text>
+            <Text style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 2 }}>Personnaliser votre application</Text>
+          </View>
+          <TouchableOpacity 
+            onPress={onClose} 
+            style={{ 
+              width: 42, 
+              height: 42, 
+              borderRadius: 21, 
+              backgroundColor: 'rgba(255,255,255,0.2)', 
+              justifyContent: 'center', 
+              alignItems: 'center',
+              borderWidth: 1,
+              borderColor: 'rgba(255,255,255,0.3)',
+            }}
+          >
+            <Ionicons name="close" size={24} color="#fff" />
           </TouchableOpacity>
-        </View>
+        </LinearGradient>
 
         <ScrollView style={{ padding: 20 }}>
-          <Text style={{ fontSize: 12, fontWeight: '700', color: subColor, marginTop: 10, marginBottom: 10, letterSpacing: 1 }}>{TEXTS.appearance}</Text>
-          <View style={{ backgroundColor: cardBg, borderRadius: 16, borderWidth: 1, borderColor }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderColor }}>
-              <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: isDarkMode ? '#312E81' : '#EEF2FF', justifyContent: 'center', alignItems: 'center' }}>
-                <Ionicons name="moon-outline" size={20} color={isDarkMode ? '#A5B4FC' : '#6366F1'} />
+          <Text style={{ fontSize: 11, fontWeight: '800', color: subColor, marginTop: 5, marginBottom: 12, letterSpacing: 1.2 }}>{TEXTS.appearance}</Text>
+          
+          {/* Card avec design amélioré */}
+          <View style={{ 
+            backgroundColor: cardBg, 
+            borderRadius: 20, 
+            borderWidth: 1, 
+            borderColor,
+            overflow: 'hidden',
+            elevation: 3,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.1,
+            shadowRadius: 8,
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', padding: 18, borderBottomWidth: 1, borderColor }}>
+              <View style={{ 
+                width: 44, 
+                height: 44, 
+                borderRadius: 12, 
+                backgroundColor: isDarkMode ? '#1E3A8A' : '#DBEAFE', 
+                justifyContent: 'center', 
+                alignItems: 'center',
+                marginRight: 14,
+              }}>
+                <Ionicons name="moon" size={22} color={isDarkMode ? '#60A5FA' : '#1E40AF'} />
               </View>
-              <Text style={{ flex: 1, fontSize: 16, fontWeight: '600', color: textColor, marginLeft: 14 }}>{TEXTS.dark_mode}</Text>
-              <Switch value={isDarkMode} onValueChange={toggleDarkMode} trackColor={{ true: activeTheme.primary, false: isDarkMode ? '#475569' : '#E0E0E0' }} thumbColor="#fff" />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: textColor }}>{TEXTS.dark_mode}</Text>
+                <Text style={{ fontSize: 12, color: subColor, marginTop: 2 }}>Activer le thème sombre</Text>
+              </View>
+              <Switch 
+                value={isDarkMode} 
+                onValueChange={toggleDarkMode} 
+                trackColor={{ true: activeTheme.primary, false: isDarkMode ? '#475569' : '#E0E0E0' }} 
+                thumbColor="#fff" 
+              />
             </View>
 
-            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', padding: 16 }} onPress={() => setShowThemes(!showThemes)}>
-              <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: activeTheme.secondary, justifyContent: 'center', alignItems: 'center' }}>
-                <Ionicons name="color-palette-outline" size={20} color={activeTheme.primary} />
+            <TouchableOpacity 
+              style={{ flexDirection: 'row', alignItems: 'center', padding: 18 }} 
+              onPress={() => setShowThemes(!showThemes)}
+            >
+              <View style={{ 
+                width: 44, 
+                height: 44, 
+                borderRadius: 12, 
+                backgroundColor: activeTheme.secondary, 
+                justifyContent: 'center', 
+                alignItems: 'center',
+                marginRight: 14,
+              }}>
+                <Ionicons name="color-palette" size={22} color={activeTheme.primary} />
               </View>
-              <Text style={{ flex: 1, fontSize: 16, fontWeight: '600', color: textColor, marginLeft: 14 }}>{TEXTS.choose_theme}</Text>
-              <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: activeTheme.primary, marginRight: 8 }} />
-              <Ionicons name={showThemes ? "chevron-up" : "chevron-down"} size={20} color={subColor} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: textColor }}>{TEXTS.choose_theme}</Text>
+                <Text style={{ fontSize: 12, color: subColor, marginTop: 2 }}>
+                  {THEMES[currentTheme]?.name || 'Thème actuel'}
+                </Text>
+              </View>
+              <View style={{ 
+                width: 28, 
+                height: 28, 
+                borderRadius: 8, 
+                backgroundColor: activeTheme.primary, 
+                marginRight: 10,
+                borderWidth: 2,
+                borderColor: isDarkMode ? '#334155' : '#E2E8F0',
+              }} />
+              <Ionicons name={showThemes ? "chevron-up" : "chevron-down"} size={22} color={subColor} />
             </TouchableOpacity>
 
             {showThemes && (
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', padding: 16, gap: 12, justifyContent: 'center', borderTopWidth: 1, borderColor }}>
+              <View style={{ padding: 16, gap: 12, borderTopWidth: 1, borderColor }}>
                 {(Object.keys(THEMES) as Array<keyof typeof THEMES>).map((key) => {
                   const th = THEMES[key];
                   const isActive = currentTheme === key;
@@ -508,26 +588,139 @@ const SettingsModal = ({ visible, onClose, isDarkMode, toggleDarkMode, currentTh
                       key={key} 
                       onPress={() => setTheme(key)} 
                       style={{ 
-                        width: '46%', 
                         flexDirection: 'row',
                         alignItems: 'center', 
-                        padding: 10, 
-                        borderRadius: 14, 
-                        borderWidth: isActive ? 2 : 1, 
-                        borderColor: isActive ? th.primary : 'transparent',
-                        backgroundColor: isActive ? th.secondary : (isDarkMode ? '#334155' : '#F8FAFC'),
-                        gap: 10,
-                        elevation: isActive ? 2 : 0
+                        padding: 14, 
+                        borderRadius: 16, 
+                        borderWidth: 2, 
+                        borderColor: isActive ? th.primary : borderColor,
+                        backgroundColor: isActive ? th.primary + '10' : (isDarkMode ? '#0F172A' : '#F8FAFC'),
+                        gap: 12,
+                        elevation: isActive ? 4 : 0,
+                        shadowColor: isActive ? th.primary : '#000',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: isActive ? 0.25 : 0,
+                        shadowRadius: 3.84,
                       }}
                     >
-                      <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: th.primary, justifyContent: 'center', alignItems: 'center' }}>
-                         <Text style={{ fontSize: 16 }}>{th.emoji}</Text>
+                      {/* Aperçu des couleurs en forme de mini app */}
+                      <View style={{ 
+                        width: 56, 
+                        height: 56, 
+                        borderRadius: 14,
+                        backgroundColor: isDarkMode ? '#1E293B' : '#FFFFFF',
+                        overflow: 'hidden',
+                        borderWidth: 1.5,
+                        borderColor: th.primary + '40',
+                        elevation: 2,
+                      }}>
+                        {/* Mini header avec gradient */}
+                        <View style={{ 
+                          height: 20, 
+                          background: `linear-gradient(135deg, ${th.gradient[0]}, ${th.gradient[1]})`,
+                          backgroundColor: th.primary,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          paddingHorizontal: 4,
+                          gap: 2,
+                        }}>
+                          <View style={{ width: 3, height: 3, borderRadius: 1.5, backgroundColor: 'rgba(255,255,255,0.8)' }} />
+                          <View style={{ width: 3, height: 3, borderRadius: 1.5, backgroundColor: 'rgba(255,255,255,0.8)' }} />
+                        </View>
+                        
+                        {/* Mini card */}
+                        <View style={{ padding: 4, gap: 3 }}>
+                          <View style={{ 
+                            height: 6, 
+                            borderRadius: 2, 
+                            backgroundColor: th.secondary,
+                            width: '70%'
+                          }} />
+                          <View style={{ 
+                            flexDirection: 'row',
+                            gap: 2,
+                          }}>
+                            <View style={{ 
+                              flex: 1,
+                              height: 18, 
+                              borderRadius: 4, 
+                              backgroundColor: th.secondary,
+                            }} />
+                            <View style={{ 
+                              width: 18, 
+                              height: 18, 
+                              borderRadius: 4, 
+                              backgroundColor: th.primary,
+                              justifyContent: 'center',
+                              alignItems: 'center',
+                            }}>
+                              <Text style={{ fontSize: 8, color: '#fff' }}>{th.emoji}</Text>
+                            </View>
+                          </View>
+                        </View>
                       </View>
+                      
+                      {/* Nom du thème */}
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 14, fontWeight: '700', color: isActive ? th.primary : textColor }}>{th.name}</Text>
-                        <View style={{ width: 12, height: 4, borderRadius: 2, backgroundColor: th.primary, marginTop: 4, opacity: 0.6 }} />
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                          <Text style={{ fontSize: 16, fontWeight: '700', color: isActive ? th.primary : textColor }}>
+                            {th.name}
+                          </Text>
+                          {isActive && (
+                            <View style={{ 
+                              backgroundColor: th.primary, 
+                              paddingHorizontal: 6, 
+                              paddingVertical: 2, 
+                              borderRadius: 6 
+                            }}>
+                              <Text style={{ fontSize: 9, fontWeight: '800', color: '#fff' }}>ACTIF</Text>
+                            </View>
+                          )}
+                        </View>
+                        
+                        {/* Preview des couleurs */}
+                        <View style={{ flexDirection: 'row', gap: 4, marginTop: 2 }}>
+                          <View style={{ 
+                            width: 16, 
+                            height: 16, 
+                            borderRadius: 4, 
+                            backgroundColor: th.primary,
+                            borderWidth: 1,
+                            borderColor: isDarkMode ? '#334155' : '#E2E8F0',
+                          }} />
+                          <View style={{ 
+                            width: 16, 
+                            height: 16, 
+                            borderRadius: 4, 
+                            backgroundColor: th.secondary,
+                            borderWidth: 1,
+                            borderColor: isDarkMode ? '#334155' : '#E2E8F0',
+                          }} />
+                          <View style={{ 
+                            width: 16, 
+                            height: 16, 
+                            borderRadius: 4, 
+                            backgroundColor: th.primaryLight,
+                            borderWidth: 1,
+                            borderColor: isDarkMode ? '#334155' : '#E2E8F0',
+                          }} />
+                        </View>
                       </View>
-                      {isActive && <Ionicons name="checkmark-circle" size={18} color={th.primary} />}
+                      
+                      {/* Icône de sélection */}
+                      {isActive && (
+                        <View style={{ 
+                          width: 32, 
+                          height: 32, 
+                          borderRadius: 16, 
+                          backgroundColor: th.primary,
+                          justifyContent: 'center',
+                          alignItems: 'center',
+                          elevation: 2,
+                        }}>
+                          <Ionicons name="checkmark" size={20} color="#fff" />
+                        </View>
+                      )}
                     </TouchableOpacity>
                   );
                 })}
@@ -535,16 +728,44 @@ const SettingsModal = ({ visible, onClose, isDarkMode, toggleDarkMode, currentTh
             )}
           </View>
 
-          <Text style={{ fontSize: 12, fontWeight: '700', color: subColor, marginTop: 20, marginBottom: 10, letterSpacing: 1 }}>{TEXTS.support}</Text>
-          <View style={{ backgroundColor: cardBg, borderRadius: 16, borderWidth: 1, borderColor }}>
-            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', padding: 16 }} onPress={() => { onClose(); setTimeout(() => setShowHelp(true), 300); }}>
-              <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: '#FEF3C7', justifyContent: 'center', alignItems: 'center' }}>
-                <Ionicons name="information-circle-outline" size={20} color="#D97706" />
+          <Text style={{ fontSize: 11, fontWeight: '800', color: subColor, marginTop: 25, marginBottom: 12, letterSpacing: 1.2 }}>{TEXTS.support}</Text>
+          <View style={{ 
+            backgroundColor: cardBg, 
+            borderRadius: 20, 
+            borderWidth: 1, 
+            borderColor,
+            overflow: 'hidden',
+            elevation: 3,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.1,
+            shadowRadius: 8,
+          }}>
+            <TouchableOpacity 
+              style={{ flexDirection: 'row', alignItems: 'center', padding: 18 }} 
+              onPress={() => { onClose(); setTimeout(() => setShowHelp(true), 300); }}
+            >
+              <View style={{ 
+                width: 44, 
+                height: 44, 
+                borderRadius: 12, 
+                backgroundColor: '#FEF3C7', 
+                justifyContent: 'center', 
+                alignItems: 'center',
+                marginRight: 14,
+              }}>
+                <Ionicons name="help-circle" size={22} color="#D97706" />
               </View>
-              <Text style={{ flex: 1, fontSize: 16, fontWeight: '600', color: textColor, marginLeft: 14 }}>{TEXTS.help}</Text>
-              <Ionicons name="chevron-forward" size={20} color={subColor} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: textColor }}>{TEXTS.help}</Text>
+                <Text style={{ fontSize: 12, color: subColor, marginTop: 2 }}>Guide d'utilisation</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={22} color={subColor} />
             </TouchableOpacity>
           </View>
+
+          {/* Espace en bas */}
+          <View style={{ height: 40 }} />
         </ScrollView>
       </View>
     </Modal>
@@ -940,8 +1161,19 @@ export default function Home() {
             </View>
           ) : (
             <View style={s.emptyState}>
-              <View style={[s.emptyIcon, { backgroundColor: isDarkMode ? '#1E293B' : '#F1F5F9' }]}>
-                <Ionicons name={activeTab === 'ongoing' ? "basket-outline" : "checkmark-done-circle-outline"} size={50} color={s.textSec.color} />
+              <View style={[
+                s.emptyIcon, 
+                { 
+                  backgroundColor: isDarkMode ? activeTheme.primaryDark + '20' : activeTheme.primary + '10',
+                  borderColor: activeTheme.primary + '30',
+                  borderWidth: 3,
+                }
+              ]}>
+                <Ionicons 
+                  name={activeTab === 'ongoing' ? "basket-outline" : "checkmark-done-circle-outline"} 
+                  size={50} 
+                  color={activeTheme.primary} 
+                />
               </View>
               <Text style={s.emptyTitle}>{activeTab === 'ongoing' ? TEXTS.empty_ongoing : TEXTS.empty_history}</Text>
               {activeTab === 'ongoing' && <Text style={s.emptySubtitle}>Appuyez sur + pour créer une liste</Text>}

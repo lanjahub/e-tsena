@@ -14,11 +14,19 @@ export function EmptyState({ title, message, icon = 'folder-open-outline' }: Pro
 
   return (
     <View style={styles.container}>
-      <Ionicons 
-        name={icon as any} 
-        size={48} 
-        color={isDarkMode ? '#475569' : '#CBD5E1'} 
-      />
+      <View style={[
+        styles.iconContainer,
+        { 
+          backgroundColor: isDarkMode ? activeTheme.primaryDark + '20' : activeTheme.primary + '10',
+          borderColor: activeTheme.primary + '30',
+        }
+      ]}>
+        <Ionicons 
+          name={icon as any} 
+          size={48} 
+          color={activeTheme.primary} 
+        />
+      </View>
       <Text style={[styles.title, { color: isDarkMode ? '#94A3B8' : '#64748B' }]}>
         {title}
       </Text>
@@ -37,6 +45,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 40,
     paddingHorizontal: 20,
+  },
+  iconContainer: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
   },
   title: {
     fontSize: 16,

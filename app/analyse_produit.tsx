@@ -216,11 +216,11 @@ const handleAnalyze = () => {
       } else if (sortBy === 'amount') {
         const amountA = viewMode === 'summary' ? a.totalPrix : a.prixTotal;
         const amountB = viewMode === 'summary' ? b.totalPrix : b.prixTotal;
-        compareResult = (amountB || 0) - (amountA || 0);
+        compareResult = (amountA || 0) - (amountB || 0);
       } else if (sortBy === 'qty') {
         const qtyA = viewMode === 'summary' ? a.totalQte : a.quantite;
         const qtyB = viewMode === 'summary' ? b.totalQte : b.quantite;
-        compareResult = (qtyB || 0) - (qtyA || 0);
+        compareResult = (qtyA || 0) - (qtyB || 0);
       }
 
       return sortOrder === 'ASC' ? compareResult : -compareResult;
@@ -314,6 +314,8 @@ const handleAnalyze = () => {
               </tr>
             `;
           }
+
+          
         })
         .join('');
 
@@ -533,7 +535,7 @@ const handleAnalyze = () => {
                 <TouchableOpacity
                   onPress={() => {
                     if (sortBy === 'amount') toggleSortOrder();
-                    else setSortBy('amount');
+                    else { setSortBy('amount'); setSortOrder('DESC'); }
                   }}
                   style={[s.sortChip, sortBy === 'amount' && s.sortChipActive]}
                 >
@@ -549,7 +551,7 @@ const handleAnalyze = () => {
                 <TouchableOpacity
                   onPress={() => {
                     if (sortBy === 'qty') toggleSortOrder();
-                    else setSortBy('qty');
+                    else { setSortBy('qty'); setSortOrder('DESC'); }
                   }}
                   style={[s.sortChip, sortBy === 'qty' && s.sortChipActive]}
                 >
@@ -565,7 +567,7 @@ const handleAnalyze = () => {
                 <TouchableOpacity
                   onPress={() => {
                     if (sortBy === 'alpha') toggleSortOrder();
-                    else setSortBy('alpha');
+                    else { setSortBy('alpha'); setSortOrder('ASC'); }
                   }}
                   style={[s.sortChip, sortBy === 'alpha' && s.sortChipActive]}
                 >
